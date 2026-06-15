@@ -7,7 +7,7 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;background:#000;}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;font-size:14px;}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;font-size:14px;-webkit-user-select: none;  user-select: none;}
 button{cursor:pointer;font-family:inherit;border:none;background:none;color:inherit;}
 input,select,textarea{font-family:inherit;}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;}
@@ -119,7 +119,7 @@ select{-webkit-appearance:none;}
 .inp{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:#fff;padding:9px 12px;font-size:13px;outline:none;transition:border-color .15s;}
 .inp:focus{border-color:var(--border2);}
 .inp[type=date]{color-scheme:dark;}
-.sel{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:#fff;padding:9px 12px;font-size:13px;outline:none;}
+.sel{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);color:#fff;padding:9px 12px;font-size:13px;outline:none;text-align:left;}
 .flabel{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);margin-bottom:5px;}
 
 .sg3{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
@@ -199,6 +199,15 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .ppill{flex-shrink:0;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--border);background:var(--bg2);color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;}
 .ppill.on{background:#fff;color:#000;border-color:#fff;}
 
+/* THEMED FILTER LIST OPTION ROWS */
+.filter-opt-btn {
+  width:100%; text-align:left; padding:12px 14px; background:var(--bg2); 
+  border:1px solid var(--border); border-radius:var(--r); margin-bottom:6px; 
+  font-weight:600; display:flex; justify-content:space-between; align-items:center;
+}
+.filter-opt-btn.active { border-color:#fff; background:var(--bg3); color:#fff; }
+.filter-group-header { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; margin:12px 0 6px 4px; letter-spacing:0.5px; }
+
 /* PAYMENT ENTRY */
 .payrow{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px; margin-bottom: 8px;}
 
@@ -249,12 +258,10 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </head>
 <body>
 
-<!-- SPLASH SCREEN -->
 <div id="splash" class="full-overlay active">
   <div class="splash-icon">✏️</div>
 </div>
 
-<!-- ONBOARDING OVERLAY -->
 <div id="onboarding" class="full-overlay">
  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="eico anim-stagger d1" style="font-size:36px; width:80px; height:80px; margin: 0 auto 20px; border-radius:24px;">🥛</div>
@@ -282,7 +289,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
 </div>
 
-<!-- QUICK ENTRY OVERLAY -->
 <div id="quick-entry" class="full-overlay">
  <div style="max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="row anim-stagger d1" style="justify-content:space-between; align-items:center; margin-bottom:30px; margin-top: 10px;">
@@ -297,7 +303,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
   <div id="qe-inputs" class="sp2 mb4 anim-stagger d2"></div>
 
-  <!-- EXCLUSIVE PAYMENT ENTRY -->
   <div class="card mb4 anim-stagger d3" style="border-radius: 24px; padding: 20px; background: rgba(20,20,20,0.6); border:1px solid rgba(255,255,255,0.05);">
    <div class="row" style="justify-content:space-between; align-items:center;">
     <div><div style="font-weight:800; font-size: 15px;">Payment Received?</div><div style="font-size:12px; color:var(--muted); margin-top:2px;">Log cash or UPI now</div></div>
@@ -338,11 +343,15 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </nav>
 </div>
 
-<!-- MODALS -->
 <div class="moverlay" id="m-confirm" onclick="moi(event,'m-confirm')"><div class="mbox">
- <div class="mh"><span class="mt" id="mc-title"></span><button class="mx" onclick="cm('m-confirm')">✕</button></div>
+ <div class="mh"><span class="mt" id="mc-title">Confirm Action</span><button class="mx" onclick="cm('m-confirm')">✕</button></div>
  <div class="mbody" id="mc-body"></div>
  <div class="mact" id="mc-act"></div>
+</div></div>
+
+<div class="moverlay" id="m-filter-sheet" onclick="moi(event,'m-filter-sheet')"><div class="mbox">
+ <div class="mh"><span class="mt">Filter Columns</span><button class="mx" onclick="cm('m-filter-sheet')">✕</button></div>
+ <div id="filter-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:10px;"></div>
 </div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
@@ -432,7 +441,6 @@ const AnalyticsEngine = {
      const pAnimals = (Store.get('mdn_profile') || {}).animals || [];
      let cache = { daily: {}, periods: [], allTime: { milk:0, rev:0, byCategory: {}, byName: {} } };
      
-     // Ensure categories exist
      ['cow', 'buffalo', 'goat', 'other'].forEach(c => cache.allTime.byCategory[c] = {milk:0, rev:0});
 
      pages.forEach(p => {
@@ -455,16 +463,13 @@ const AnalyticsEngine = {
                    if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
                    const rev = v * rate;
 
-                   // Daily Cache
                    cache.daily[r.date].total += v;
                    cache.daily[r.date][at] = (cache.daily[r.date][at] || 0) + v;
                    
-                   // Period Cache
                    periodData.total += v;
                    if(!periodData.byCategory[at]) periodData.byCategory[at] = [];
                    periodData.byCategory[at].push(v);
                    
-                   // All-Time Cache
                    if(!cache.allTime.byCategory[at]) cache.allTime.byCategory[at] = {milk:0, rev:0};
                    cache.allTime.byCategory[at].milk += v;
                    cache.allTime.byCategory[at].rev += rev;
@@ -508,6 +513,31 @@ const addDays=(dStr,n)=>{
   dt.setDate(dt.getDate() + n);
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
+
+// Custom App-Themed Popups Engine
+let confirmResolution = null;
+function appConfirm(title, body) {
+  return new Promise((resolve) => {
+    confirmResolution = resolve;
+    document.getElementById('mc-title').textContent = title;
+    document.getElementById('mc-body').textContent = body;
+    document.getElementById('mc-act').innerHTML = `
+      <button class="btn bs" onclick="submitAppConfirm(false)">Cancel</button>
+      <button class="btn bd" onclick="submitAppConfirm(true)">Confirm</button>
+    `;
+    om('m-confirm');
+  });
+}
+function submitAppConfirm(result) {
+  cm('m-confirm');
+  if(confirmResolution) {
+    confirmResolution(result);
+    confirmResolution = null;
+  }
+}
+
+// Global Filter Tracking Variable
+let currentTableFilter = 'all';
 
 // ══════════════════════════════════════════════════════════════════
 //  COLUMN SYSTEM
@@ -974,7 +1004,7 @@ function pageCardHTML(p){
 // ══════════════════════════════════════════════════════════════════
 //  PAGE DETAIL VIEW & TABLE COMPACT FILTERING
 // ══════════════════════════════════════════════════════════════════
-function openDetail(id){curDetailId=id;renderHome();}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; renderHome();}
 
 function renderDetailView(el){
   const pages=DB.pages();
@@ -987,15 +1017,13 @@ function renderDetailView(el){
   const backLabel=farmer?farmer.name:'Home';
   const todayStr=today();
 
-  // Build filter options based on active columns
-  let filterOpts = `<option value="all">Show All Columns</option><option value="totals">Totals Only</option>`;
-  if(profile.role === 'farmer' && profile.animals?.length > 0) {
-      filterOpts += `<optgroup label="By Category">`;
-      const cats = [...new Set(profile.animals.map(a => a.type))];
-      cats.forEach(c => filterOpts += `<option value="cat_${c}">Only ${c.charAt(0).toUpperCase()+c.slice(1)}s</option>`);
-      filterOpts += `</optgroup><optgroup label="By Animal Name">`;
-      profile.animals.forEach(a => filterOpts += `<option value="anim_${a.id}">${a.name}</option>`);
-      filterOpts += `</optgroup>`;
+  // Readable plain-text label generator matching active filter configuration
+  let printLabel = "Show All Columns";
+  if(currentTableFilter === 'totals') printLabel = "Totals Only";
+  else if(currentTableFilter.startsWith('cat_')) printLabel = "Only " + currentTableFilter.replace('cat_','').toUpperCase() + "s";
+  else if(currentTableFilter.startsWith('anim_')) {
+     const targetAnim = profile.animals?.find(a=>a.id === currentTableFilter.replace('anim_',''));
+     if(targetAnim) printLabel = targetAnim.name;
   }
 
   let html=`
@@ -1013,13 +1041,14 @@ function renderDetailView(el){
    </div>
    
    <div class="row gap2 mb3" style="padding:0 15px;">
-      <select class="sel" id="table-filter" onchange="applyTableFilter('${page.id}')" style="width:100%; padding:8px 12px; font-weight:700;">
-         ${filterOpts}
-      </select>
+      <button class="btn bs w-100 style-select-trigger" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:#fff;">
+        <span style="font-size:13px; font-weight:700;">🔍 Filter: ${printLabel}</span>
+        <span style="font-size:10px; color:var(--sub);">▼</span>
+      </button>
    </div>
 
    <div style="padding:0 15px;margin-bottom:12px;">
-    <div class="twrap" id="table-container">${buildCompactTable(page,profile,todayStr, 'all')}</div>
+    <div class="twrap" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div>
    </div>
    <div style="padding:0 15px;margin-bottom:12px;">${buildColTotals(page)}</div>
    
@@ -1033,10 +1062,40 @@ function renderDetailView(el){
   el.innerHTML=html;
 }
 
-function applyTableFilter(pageId) {
-   const filter = document.getElementById('table-filter').value;
+// Logic to build custom bottom action sheet list dynamically
+function openFilterSheetModal(pageId) {
+  const profile = DB.profile();
+  let listHtml = `
+    <button class="filter-opt-btn ${currentTableFilter==='all'?'active':''}" onclick="applyThemedFilter('${pageId}','all')">Show All Columns ${currentTableFilter==='all'?'✓':''}</button>
+    <button class="filter-opt-btn ${currentTableFilter==='totals'?'active':''}" onclick="applyThemedFilter('${pageId}','totals')">Totals Only ${currentTableFilter==='totals'?'✓':''}</button>
+  `;
+
+  if(profile.role === 'farmer' && profile.animals?.length > 0) {
+      listHtml += `<div class="filter-group-header">By Category</div>`;
+      const cats = [...new Set(profile.animals.map(a => a.type))];
+      cats.forEach(c => {
+         const key = `cat_${c}`;
+         listHtml += `<button class="filter-opt-btn ${currentTableFilter===key?'active':''}" onclick="applyThemedFilter('${pageId}','${key}')">Only ${c.charAt(0).toUpperCase()+c.slice(1)}s ${currentTableFilter===key?'✓':''}</button>`;
+      });
+
+      listHtml += `<div class="filter-group-header">By Animal Name</div>`;
+      profile.animals.forEach(a => {
+         const key = `anim_${a.id}`;
+         listHtml += `<button class="filter-opt-btn ${currentTableFilter===key?'active':''}" onclick="applyThemedFilter('${pageId}','${key}')">${aIcon[a.type]||'🥛'} ${a.name} ${currentTableFilter===key?'✓':''}</button>`;
+      });
+  }
+
+  document.getElementById('filter-sheet-options').innerHTML = listHtml;
+  om('m-filter-sheet');
+}
+
+function applyThemedFilter(pageId, targetFilterValue) {
+   cm('m-filter-sheet');
+   currentTableFilter = targetFilterValue;
    const page = DB.pages().find(p=>p.id===pageId);
-   document.getElementById('table-container').innerHTML = buildCompactTable(page, DB.profile(), today(), filter);
+   // Re-render dashboard elements
+   document.getElementById('table-container').innerHTML = buildCompactTable(page, DB.profile(), today(), currentTableFilter);
+   renderHome();
 }
 
 function buildCompactTable(page,profile,todayStr, filter){
@@ -1044,7 +1103,6 @@ function buildCompactTable(page,profile,todayStr, filter){
   
   page.cols.forEach(c => {
     if(c.type === 'sr') sys1.push(c);
-    // Explicitly hide old separate date column if it exists in data
     else if(c.type === 'date') return; 
     else if(c.type === 'total') {
         if(filter === 'totals' || filter === 'all') sys2.push(c);
@@ -1052,7 +1110,6 @@ function buildCompactTable(page,profile,todayStr, filter){
     else {
       const key = c.animal || 'global';
       
-      // Filter Logic
       if(filter !== 'all') {
          if(filter === 'totals') return;
          if(filter.startsWith('cat_') && c.animalType !== filter.replace('cat_','')) return;
@@ -1125,6 +1182,11 @@ function buildColTotals(page){
   let html=`<div class="card"><div class="slabel mb2">Column Totals</div><div class="sg2">`;
   milkCols.forEach(c=>{
     const tot=page.rows.reduce((s,r)=>s+(parseFloat(r[c.id])||0),0);
+    if(currentTableFilter !== 'all') {
+       if(currentTableFilter === 'totals') return;
+       if(currentTableFilter.startsWith('cat_') && c.animalType !== currentTableFilter.replace('cat_','')) return;
+       if(currentTableFilter.startsWith('anim_') && c.animal !== currentTableFilter.replace('anim_','')) return;
+    }
     html+=`<div class="card2"><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">${c.name.replace(' AM','').replace(' PM','')} ${c.type==='milk_am'?'AM':'PM'}</div><div style="font-size:14px;font-weight:800;">${fmt(tot)} L</div></div>`;
   });
   return html+`</div></div>`;
@@ -1146,7 +1208,7 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile());
   DB.log({action:'cell_update',pageId,rowId,colId,colName,colType,from:old,to:value,assignedDate,rowIndex,pageLabel:pages[pi].label});
   DB.savePages(pages);
-  applyTableFilter(pageId); // Re-render table keeping filter intact
+  document.getElementById('table-container').innerHTML = buildCompactTable(pages[pi], DB.profile(), today(), currentTableFilter);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1191,21 +1253,18 @@ function drawSelectedGraph() {
   let svg = '';
 
   if(gChartType === 'overall') {
-     // Line Chart for all daily data
      const dates = Object.keys(cache.daily).sort();
      if(dates.length < 2) { container.innerHTML = `<div class="empty"><div class="esub">Not enough daily data for a trend line.</div></div>`; return; }
      
-     const data = dates.map(d => ({x:d, y:cache.daily[d].total})).slice(-14); // last 14 days
+     const data = dates.map(d => ({x:d, y:cache.daily[d].total})).slice(-14); 
      const maxV = Math.max(...data.map(d=>d.y), 1);
      
-     // Y Axis
      [0, 0.5, 1].forEach(pct => {
        const y = PAD.t + cH*(1-pct);
        svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/>`;
        svg += `<text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`;
      });
      
-     // X Axis & Line
      svg += `<line x1="${PAD.l}" y1="${PAD.t+cH}" x2="${W-PAD.r}" y2="${PAD.t+cH}" class="chart-axis"/>`;
      
      let pathD = '';
@@ -1223,7 +1282,6 @@ function drawSelectedGraph() {
   }
   
   else if(gChartType === 'current') {
-     // Bar chart for current period
      const p = cache.periods[0];
      const pages = DB.pages();
      const page = pages.find(pg => pg.id === p.id);
@@ -1236,7 +1294,6 @@ function drawSelectedGraph() {
      const maxV = Math.max(...data.map(d=>d.m), 1);
      const barW = Math.floor(cW/data.length)-4;
      
-     // Y Axis
      [0, 0.5, 1].forEach(pct => {
        const y = PAD.t + cH*(1-pct);
        svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/>`;
@@ -1255,8 +1312,7 @@ function drawSelectedGraph() {
   }
   
   else if(gChartType === 'compare') {
-     // Bar Chart comparing periods
-     const data = [...cache.periods].reverse().slice(-6); // last 6
+     const data = [...cache.periods].reverse().slice(-6); 
      if(data.length === 0) return;
      const maxV = Math.max(...data.map(d=>d.total), 1);
      const barW = Math.floor(cW/data.length)-8;
@@ -1307,7 +1363,7 @@ function drawSelectedGraph() {
         let col = aColors[item.type];
         if(!col) col = fallbackColors[i % fallbackColors.length];
         
-        if (pct === 1) { // Single item full circle fix
+        if (pct === 1) { 
            pie += `<circle cx="${CX}" cy="${CY}" r="${CR}" fill="${col}" class="pie-slice"/>`;
         } else {
            pie += `<path d="M${CX},${CY} L${x1.toFixed(1)},${y1.toFixed(1)} A${CR},${CR} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${col}" class="pie-slice"/>`;
@@ -1331,7 +1387,7 @@ function drawSelectedGraph() {
       <div class="gchart-wrap">
        <div class="slabel mb3">${isRev ? 'All-Time Revenue Split' : 'All-Time Milk Split'}</div>
        <div class="row gap3" style="align-items:flex-start;">
-        <svg viewBox="0 0 160 160" style="width:140px;flex-shrink:0;">${pie}</svg>
+         <svg viewBox="0 0 160 160" style="width:140px;flex-shrink:0;">${pie}</svg>
         <div class="f1">${legendRows}</div>
        </div>
       </div>`;
@@ -1369,7 +1425,6 @@ function renderCalc(){
     }
   }
 
-  // OVERALL ACCOUNTABILITY LOGIC (Continuous Ledger)
   let totalEarned = 0, totalReceived = 0;
   pages.forEach(p => { totalEarned += pageSummary(p).rev; });
   DB.payments().forEach(p => { if(p.type==='received') totalReceived += parseFloat(p.amount)||0; });
@@ -1379,7 +1434,7 @@ function renderCalc(){
    <div class="card mb4">
     <div class="slabel mb3">Ongoing 10 Days</div>
     <div class="sp2">
-     <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
+     <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
      <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
      <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Total Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
     </div>
@@ -1414,7 +1469,7 @@ function updCalc(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  ME TAB (Remains Identical)
+//  ME TAB
 // ══════════════════════════════════════════════════════════════════
 function readableLog(entry){
   if(!entry || !entry.action) return 'System Action';
@@ -1435,6 +1490,7 @@ function readableLog(entry){
   }
 }
 
+// Visual layout support indicators
 function logDotColor(action){
   if(!action) return 'var(--border2)';
   if(action==='payment_received')return'#5db85d';
@@ -1543,9 +1599,11 @@ function renderMe(){
 }
 function setMV(v){meView=v;renderMe();}
 function editName(){const p=DB.profile();const n=prompt('Dairy name:',p.name);if(!n?.trim())return;p.name=n.trim();DB.saveProfile(p);DB.log({action:'name_changed',to:p.name});renderMe();}
-function setRole(r){
+
+async function setRole(r){
   const p=DB.profile();if(p.role===r)return;
-  if(!confirm(`Switch to ${r} mode? Existing data is preserved.`))return;
+  const agreed = await appConfirm('Switch Mode?', `Switch to ${r} mode? Existing data is preserved.`);
+  if(!agreed) return;
   p.role=r;DB.saveProfile(p);DB.log({action:'role_changed',to:r});
   curFarmerId=null;curDetailId=null;renderMe();renderHome();
 }
@@ -1588,10 +1646,11 @@ function doSaveAnimal(){
   DB.log({action:isNew?'animal_added':'animal_updated',id:entry.id,name,animalType});
   cm('m-animal');renderMe();
 }
-function removeAnimal(id){
+async function removeAnimal(id){
   const p=DB.profile();
   const a=p.animals?.find(x=>x.id===id);
-  if(!confirm('Remove '+a?.name+'?'))return;
+  const agreed = await appConfirm('Remove Animal?', 'Remove '+a?.name+'?');
+  if(!agreed) return;
   p.animals=p.animals.filter(x=>x.id!==id);
   DB.saveProfile(p);
   DB.log({action:'animal_removed',id,name:a?.name});
