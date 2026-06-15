@@ -7,9 +7,9 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;background:#000;}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;font-size:14px;-webkit-user-select: none;  user-select: none;}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;font-size:14px;-webkit-user-select: none;user-select: none;}
 button{cursor:pointer;font-family:inherit;border:none;background:none;color:inherit;}
-input,select,textarea{font-family:inherit;}
+input,select,textarea{font-family:inherit;-webkit-user-select: text;user-select: text;}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;}
 input[type=number]{-moz-appearance:textfield;}
 select{-webkit-appearance:none;}
@@ -113,6 +113,7 @@ select{-webkit-appearance:none;}
 .bp{background:#fff;color:#000;}.bs{background:var(--bg2);color:var(--text);border:1px solid var(--border);}
 .bg{background:transparent;color:var(--sub);border:1px solid var(--border);}
 .bd{background:var(--danger);color:#fff;}.bw{background:#3a2a00;color:#e8b800;border:1px solid #5a4400;}
+.bd-trigger{background:var(--bg2);color:#fff;border:1px solid var(--border);text-align:left;font-weight:600;}
 .bsm{padding:5px 11px;font-size:11px;border-radius:8px;}
 .bic{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border-radius:8px;background:var(--bg2);border:1px solid var(--border);color:var(--sub);flex-shrink:0;font-size:13px;}
 
@@ -208,6 +209,18 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .filter-opt-btn.active { border-color:#fff; background:var(--bg3); color:#fff; }
 .filter-group-header { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; margin:12px 0 6px 4px; letter-spacing:0.5px; }
 
+/* THEMED CALENDAR SPECIFIC CSS */
+#m-calendar-sheet {
+  z-index: 400 !important; /* Forces calendar to stand on top of all other modals */
+}
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+.cal-head { font-weight: 700; color: var(--sub); font-size: 11px; padding: 5px 0; text-transform: uppercase; }
+.cal-day { padding: 10px 0; border-radius: 8px; font-weight: 600; font-size: 13px; background: var(--bg2); border: 1px solid transparent; }
+.cal-day:active { background: var(--bg3); }
+.cal-day.empty-cell { background: transparent; pointer-events: none; }
+.cal-day.selected { background: #fff; color: #000; font-weight: 800; }
+.cal-day.today-marker { border-color: var(--border2); color: var(--success); }
+
 /* PAYMENT ENTRY */
 .payrow{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px; margin-bottom: 8px;}
 
@@ -258,10 +271,12 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </head>
 <body>
 
+<!-- SPLASH SCREEN -->
 <div id="splash" class="full-overlay active">
   <div class="splash-icon">✏️</div>
 </div>
 
+<!-- ONBOARDING OVERLAY -->
 <div id="onboarding" class="full-overlay">
  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="eico anim-stagger d1" style="font-size:36px; width:80px; height:80px; margin: 0 auto 20px; border-radius:24px;">🥛</div>
@@ -289,6 +304,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
 </div>
 
+<!-- QUICK ENTRY OVERLAY -->
 <div id="quick-entry" class="full-overlay">
  <div style="max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="row anim-stagger d1" style="justify-content:space-between; align-items:center; margin-bottom:30px; margin-top: 10px;">
@@ -303,6 +319,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
   <div id="qe-inputs" class="sp2 mb4 anim-stagger d2"></div>
 
+  <!-- EXCLUSIVE PAYMENT ENTRY -->
   <div class="card mb4 anim-stagger d3" style="border-radius: 24px; padding: 20px; background: rgba(20,20,20,0.6); border:1px solid rgba(255,255,255,0.05);">
    <div class="row" style="justify-content:space-between; align-items:center;">
     <div><div style="font-weight:800; font-size: 15px;">Payment Received?</div><div style="font-size:12px; color:var(--muted); margin-top:2px;">Log cash or UPI now</div></div>
@@ -343,22 +360,44 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </nav>
 </div>
 
+<!-- MODALS -->
 <div class="moverlay" id="m-confirm" onclick="moi(event,'m-confirm')"><div class="mbox">
  <div class="mh"><span class="mt" id="mc-title">Confirm Action</span><button class="mx" onclick="cm('m-confirm')">✕</button></div>
  <div class="mbody" id="mc-body"></div>
  <div class="mact" id="mc-act"></div>
 </div></div>
 
+<!-- THEMED FILTER MODAL SHEET -->
 <div class="moverlay" id="m-filter-sheet" onclick="moi(event,'m-filter-sheet')"><div class="mbox">
  <div class="mh"><span class="mt">Filter Columns</span><button class="mx" onclick="cm('m-filter-sheet')">✕</button></div>
  <div id="filter-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:10px;"></div>
+</div></div>
+
+<!-- THEMED CALENDAR MODAL SHEET -->
+<div class="moverlay" id="m-calendar-sheet" onclick="moi(event,'m-calendar-sheet')"><div class="mbox">
+ <div class="mh">
+   <span class="mt" id="cal-month-title">Select Date</span>
+   <div class="row gap2">
+     <button class="btn bs bsm" onclick="navCalendarMonth(-1)">◀</button>
+     <button class="btn bs bsm" onclick="navCalendarMonth(1)">▶</button>
+     <button class="mx" onclick="cm('m-calendar-sheet')">✕</button>
+   </div>
+ </div>
+ <div class="cal-grid cal-head mb2">
+   <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+ </div>
+ <div id="calendar-days-container" class="cal-grid mb3"></div>
 </div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
  <div class="mh"><span class="mt">New 10-Day Record</span><button class="mx" onclick="cm('m-newpage')">✕</button></div>
  <div class="mbody mb3">Choose the start date. Each row unlocks only on its corresponding date.</div>
  <label class="flabel">Start Date</label>
- <input class="inp mb3" type="date" id="mnp-date"/>
+ 
+ <!-- Updated input block trigger button replacing system select raw calendar -->
+ <button class="btn bd-trigger mb3 w-100" id="mnp-date-trigger" onclick="openThemedCalendar('mnp-date')">Choose Start Date</button>
+ <input type="hidden" id="mnp-date"/>
+
  <div id="mnp-farmer-row" style="display:none;margin-bottom:12px;">
   <label class="flabel">Farmer</label>
   <select class="sel" id="mnp-farmer"></select>
@@ -536,8 +575,89 @@ function submitAppConfirm(result) {
   }
 }
 
-// Global Filter Tracking Variable
+// Global Filter Variables
 let currentTableFilter = 'all';
+
+// ══════════════════════════════════════════════════════════════════
+//  THEMED EMBEDDED CALENDAR ENGINE
+// ══════════════════════════════════════════════════════════════════
+let activeCalendarTargetInputId = '';
+let calendarCurrentYear = new Date().getFullYear();
+let calendarCurrentMonth = new Date().getMonth(); // 0-indexed
+
+function openThemedCalendar(targetHiddenInputId) {
+  activeCalendarTargetInputId = targetHiddenInputId;
+  const currentVal = document.getElementById(targetHiddenInputId).value || today();
+  const [y, m, d] = currentVal.split('-').map(Number);
+  
+  calendarCurrentYear = y;
+  calendarCurrentMonth = m - 1;
+  
+  drawCalendarGrid();
+  om('m-calendar-sheet');
+}
+
+function drawCalendarGrid() {
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  document.getElementById('cal-month-title').textContent = `${months[calendarCurrentMonth]} ${calendarCurrentYear}`;
+  
+  const firstDayIndex = new Date(calendarCurrentYear, calendarCurrentMonth, 1).getDay();
+  const totalDaysInMonth = new Date(calendarCurrentYear, calendarCurrentMonth + 1, 0).getDate();
+  
+  const targetHiddenInputId = activeCalendarTargetInputId;
+  const currentVal = document.getElementById(targetHiddenInputId).value;
+  const todayStr = today();
+
+  let daysHtml = '';
+  
+  // Padding blank days for row alignment offsets
+  for (let i = 0; i < firstDayIndex; i++) {
+    daysHtml += `<div class="cal-day empty-cell"></div>`;
+  }
+  
+  // Generating physical day selection buttons
+  for (let day = 1; day <= totalDaysInMonth; day++) {
+    const formatMonthStr = String(calendarCurrentMonth + 1).padStart(2, '0');
+    const formatDayStr = String(day).padStart(2, '0');
+    const computedISODate = `${calendarCurrentYear}-${formatMonthStr}-${formatDayStr}`;
+    
+    let stateClasses = '';
+    if (computedISODate === currentVal) stateClasses += ' selected';
+    if (computedISODate === todayStr) stateClasses += ' today-marker';
+    
+    daysHtml += `
+      <button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">
+        ${day}
+      </button>
+    `;
+  }
+  
+  document.getElementById('calendar-days-container').innerHTML = daysHtml;
+}
+
+function navCalendarMonth(direction) {
+  calendarCurrentMonth += direction;
+  if (calendarCurrentMonth > 11) {
+    calendarCurrentMonth = 0;
+    calendarCurrentYear++;
+  } else if (calendarCurrentMonth < 0) {
+    calendarCurrentMonth = 11;
+    calendarCurrentYear--;
+  }
+  drawCalendarGrid();
+}
+
+function selectCalendarDate(isoDateStr) {
+  document.getElementById(activeCalendarTargetInputId).value = isoDateStr;
+  
+  // Update view component trigger buttons dynamically
+  const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
+  if (triggerButton) {
+    triggerButton.textContent = fmtD(isoDateStr);
+  }
+  
+  cm('m-calendar-sheet');
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  COLUMN SYSTEM
@@ -641,18 +761,6 @@ function createPage(startDate,farmerId){
   };
 }
 
-function getOrCreateActivePage() {
-  const pages = DB.pages();
-  const td = today();
-  let active = pages.find(p => !p.locked && td >= p.startDate && td <= p.endDate);
-  if (!active) {
-    active = createPage(td);
-    pages.unshift(active);
-    DB.savePages(pages);
-  }
-  return active;
-}
-
 // ══════════════════════════════════════════════════════════════════
 //  STATE & SWIPE GESTURES
 // ══════════════════════════════════════════════════════════════════
@@ -709,24 +817,36 @@ function initApp() {
   const p = DB.profile();
   if (!p.shiftTime) { p.shiftTime = 15; DB.saveProfile(p); }
 
-  setTimeout(() => {
+  // Minimum splash time is 800ms, but we wait for content to be rendered before hiding
+  const minSplashEnd = Date.now() + 800;
+
+  function hideSplash(afterHide) {
     const splash = document.getElementById('splash');
-    splash.style.opacity = '0';
+    const remaining = Math.max(0, minSplashEnd - Date.now());
     setTimeout(() => {
-      splash.style.display = 'none';
-      if (!p.onboarded && p.role === 'farmer') {
-        document.getElementById('app').style.display = 'none';
-        const ob = document.getElementById('onboarding');
-        ob.classList.add('active');
-        setTimeout(() => ob.classList.add('start-anim'), 10);
-      } else if(p.role === 'farmer') {
-        openQuickEntry();
-      } else {
-        document.getElementById('app').style.display = 'flex';
-        renderHome();renderGraphs();renderCalc();renderMe();
-      }
-    }, 300);
-  }, 1000); 
+      splash.style.opacity = '0';
+      setTimeout(() => {
+        splash.style.display = 'none';
+        afterHide();
+      }, 300);
+    }, remaining);
+  }
+
+  if (!p.onboarded && p.role === 'farmer') {
+    hideSplash(() => {
+      document.getElementById('app').style.display = 'none';
+      const ob = document.getElementById('onboarding');
+      ob.classList.add('active');
+      setTimeout(() => ob.classList.add('start-anim'), 10);
+    });
+  } else if (p.role === 'farmer') {
+    hideSplash(() => { openQuickEntry(); });
+  } else {
+    // Render content first, THEN hide splash — no blank flash
+    document.getElementById('app').style.display = 'flex';
+    renderHome(); renderGraphs(); renderCalc(); renderMe();
+    hideSplash(() => { /* content already rendered */ });
+  }
 }
 
 function goTab(id,btn){
@@ -784,6 +904,18 @@ function finishOnboarding() {
 //  QUICK ENTRY LOGIC
 // ══════════════════════════════════════════════════════════════════
 let qeContext = { pageId: null, rowId: null, cols: [], isPM: false };
+
+function getOrCreateActivePage() {
+  const pages = DB.pages();
+  const td = today();
+  let active = pages.find(p => !p.locked && td >= p.startDate && td <= p.endDate);
+  if (!active) {
+    active = createPage(td);
+    pages.unshift(active);
+    DB.savePages(pages);
+  }
+  return active;
+}
 
 function openQuickEntry() {
   document.getElementById('app').style.display = 'none';
@@ -979,8 +1111,66 @@ function renderFarmerHome(el){
   el.innerHTML=html+`</div>`;
 }
 
-function renderMilkmanHome(el){ /* Reused logic */ }
-function renderFarmerAccountView(el){ /* Reused logic */ }
+function renderMilkmanHome(el){
+  const pages=DB.pages().filter(p=>!p.trashed);
+  const farmers=DB.farmers();
+  const trash=DB.trash();
+  const profile=DB.profile();
+  let totalRev=0,activeRev=0;
+  pages.forEach(p=>{const t=pageSummary(p);totalRev+=t.rev;if(!p.locked)activeRev+=t.rev;});
+  const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  let html=`
+   <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
+    <div><div class="eyebrow">Milkman</div><div class="ptitle">${profile.name}</div></div>
+    <div class="row gap2">
+     ${trash.length?`<button class="btn bg bsm" onclick="openTrash()">🗑 ${trash.length}</button>`:''}
+     <button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button>
+    </div>
+   </div>
+   <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
+    <div class="sbox"><div class="sval">${pages.length}</div><div class="ssub">Records</div></div>
+    <div class="sbox"><div class="sval">₹${fmt(totalRev)}</div><div class="ssub">Total Earned</div></div>
+    <div class="sbox"><div class="sval">₹${fmt(activeRev)}</div><div class="ssub">Active Period</div></div>
+   </div>
+   <div class="pc sp3">`;
+  if(!sorted.length){
+    html+=`<div class="empty"><div class="eico">📓</div><div class="etitle">No records yet</div><div class="esub">Tap "+ Record" to start</div></div>`;
+  } else { sorted.forEach(p=>{ html+=pageCardHTML(p); }); }
+  el.innerHTML=html+`</div>`;
+}
+
+function renderFarmerAccountView(el){
+  const farmer=DB.farmers().find(f=>f.id===curFarmerId);
+  if(!farmer){curFarmerId=null;renderHome();return;}
+  const pages=DB.pages().filter(p=>p.farmerId===curFarmerId&&!p.trashed);
+  const payments=DB.payments().filter(p=>p.farmerId===curFarmerId);
+  let totalEarned=0,totalPaid=0;
+  pages.forEach(p=>{totalEarned+=pageSummary(p).rev;});
+  payments.forEach(p=>{if(p.type==='received')totalPaid+=parseFloat(p.amount)||0;});
+  const netBal=totalEarned-totalPaid;
+  const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  let html=`
+   <div class="ph">
+    <div class="row gap2 mb3">
+     <button class="btn bg bsm" onclick="curFarmerId=null;renderHome()">← Farmers</button>
+     <div class="f1"></div>
+     <button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button>
+    </div>
+    <div class="eyebrow">Farmer Account</div>
+    <div class="ptitle">${farmer.name}</div>
+    ${farmer.village?`<div style="font-size:11px;color:var(--muted);margin-top:2px;">📍 ${farmer.village}</div>`:''}
+   </div>
+   <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
+    <div class="sbox"><div class="sval">₹${fmt(totalEarned)}</div><div class="ssub">Total Due</div></div>
+    <div class="sbox"><div class="sval">₹${fmt(totalPaid)}</div><div class="ssub">Received</div></div>
+    <div class="sbox" style="border-color:${netBal>0?'var(--warn)':'var(--success)'};"><div class="sval" style="color:${netBal>0?'#e8b800':'var(--success)'};">₹${fmt(netBal)}</div><div class="ssub">${netBal>0?'Balance':'Settled'}</div></div>
+   </div>
+   <div class="pc sp3">`;
+  if(!sorted.length){
+    html+=`<div class="empty"><div class="eico">📓</div><div class="etitle">No records</div><div class="esub">Tap "+ Record" to add one</div></div>`;
+  } else { sorted.forEach(p=>{ html+=pageCardHTML(p); }); }
+  el.innerHTML=html+`</div>`;
+}
 
 function pageCardHTML(p){
   const t=pageSummary(p);
@@ -1017,7 +1207,6 @@ function renderDetailView(el){
   const backLabel=farmer?farmer.name:'Home';
   const todayStr=today();
 
-  // Readable plain-text label generator matching active filter configuration
   let printLabel = "Show All Columns";
   if(currentTableFilter === 'totals') printLabel = "Totals Only";
   else if(currentTableFilter.startsWith('cat_')) printLabel = "Only " + currentTableFilter.replace('cat_','').toUpperCase() + "s";
@@ -1041,7 +1230,7 @@ function renderDetailView(el){
    </div>
    
    <div class="row gap2 mb3" style="padding:0 15px;">
-      <button class="btn bs w-100 style-select-trigger" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:#fff;">
+      <button class="btn bs w-100" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:#fff;">
         <span style="font-size:13px; font-weight:700;">🔍 Filter: ${printLabel}</span>
         <span style="font-size:10px; color:var(--sub);">▼</span>
       </button>
@@ -1062,7 +1251,6 @@ function renderDetailView(el){
   el.innerHTML=html;
 }
 
-// Logic to build custom bottom action sheet list dynamically
 function openFilterSheetModal(pageId) {
   const profile = DB.profile();
   let listHtml = `
@@ -1093,7 +1281,6 @@ function applyThemedFilter(pageId, targetFilterValue) {
    cm('m-filter-sheet');
    currentTableFilter = targetFilterValue;
    const page = DB.pages().find(p=>p.id===pageId);
-   // Re-render dashboard elements
    document.getElementById('table-container').innerHTML = buildCompactTable(page, DB.profile(), today(), currentTableFilter);
    renderHome();
 }
@@ -1434,7 +1621,7 @@ function renderCalc(){
    <div class="card mb4">
     <div class="slabel mb3">Ongoing 10 Days</div>
     <div class="sp2">
-     <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
+     <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
      <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
      <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Total Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
     </div>
@@ -1490,7 +1677,6 @@ function readableLog(entry){
   }
 }
 
-// Visual layout support indicators
 function logDotColor(action){
   if(!action) return 'var(--border2)';
   if(action==='payment_received')return'#5db85d';
@@ -1654,6 +1840,178 @@ async function removeAnimal(id){
   p.animals=p.animals.filter(x=>x.id!==id);
   DB.saveProfile(p);
   DB.log({action:'animal_removed',id,name:a?.name});
+  renderMe();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  RECORD MODAL ROUTING & INITIALIZATION LOGIC
+// ══════════════════════════════════════════════════════════════════
+function openNewPageModal() {
+  const currentInitialDate = today();
+  document.getElementById('mnp-date').value = currentInitialDate;
+  document.getElementById('mnp-date-trigger').textContent = fmtD(currentInitialDate);
+  
+  const profile = DB.profile();
+  const farmerRow = document.getElementById('mnp-farmer-row');
+  if (farmerRow) {
+    if (profile.role === 'milkman') {
+      farmerRow.style.display = 'block';
+      const select = document.getElementById('mnp-farmer');
+      if (select) {
+        const farmers = DB.farmers();
+        select.innerHTML = farmers.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+      }
+    } else {
+      farmerRow.style.display = 'none';
+    }
+  }
+  om('m-newpage');
+}
+
+function doNewPage() {
+  const dateVal = document.getElementById('mnp-date').value;
+  if (!dateVal) return alert('Please select a start date');
+  
+  let farmerId = null;
+  const profile = DB.profile();
+  if (profile.role === 'milkman') {
+    const select = document.getElementById('mnp-farmer');
+    farmerId = select ? select.value : null;
+    if (!farmerId && DB.farmers().length === 0) {
+      alert('Please add a farmer first in the Profile tab.');
+      cm('m-newpage');
+      return;
+    }
+  }
+  
+  const pages = DB.pages();
+  const newPg = createPage(dateVal, farmerId);
+  pages.unshift(newPg);
+  DB.savePages(pages);
+  DB.log({ action: 'page_created', label: newPg.label });
+  
+  cm('m-newpage');
+  renderHome();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PAGE ACTIONS
+// ══════════════════════════════════════════════════════════════════
+function closeDetail(){
+  curDetailId=null;
+  currentTableFilter='all';
+  renderHome();
+}
+
+async function trashPage(pageId){
+  const agreed = await appConfirm('Move to Trash?','This record will be moved to trash and deleted after 30 days.');
+  if(!agreed) return;
+  const pages=DB.pages();
+  const pi=pages.findIndex(p=>p.id===pageId);
+  if(pi<0) return;
+  const page=pages[pi];
+  page.trashed=true;
+  page.trashedAt=new Date().toISOString();
+  const trash=DB.trash();
+  trash.unshift(page);
+  DB.saveTrash(trash);
+  pages.splice(pi,1);
+  DB.savePages(pages);
+  DB.log({action:'page_trashed',label:page.label});
+  curDetailId=null;
+  currentTableFilter='all';
+  renderHome();
+}
+
+async function reqLock(pageId){
+  const pages=DB.pages();
+  const pi=pages.findIndex(p=>p.id===pageId);
+  if(pi<0) return;
+  const page=pages[pi];
+  if(page.locked){
+    const agreed=await appConfirm('Unlock Record?','Unlock this record to allow editing again?');
+    if(!agreed) return;
+    page.locked=false;
+    page.clearedAt=null;
+    DB.savePages(pages);
+    DB.log({action:'page_unlocked',label:page.label});
+  } else {
+    const agreed=await appConfirm('Mark as Cleared?','Lock this record and mark account as cleared?');
+    if(!agreed) return;
+    page.locked=true;
+    page.clearedAt=new Date().toISOString();
+    DB.savePages(pages);
+    DB.log({action:'page_locked',label:page.label});
+  }
+  renderHome();
+}
+
+function openColManager(pageId){
+  // Column manager is a future feature; for now show a simple info modal
+  document.getElementById('mc-title').textContent='Column Manager';
+  document.getElementById('mc-body').textContent='Column customisation is coming soon. Your current columns are auto-generated based on your animals and role settings.';
+  document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">OK</button>`;
+  om('m-confirm');
+}
+
+function openTrash(){
+  const trash=DB.trash();
+  const now=Date.now();
+  // Build a simple modal showing trashed items
+  document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
+  if(!trash.length){
+    document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
+    document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+  } else {
+    let bodyHtml='<div class="sp2">';
+    trash.forEach(p=>{
+      const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000));
+      bodyHtml+=`<div class="trash-card">
+        <div style="font-weight:700;font-size:13px;">${p.label}</div>
+        <div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div>
+        <button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button>
+      </div>`;
+    });
+    bodyHtml+='</div>';
+    document.getElementById('mc-body').innerHTML=bodyHtml;
+    document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+  }
+  om('m-confirm');
+}
+
+function restoreFromTrash(pageId){
+  const trash=DB.trash();
+  const ti=trash.findIndex(p=>p.id===pageId);
+  if(ti<0) return;
+  const page=trash[ti];
+  page.trashed=false;
+  delete page.trashedAt;
+  const pages=DB.pages();
+  pages.unshift(page);
+  DB.savePages(pages);
+  trash.splice(ti,1);
+  DB.saveTrash(trash);
+  DB.log({action:'page_restored',label:page.label});
+  cm('m-confirm');
+  renderHome();
+}
+
+function doSaveFarmer(){
+  const name=document.getElementById('mf-name').value.trim();
+  if(!name){alert('Enter farmer name');return;}
+  const phone=document.getElementById('mf-phone').value.trim();
+  const village=document.getElementById('mf-village').value.trim();
+  const rate=parseFloat(document.getElementById('mf-rate').value)||0;
+  const farmers=DB.farmers();
+  const isNew=!editFarmerId;
+  const entry={id:isNew?uid():editFarmerId,name,phone,village,rate,createdAt:new Date().toISOString()};
+  if(isNew){farmers.push(entry);}
+  else{const i=farmers.findIndex(f=>f.id===editFarmerId);if(i>=0)farmers[i]=entry;}
+  DB.saveFarmers(farmers);
+  DB.log({action:isNew?'farmer_added':'farmer_updated',name});
+  editFarmerId=null;
+  cm('m-farmer');
+  renderHome();
   renderMe();
 }
 
