@@ -1416,6 +1416,33 @@ function updCalc(){
 // ══════════════════════════════════════════════════════════════════
 //  ME TAB (Remains Identical)
 // ══════════════════════════════════════════════════════════════════
+function readableLog(entry){
+  if(!entry || !entry.action) return 'System Action';
+  const t=fmtTime(entry.ts);
+  switch(entry.action){
+    case 'cell_update':{
+      const qty=parseFloat(entry.to)||0;
+      const unit=entry.colType==='rate'||entry.colType==='rate_per_animal'?'₹/L':entry.colType==='total'?'₹':'L';
+      const verb=entry.from===''||entry.from===0||entry.from===undefined?'entered':'changed';
+      const fromStr=(entry.from!==undefined&&entry.from!=='')?' (was '+entry.from+unit+')':'';
+      return`<strong>${qty}${unit}</strong> ${verb} in <strong>${entry.colName||entry.colId}</strong> for <strong>${fmtDS(entry.assignedDate)||'row '+(entry.rowIndex+1)}</strong>${fromStr}`;
+    }
+    case 'page_created':return`New 10-day record created: <strong>${entry.label||''}</strong>`;
+    case 'page_locked':return`Period <strong>${entry.label||''}</strong> marked as Account Cleared`;
+    case 'page_unlocked':return`Period <strong>${entry.label||''}</strong> was unlocked for editing`;
+    case 'payment_received':return`💰 Payment of <strong>₹${fmt(entry.amount)}</strong> received via Quick Screen`;
+    default:return entry.action+(entry.note?' — '+entry.note:'');
+  }
+}
+
+function logDotColor(action){
+  if(!action) return 'var(--border2)';
+  if(action==='payment_received')return'#5db85d';
+  if(action.includes('delet')||action.includes('remov'))return'var(--danger)';
+  if(action.includes('lock'))return'#aaa';
+  return'var(--border2)';
+}
+
 function renderMe(){
   const profile=DB.profile();
   const el=document.getElementById('p-me');
