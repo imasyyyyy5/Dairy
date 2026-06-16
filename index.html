@@ -49,6 +49,12 @@ select{-webkit-appearance:none;}
 .start-anim .d3 { animation-delay: 0.4s; }
 .start-anim .d4 { animation-delay: 0.55s; }
 
+/* APP-THEMED TOAST SYSTEM */
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.toast { background-color: var(--bg2); border: 1px solid var(--border2); color: #fff; padding: 12px 20px; border-radius: 100px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); font-weight: 600; font-size: 13px; opacity: 0; animation: toastIn 0.3s forwards, toastOut 0.3s forwards 2.7s; display: flex; align-items: center; gap: 8px; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-20px) scale(0.95); } }
+
 /* QUICK ENTRY PREMIUM UI */
 .qe-card {
   background: linear-gradient(145deg, var(--bg2), var(--bg1));
@@ -271,6 +277,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </head>
 <body>
 
+<div id="toast-container"></div>
+
 <!-- SPLASH SCREEN -->
 <div id="splash" class="full-overlay active">
   <div class="splash-icon">✏️</div>
@@ -390,11 +398,10 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
- <div class="mh"><span class="mt">New 10-Day Record</span><button class="mx" onclick="cm('m-newpage')">✕</button></div>
+ <div class="mh"><span class="mt" id="mnp-modal-title">New Record</span><button class="mx" onclick="cm('m-newpage')">✕</button></div>
  <div class="mbody mb3">Choose the start date. Each row unlocks only on its corresponding date.</div>
  <label class="flabel">Start Date</label>
  
- <!-- Updated input block trigger button replacing system select raw calendar -->
  <button class="btn bd-trigger mb3 w-100" id="mnp-date-trigger" onclick="openThemedCalendar('mnp-date')">Choose Start Date</button>
  <input type="hidden" id="mnp-date"/>
 
@@ -451,7 +458,7 @@ const Store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
 };
 const DB={
-  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'milkman',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15},
+  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'milkman',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10},
   saveProfile:(p)=>Store.set('mdn_profile',p),
   pages:()=>Store.get('mdn_pages')||[],
   savePages:(p)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); },
@@ -530,7 +537,7 @@ const AnalyticsEngine = {
 };
 
 // ══════════════════════════════════════════════════════════════════
-//  HELPERS (TIMEZONE SAFE FIX)
+//  HELPERS & TOAST SYSTEM
 // ══════════════════════════════════════════════════════════════════
 const fmt=n=>(parseFloat(n)||0).toFixed(2);
 const fmtD=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});};
@@ -552,6 +559,36 @@ const addDays=(dStr,n)=>{
   dt.setDate(dt.getDate() + n);
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
+
+// App-Themed Toast Function
+function showToast(message, isSuccess = true) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `<span style="color:${isSuccess ? 'var(--success)' : 'var(--danger)'}; font-size: 16px;">${isSuccess ? '✓' : '✕'}</span> ${message}`;
+  
+  container.appendChild(toast);
+  setTimeout(() => {
+      if(container.contains(toast)) container.removeChild(toast);
+  }, 3000);
+}
+
+// Backup Export Function
+function exportData() {
+  let backup = {};
+  for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if(key.startsWith('mdn_')) backup[key] = localStorage.getItem(key);
+  }
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", `dairy_backup_${today()}.json`);
+  document.body.appendChild(downloadAnchorNode); 
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+  showToast("Data exported successfully!");
+}
 
 // Custom App-Themed Popups Engine
 let confirmResolution = null;
@@ -744,14 +781,15 @@ function pageSummary(p){
 
 function createPage(startDate,farmerId){
   const profile=DB.profile();
-  const end=addDays(startDate,9);
+  const pLen = profile.periodLength || 10;
+  const end=addDays(startDate, pLen - 1);
   const sD=new Date(startDate+'T00:00:00'),eD=new Date(end+'T00:00:00');
   const label=sD.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' – '+eD.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const cols=defaultColumns(profile);
   return{
     id:uid(),label,startDate,endDate:end,farmerId:farmerId||null,
     cols,
-    rows:Array.from({length:10},(_,i)=>{
+    rows:Array.from({length: pLen},(_,i)=>{
       const rowDate=addDays(startDate,i);
       const r={id:uid(),index:i,assignedDate:rowDate,date:'',dateFrozen:false,total:0};
       cols.forEach(c=>{if(!['sr','date','total'].includes(c.type))r[c.id]='';});
@@ -816,6 +854,7 @@ function handleSwipe() {
 function initApp() {
   const p = DB.profile();
   if (!p.shiftTime) { p.shiftTime = 15; DB.saveProfile(p); }
+  if (!p.periodLength) { p.periodLength = 10; DB.saveProfile(p); }
 
   // Minimum splash time is 800ms, but we wait for content to be rendered before hiding
   const minSplashEnd = Date.now() + 800;
@@ -1042,6 +1081,8 @@ function saveQuickEntry(btnElement) {
     }
   }
 
+  showToast('Shift Data Saved Successfully!');
+
   if(btnElement) {
     const originalText = btnElement.innerHTML;
     btnElement.innerHTML = '✓ Saved Successfully';
@@ -1175,12 +1216,13 @@ function renderFarmerAccountView(el){
 function pageCardHTML(p){
   const t=pageSummary(p);
   const filled=p.rows.filter(r=>r.date).length;
-  const dots=Array.from({length:10},(_,i)=>`<span class="dot${p.rows[i]?.date?' on':''}"></span>`).join('');
+  const maxDots=Math.min(10, p.rows.length);
+  const dots=Array.from({length:maxDots},(_,i)=>`<span class="dot${p.rows[i]?.date?' on':''}"></span>`).join('');
   return`<button class="pcard${p.locked?' locked':''}" onclick="openDetail('${p.id}')">
    <div class="row gap2" style="justify-content:space-between;margin-bottom:${p.locked?0:9}px;">
     <div class="row gap2">
      <div style="width:30px;height:30px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;">${p.locked?'🔒':'📄'}</div>
-     <div><div style="font-weight:700;font-size:13px;">${p.label}</div><div style="font-size:10px;color:var(--muted);margin-top:1px;">${filled}/10 entries</div></div>
+     <div><div style="font-weight:700;font-size:13px;">${p.label}</div><div style="font-size:10px;color:var(--muted);margin-top:1px;">${filled}/${p.rows.length} entries</div></div>
     </div>
     <span class="badge ${p.locked?'bc':'ba'}">${p.locked?'Cleared':'Active'}</span>
    </div>
@@ -1224,7 +1266,7 @@ function renderDetailView(el){
      <button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button>
      <button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button>
     </div>
-    <div class="eyebrow">10-Day Period</div>
+    <div class="eyebrow">${page.rows.length}-Day Period</div>
     <div class="ptitle" style="font-size:17px;">${page.label}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">Each row unlocks on its assigned date.</div>
    </div>
@@ -1619,7 +1661,7 @@ function renderCalc(){
 
   document.getElementById('cledger').innerHTML=`
    <div class="card mb4">
-    <div class="slabel mb3">Ongoing 10 Days</div>
+    <div class="slabel mb3">Ongoing Period Dashboard</div>
     <div class="sp2">
      <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
      <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
@@ -1656,7 +1698,7 @@ function updCalc(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  ME TAB
+//  ME TAB (PROFILE / SETTINGS)
 // ══════════════════════════════════════════════════════════════════
 function readableLog(entry){
   if(!entry || !entry.action) return 'System Action';
@@ -1669,7 +1711,7 @@ function readableLog(entry){
       const fromStr=(entry.from!==undefined&&entry.from!=='')?' (was '+entry.from+unit+')':'';
       return`<strong>${qty}${unit}</strong> ${verb} in <strong>${entry.colName||entry.colId}</strong> for <strong>${fmtDS(entry.assignedDate)||'row '+(entry.rowIndex+1)}</strong>${fromStr}`;
     }
-    case 'page_created':return`New 10-day record created: <strong>${entry.label||''}</strong>`;
+    case 'page_created':return`New record created: <strong>${entry.label||''}</strong>`;
     case 'page_locked':return`Period <strong>${entry.label||''}</strong> marked as Account Cleared`;
     case 'page_unlocked':return`Period <strong>${entry.label||''}</strong> was unlocked for editing`;
     case 'payment_received':return`💰 Payment of <strong>₹${fmt(entry.amount)}</strong> received via Quick Screen`;
@@ -1760,14 +1802,25 @@ function renderMe(){
      <div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div>
      <label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label>
     </div>
-    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);">
+    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);">
      <div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div>
      <select class="sel" style="width:auto; padding:5px 10px;" onchange="setShiftTime(this.value)">
        ${[12,13,14,15,16,17,18,19].map(h=> `<option value="${h}" ${profile.shiftTime===h?'selected':''}>${h>12?h-12:h} PM</option>`).join('')}
      </select>
     </div>
+    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);">
+     <div><div style="font-weight:700;font-size:13px;">Default Record Period</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Days per sheet</div></div>
+     <input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/>
+    </div>
    </div>
-   <button class="btn bg" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>
+   
+   <div class="card mt3">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Your data is saved locally in this browser. Export it regularly to prevent loss if browser data is cleared.</div>
+    <button class="btn bs" style="width:100%;" onclick="exportData()">⬇️ Export Data Backup</button>
+   </div>
+
+   <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>
    `;
   }
 
@@ -1795,11 +1848,21 @@ async function setRole(r){
 }
 function setRatePref(v){
   const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p);
-  alert('Preference saved. If you changed this setting, it will take effect properly when your NEXT 10-day record is created.');
+  showToast('Preference saved. Takes effect on next record.');
 }
 function setShiftTime(v){
   const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p);
+  showToast('Evening shift time updated.');
 }
+function setPeriodLength(v) {
+  const p = DB.profile();
+  let val = parseInt(v);
+  if(val < 1 || isNaN(val)) val = 10;
+  p.periodLength = val;
+  DB.saveProfile(p);
+  showToast(`Default period length set to ${val} days`);
+}
+
 function openAnimalModal(id){
   editAnimalId=id;
   const isNew=id==='new';
@@ -1852,6 +1915,9 @@ function openNewPageModal() {
   document.getElementById('mnp-date-trigger').textContent = fmtD(currentInitialDate);
   
   const profile = DB.profile();
+  const pLen = profile.periodLength || 10;
+  document.getElementById('mnp-modal-title').textContent = `New ${pLen}-Day Record`;
+
   const farmerRow = document.getElementById('mnp-farmer-row');
   if (farmerRow) {
     if (profile.role === 'milkman') {
@@ -1870,7 +1936,7 @@ function openNewPageModal() {
 
 function doNewPage() {
   const dateVal = document.getElementById('mnp-date').value;
-  if (!dateVal) return alert('Please select a start date');
+  if (!dateVal) return showToast('Please select a start date', false);
   
   let farmerId = null;
   const profile = DB.profile();
@@ -1878,7 +1944,7 @@ function doNewPage() {
     const select = document.getElementById('mnp-farmer');
     farmerId = select ? select.value : null;
     if (!farmerId && DB.farmers().length === 0) {
-      alert('Please add a farmer first in the Profile tab.');
+      showToast('Please add a farmer first in the Profile tab.', false);
       cm('m-newpage');
       return;
     }
@@ -1890,6 +1956,7 @@ function doNewPage() {
   DB.savePages(pages);
   DB.log({ action: 'page_created', label: newPg.label });
   
+  showToast('New Record Created Successfully!');
   cm('m-newpage');
   renderHome();
 }
@@ -1947,7 +2014,6 @@ async function reqLock(pageId){
 }
 
 function openColManager(pageId){
-  // Column manager is a future feature; for now show a simple info modal
   document.getElementById('mc-title').textContent='Column Manager';
   document.getElementById('mc-body').textContent='Column customisation is coming soon. Your current columns are auto-generated based on your animals and role settings.';
   document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">OK</button>`;
@@ -1957,7 +2023,6 @@ function openColManager(pageId){
 function openTrash(){
   const trash=DB.trash();
   const now=Date.now();
-  // Build a simple modal showing trashed items
   document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
   if(!trash.length){
     document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
@@ -1998,7 +2063,7 @@ function restoreFromTrash(pageId){
 
 function doSaveFarmer(){
   const name=document.getElementById('mf-name').value.trim();
-  if(!name){alert('Enter farmer name');return;}
+  if(!name){showToast('Enter farmer name', false);return;}
   const phone=document.getElementById('mf-phone').value.trim();
   const village=document.getElementById('mf-village').value.trim();
   const rate=parseFloat(document.getElementById('mf-rate').value)||0;
