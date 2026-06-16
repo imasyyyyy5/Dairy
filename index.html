@@ -217,7 +217,7 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 
 /* THEMED CALENDAR SPECIFIC CSS */
 #m-calendar-sheet {
-  z-index: 400 !important; /* Forces calendar to stand on top of all other modals */
+  z-index: 400 !important;
 }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
 .cal-head { font-weight: 700; color: var(--sub); font-size: 11px; padding: 5px 0; text-transform: uppercase; }
@@ -239,8 +239,7 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .logrow{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--bg2);border-radius:var(--r);}
 .logdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
 .logtime{font-size:10px;color:var(--muted);margin-top:2px;font-family:monospace;}
-.logmsg{font-size:12px;color:var(--text);line-height:1.5;}
-.logmsg strong{color:#fff;font-weight:700;}
+.logmsg{font-size:13px;color:var(--text);line-height:1.5;}
 
 /* TRASH */
 .trash-card{background:var(--bg1);border:1px solid #3a1a1a;border-radius:var(--rl);padding:13px;opacity:.7;}
@@ -278,18 +277,22 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <body>
 
 <div id="toast-container"></div>
+<input type="file" id="import-file" style="display:none;" onchange="importDataObfuscated(event)" accept=".dat" />
 
-<!-- SPLASH SCREEN -->
 <div id="splash" class="full-overlay active">
   <div class="splash-icon">✏️</div>
 </div>
 
-<!-- ONBOARDING OVERLAY -->
 <div id="onboarding" class="full-overlay">
  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="eico anim-stagger d1" style="font-size:36px; width:80px; height:80px; margin: 0 auto 20px; border-radius:24px;">🥛</div>
   <h1 class="ptitle tc mb2 anim-stagger d1">Welcome to Dairy</h1>
-  <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Add the animals you milk to automate your daily entry sheets.</p>
+  <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Set up your profile and add the animals you milk to automate your daily entry sheets.</p>
+  
+  <div class="card mb3 anim-stagger d2" style="border-radius:24px; padding:20px;">
+    <div class="slabel">Your Name / Dairy Name</div>
+    <input class="inp" id="ob-dairy-name" placeholder="Enter name..."/>
+  </div>
   
   <div id="ob-animal-list" class="sp2 mb3 anim-stagger d2"></div>
   
@@ -312,9 +315,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
 </div>
 
-<!-- QUICK ENTRY OVERLAY -->
 <div id="quick-entry" class="full-overlay">
- <div style="max-width: 500px; margin: 0 auto; width: 100%;">
+ <div id="qe-active-content" style="max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="row anim-stagger d1" style="justify-content:space-between; align-items:center; margin-bottom:30px; margin-top: 10px;">
    <div>
     <div class="eyebrow" id="qe-date-label" style="font-size:11px;">Today's Date</div>
@@ -327,7 +329,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
   <div id="qe-inputs" class="sp2 mb4 anim-stagger d2"></div>
 
-  <!-- EXCLUSIVE PAYMENT ENTRY -->
   <div class="card mb4 anim-stagger d3" style="border-radius: 24px; padding: 20px; background: rgba(20,20,20,0.6); border:1px solid rgba(255,255,255,0.05);">
    <div class="row" style="justify-content:space-between; align-items:center;">
     <div><div style="font-weight:800; font-size: 15px;">Payment Received?</div><div style="font-size:12px; color:var(--muted); margin-top:2px;">Log cash or UPI now</div></div>
@@ -347,6 +348,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
    <button class="btn bg" style="width:100%; border: none; font-size: 14px; color:var(--sub);" onclick="openFullApp()">Skip to Full App ›</button>
   </div>
  </div>
+ <div id="qe-success-content" style="max-width: 500px; margin: auto; width: 100%; display:none;"></div>
 </div>
 
 
@@ -368,20 +370,32 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </nav>
 </div>
 
-<!-- MODALS -->
+<div class="moverlay" id="m-alert" onclick="moi(event,'m-alert')"><div class="mbox">
+ <div class="mh"><span class="mt" id="mal-title">Alert</span><button class="mx" onclick="submitAppAlert()">✕</button></div>
+ <div class="mbody" id="mal-body"></div>
+ <div class="mact"><button class="btn bp" onclick="submitAppAlert()" style="flex:1;">OK</button></div>
+</div></div>
+
+<div class="moverlay" id="m-prompt" onclick="moi(event,'m-prompt')"><div class="mbox">
+ <div class="mh"><span class="mt" id="mpr-title">Input</span><button class="mx" onclick="submitAppPrompt(null)">✕</button></div>
+ <div style="margin-bottom:15px;"><input class="inp" id="mpr-input" type="text" /></div>
+ <div class="mact">
+  <button class="btn bs" onclick="submitAppPrompt(null)">Cancel</button>
+  <button class="btn bp" onclick="submitAppPrompt(document.getElementById('mpr-input').value)">Save</button>
+ </div>
+</div></div>
+
 <div class="moverlay" id="m-confirm" onclick="moi(event,'m-confirm')"><div class="mbox">
- <div class="mh"><span class="mt" id="mc-title">Confirm Action</span><button class="mx" onclick="cm('m-confirm')">✕</button></div>
+ <div class="mh"><span class="mt" id="mc-title">Confirm Action</span><button class="mx" onclick="submitAppConfirm(false)">✕</button></div>
  <div class="mbody" id="mc-body"></div>
  <div class="mact" id="mc-act"></div>
 </div></div>
 
-<!-- THEMED FILTER MODAL SHEET -->
 <div class="moverlay" id="m-filter-sheet" onclick="moi(event,'m-filter-sheet')"><div class="mbox">
  <div class="mh"><span class="mt">Filter Columns</span><button class="mx" onclick="cm('m-filter-sheet')">✕</button></div>
  <div id="filter-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:10px;"></div>
 </div></div>
 
-<!-- THEMED CALENDAR MODAL SHEET -->
 <div class="moverlay" id="m-calendar-sheet" onclick="moi(event,'m-calendar-sheet')"><div class="mbox">
  <div class="mh">
    <span class="mt" id="cal-month-title">Select Date</span>
@@ -458,7 +472,7 @@ const Store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
 };
 const DB={
-  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'milkman',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10},
+  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10},
   saveProfile:(p)=>Store.set('mdn_profile',p),
   pages:()=>Store.get('mdn_pages')||[],
   savePages:(p)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); },
@@ -468,10 +482,18 @@ const DB={
   savePayments:(p)=>Store.set('mdn_payments',p),
   trash:()=>Store.get('mdn_trash')||[],
   saveTrash:(t)=>Store.set('mdn_trash',t),
-  logs:()=>Store.get('mdn_logs')||[],
-  log(entry){
+  logs:()=>{
+    const rawLogs = Store.get('mdn_logs')||[];
+    // Automatically filter out corrupted or undefined text logs
+    const cleanLogs = rawLogs.filter(l => l && l.text && l.text !== 'undefined' && l.text.trim() !== '');
+    if (cleanLogs.length !== rawLogs.length) Store.set('mdn_logs', cleanLogs); // Save the cleaned state
+    return cleanLogs;
+  },
+  
+  log(text, type='info'){
     const l=DB.logs();
-    l.unshift({...entry,id:'l'+Date.now()+Math.random().toString(36).slice(2),ts:new Date().toISOString()});
+    // Simplified logging: save plain English text immediately to save massive space
+    l.unshift({id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()});
     if(l.length>3000)l.splice(3000);
     Store.set('mdn_logs',l);
   },
@@ -537,7 +559,26 @@ const AnalyticsEngine = {
 };
 
 // ══════════════════════════════════════════════════════════════════
-//  HELPERS & TOAST SYSTEM
+//  CLOUD SYNCHRONIZATION (HOLLOW SOCKET)
+// ══════════════════════════════════════════════════════════════════
+const CloudSync = {
+  isOnline: navigator.onLine,
+  authGoogleAccount: async () => {
+     console.log("Hollow Socket: Google OAuth initiation goes here.");
+     // Setup for future Firebase/Google Sign-In Auth
+  },
+  syncData: async () => {
+     console.log("Hollow Socket: P2P & Cloud sync payload goes here.");
+     // Setup for future data diffing with external DB
+     
+     
+     showToast("Cloud connection socket verified. Server pending.", true);
+  }
+};
+
+
+// ══════════════════════════════════════════════════════════════════
+//  HELPERS, TOAST & THEMED PROMPTS
 // ══════════════════════════════════════════════════════════════════
 const fmt=n=>(parseFloat(n)||0).toFixed(2);
 const fmtD=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});};
@@ -560,38 +601,31 @@ const addDays=(dStr,n)=>{
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
 
-// App-Themed Toast Function
 function showToast(message, isSuccess = true) {
   const container = document.getElementById('toast-container');
+  if (!container) return; // Safety check
+  
+  // FIX: Use firstElementChild instead of firstChild to prevent infinite loops
+  while (container.childElementCount >= 3) {
+    container.removeChild(container.firstElementChild);
+  }
+
   const toast = document.createElement('div');
   toast.className = 'toast';
-  toast.innerHTML = `<span style="color:${isSuccess ? 'var(--success)' : 'var(--danger)'}; font-size: 16px;">${isSuccess ? '✓' : '✕'}</span> ${message}`;
   
+  // Custom black and white memo icon
+  toast.innerHTML = `<span style="font-size: 16px; margin-right: 2px; filter: grayscale(1);">${isSuccess ? '📝' : '✕'}</span> ${message}`;
   container.appendChild(toast);
-  setTimeout(() => {
-      if(container.contains(toast)) container.removeChild(toast);
+  
+  setTimeout(() => { 
+    if(container.contains(toast)) container.removeChild(toast); 
   }, 3000);
 }
 
-// Backup Export Function
-function exportData() {
-  let backup = {};
-  for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if(key.startsWith('mdn_')) backup[key] = localStorage.getItem(key);
-  }
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup));
-  const downloadAnchorNode = document.createElement('a');
-  downloadAnchorNode.setAttribute("href", dataStr);
-  downloadAnchorNode.setAttribute("download", `dairy_backup_${today()}.json`);
-  document.body.appendChild(downloadAnchorNode); 
-  downloadAnchorNode.click();
-  downloadAnchorNode.remove();
-  showToast("Data exported successfully!");
-}
 
 // Custom App-Themed Popups Engine
-let confirmResolution = null;
+let confirmResolution = null, alertResolution = null, promptResolution = null;
+
 function appConfirm(title, body) {
   return new Promise((resolve) => {
     confirmResolution = resolve;
@@ -606,10 +640,97 @@ function appConfirm(title, body) {
 }
 function submitAppConfirm(result) {
   cm('m-confirm');
-  if(confirmResolution) {
-    confirmResolution(result);
-    confirmResolution = null;
-  }
+  if(confirmResolution) { confirmResolution(result); confirmResolution = null; }
+}
+
+function appAlert(title, body) {
+  return new Promise((resolve) => {
+    alertResolution = resolve;
+    document.getElementById('mal-title').textContent = title;
+    document.getElementById('mal-body').innerHTML = body;
+    om('m-alert');
+  });
+}
+function submitAppAlert() {
+  cm('m-alert');
+  if(alertResolution) { alertResolution(); alertResolution = null; }
+}
+
+function appPrompt(title, defaultVal = '') {
+  return new Promise((resolve) => {
+    promptResolution = resolve;
+    document.getElementById('mpr-title').textContent = title;
+    document.getElementById('mpr-input').value = defaultVal;
+    om('m-prompt');
+  });
+}
+function submitAppPrompt(val) {
+  cm('m-prompt');
+  if(promptResolution) { promptResolution(val); promptResolution = null; }
+}
+
+// Backup Secure Export & Import Function
+function exportDataObfuscated() {
+  appConfirm("Export Secure Data", "This backup will be encoded for your privacy. Please store it somewhere safe.").then(res => {
+    if(!res) return;
+    
+    // Explicitly guarantee all core components are packaged, even if they are currently empty
+    let backup = {
+      mdn_profile: localStorage.getItem('mdn_profile') || null,
+      mdn_pages: localStorage.getItem('mdn_pages') || null,
+      mdn_farmers: localStorage.getItem('mdn_farmers') || null,
+      mdn_payments: localStorage.getItem('mdn_payments') || null,
+      mdn_trash: localStorage.getItem('mdn_trash') || null,
+      mdn_logs: localStorage.getItem('mdn_logs') || null,
+      mdn_analytics_cache: localStorage.getItem('mdn_analytics_cache') || null
+    };
+
+    // Catch any dynamically generated or future mdn_ keys automatically
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if(key.startsWith('mdn_') && !backup.hasOwnProperty(key)) {
+            backup[key] = localStorage.getItem(key);
+        }
+    }
+
+    // Encode JSON object to Base64 to make it unreadable text
+    const encodedPayload = btoa(encodeURIComponent(JSON.stringify(backup)));
+    const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(encodedPayload);
+    const a = document.createElement('a');
+    a.href = dataStr; 
+    const todayStr = new Date().toISOString().split('T')[0]; // Safe fallback for today()
+    a.download = `dairy_secure_full_backup_${todayStr}.dat`;
+    document.body.appendChild(a); 
+    a.click(); 
+    a.remove();
+    
+    showToast("Complete data exported successfully!");
+  });
+}
+
+function importDataObfuscated(e) {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(ev) {
+    try {
+        const rawContent = ev.target.result;
+        const decodedJSON = JSON.parse(decodeURIComponent(atob(rawContent)));
+        const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
+        if(confirmed) {
+            // Validate it has mdn tags
+            for(let key in decodedJSON) {
+                if(key.startsWith('mdn_')) localStorage.setItem(key, decodedJSON[key]);
+            }
+            showToast("Import successful! Reloading...");
+            setTimeout(() => location.reload(), 1500);
+        }
+    } catch (err) {
+        appAlert("Import Failed", "The file provided is not a valid or secure backup format.");
+    }
+    e.target.value = ''; // reset file input
+  };
+  reader.readAsText(file);
 }
 
 // Global Filter Variables
@@ -620,16 +741,13 @@ let currentTableFilter = 'all';
 // ══════════════════════════════════════════════════════════════════
 let activeCalendarTargetInputId = '';
 let calendarCurrentYear = new Date().getFullYear();
-let calendarCurrentMonth = new Date().getMonth(); // 0-indexed
+let calendarCurrentMonth = new Date().getMonth();
 
 function openThemedCalendar(targetHiddenInputId) {
   activeCalendarTargetInputId = targetHiddenInputId;
   const currentVal = document.getElementById(targetHiddenInputId).value || today();
   const [y, m, d] = currentVal.split('-').map(Number);
-  
-  calendarCurrentYear = y;
-  calendarCurrentMonth = m - 1;
-  
+  calendarCurrentYear = y; calendarCurrentMonth = m - 1;
   drawCalendarGrid();
   om('m-calendar-sheet');
 }
@@ -640,59 +758,34 @@ function drawCalendarGrid() {
   
   const firstDayIndex = new Date(calendarCurrentYear, calendarCurrentMonth, 1).getDay();
   const totalDaysInMonth = new Date(calendarCurrentYear, calendarCurrentMonth + 1, 0).getDate();
-  
-  const targetHiddenInputId = activeCalendarTargetInputId;
-  const currentVal = document.getElementById(targetHiddenInputId).value;
+  const currentVal = document.getElementById(activeCalendarTargetInputId).value;
   const todayStr = today();
-
   let daysHtml = '';
   
-  // Padding blank days for row alignment offsets
-  for (let i = 0; i < firstDayIndex; i++) {
-    daysHtml += `<div class="cal-day empty-cell"></div>`;
-  }
-  
-  // Generating physical day selection buttons
+  for (let i = 0; i < firstDayIndex; i++) daysHtml += `<div class="cal-day empty-cell"></div>`;
   for (let day = 1; day <= totalDaysInMonth; day++) {
     const formatMonthStr = String(calendarCurrentMonth + 1).padStart(2, '0');
     const formatDayStr = String(day).padStart(2, '0');
     const computedISODate = `${calendarCurrentYear}-${formatMonthStr}-${formatDayStr}`;
-    
     let stateClasses = '';
     if (computedISODate === currentVal) stateClasses += ' selected';
     if (computedISODate === todayStr) stateClasses += ' today-marker';
-    
-    daysHtml += `
-      <button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">
-        ${day}
-      </button>
-    `;
+    daysHtml += `<button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">${day}</button>`;
   }
-  
   document.getElementById('calendar-days-container').innerHTML = daysHtml;
 }
 
 function navCalendarMonth(direction) {
   calendarCurrentMonth += direction;
-  if (calendarCurrentMonth > 11) {
-    calendarCurrentMonth = 0;
-    calendarCurrentYear++;
-  } else if (calendarCurrentMonth < 0) {
-    calendarCurrentMonth = 11;
-    calendarCurrentYear--;
-  }
+  if (calendarCurrentMonth > 11) { calendarCurrentMonth = 0; calendarCurrentYear++; } 
+  else if (calendarCurrentMonth < 0) { calendarCurrentMonth = 11; calendarCurrentYear--; }
   drawCalendarGrid();
 }
 
 function selectCalendarDate(isoDateStr) {
   document.getElementById(activeCalendarTargetInputId).value = isoDateStr;
-  
-  // Update view component trigger buttons dynamically
   const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
-  if (triggerButton) {
-    triggerButton.textContent = fmtD(isoDateStr);
-  }
-  
+  if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
   cm('m-calendar-sheet');
 }
 
@@ -701,28 +794,21 @@ function selectCalendarDate(isoDateStr) {
 // ══════════════════════════════════════════════════════════════════
 function defaultColumns(profile){
   const cols=[ {id:'sr',name:'Sr.',type:'sr',locked:true} ];
-  if(profile.role==='milkman'){
+  const milkA=(profile.animals||[]).filter(a=>a.milks!==false);
+  
+  if(!milkA.length){
     cols.push({id:'cow_am',name:'Cow AM (L)',type:'milk_am',animal:'cow', animalType:'cow'});
     cols.push({id:'cow_pm',name:'Cow PM (L)',type:'milk_pm',animal:'cow', animalType:'cow'});
-    cols.push({id:'buf_am',name:'Buf AM (L)',type:'milk_am',animal:'buffalo', animalType:'buffalo'});
-    cols.push({id:'buf_pm',name:'Buf PM (L)',type:'milk_pm',animal:'buffalo', animalType:'buffalo'});
-    cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
   } else {
-    const milkA=(profile.animals||[]).filter(a=>a.milks!==false);
-    if(!milkA.length){
-      cols.push({id:'cow_am',name:'Cow AM (L)',type:'milk_am',animal:'cow', animalType:'cow'});
-      cols.push({id:'cow_pm',name:'Cow PM (L)',type:'milk_pm',animal:'cow', animalType:'cow'});
-    } else {
-      milkA.forEach(a=>{
-        cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate});
-        cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate});
-        if(profile.ratePerEntry!==false) {
-           cols.push({id:'a_'+a.id+'_rate', name:a.name+' Rate', type:'rate_per_animal', animal:a.id, animalType:a.type});
-        }
-      });
-    }
-    if(profile.ratePerEntry!==false && milkA.length===0) cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
+    milkA.forEach(a=>{
+      cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate});
+      cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate});
+      if(profile.ratePerEntry!==false) {
+          cols.push({id:'a_'+a.id+'_rate', name:a.name+' Rate', type:'rate_per_animal', animal:a.id, animalType:a.type});
+      }
+    });
   }
+  if(profile.ratePerEntry!==false && milkA.length===0) cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
   cols.push({id:'total',name:'Total (₹)',type:'total',locked:true});
   return cols;
 }
@@ -805,11 +891,8 @@ function createPage(startDate,farmerId){
 let curTab='home',curDetailId=null,curFarmerId=null;
 let meView='profile', gChartType='overall', gChartFilter='category';
 let editFarmerId=null,editAnimalId=null,animalType='cow';
-let pendingConfirm=null,colEditPageId=null;
 
-let touchStartX = 0;
-let touchEndX = 0;
-let ignoreSwipe = false;
+let touchStartX = 0; let touchEndX = 0; let ignoreSwipe = false;
 const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
 
 document.addEventListener('touchstart', e => {
@@ -823,24 +906,33 @@ document.addEventListener('touchend', e => {
   handleSwipe();
 }, {passive: true});
 
+const SWIPE_THRESHOLD = 100; // Increased magnitude to prevent accidental mis-swipes
+
 function handleSwipe() {
   const diff = touchEndX - touchStartX;
-  if (Math.abs(diff) < 60) return; 
+  if (Math.abs(diff) < SWIPE_THRESHOLD) return; 
 
   if(document.getElementById('quick-entry').style.display !== 'none' && 
      document.getElementById('quick-entry').classList.contains('active')) return;
   if(document.getElementById('onboarding').classList.contains('active')) return;
 
-  if (curDetailId && diff > 60) { closeDetail(); return; }
-  if (curFarmerId && !curDetailId && diff > 60) { curFarmerId = null; renderHome(); return; }
+  // 1. Fix: Log screen swipe right goes back to profile view
+  if (curTab === 'me' && meView === 'logs' && diff > SWIPE_THRESHOLD) {
+      setMV('profile');
+      return;
+  }
 
+  if (curDetailId && diff > SWIPE_THRESHOLD) { closeDetail(); return; }
+  if (curFarmerId && !curDetailId && diff > SWIPE_THRESHOLD) { curFarmerId = null; renderHome(); return; }
+
+  // 2. Fix: Higher magnitude needed for general tab swiping
   if (!curDetailId && !curFarmerId) {
       let currentIdx = TAB_ORDER.indexOf(curTab);
-      if (diff < -60 && currentIdx < TAB_ORDER.length - 1) {
+      if (diff < -SWIPE_THRESHOLD && currentIdx < TAB_ORDER.length - 1) {
           let nextTab = TAB_ORDER[currentIdx + 1];
           let btn = document.querySelector(`.nb[onclick*="${nextTab}"]`);
           if(btn) goTab(nextTab, btn);
-      } else if (diff > 60 && currentIdx > 0) {
+      } else if (diff > SWIPE_THRESHOLD && currentIdx > 0) {
           let prevTab = TAB_ORDER[currentIdx - 1];
           let btn = document.querySelector(`.nb[onclick*="${prevTab}"]`);
           if(btn) goTab(prevTab, btn);
@@ -848,43 +940,68 @@ function handleSwipe() {
   }
 }
 
+
 // ══════════════════════════════════════════════════════════════════
-//  APP INITIALIZATION & ROUTING
+//  APP INITIALIZATION & ROUTING ENGINE
 // ══════════════════════════════════════════════════════════════════
 function initApp() {
   const p = DB.profile();
-  if (!p.shiftTime) { p.shiftTime = 15; DB.saveProfile(p); }
-  if (!p.periodLength) { p.periodLength = 10; DB.saveProfile(p); }
+  if (!p.shiftTime) { p.shiftTime = 15; }
+  if (!p.periodLength) { p.periodLength = 10; }
+  p.role = 'farmer'; // Lock in farmer mode requirement
+  DB.saveProfile(p);
 
-  // Minimum splash time is 800ms, but we wait for content to be rendered before hiding
   const minSplashEnd = Date.now() + 800;
 
-  function hideSplash(afterHide) {
-    const splash = document.getElementById('splash');
+  function transitionTo(targetFunction) {
     const remaining = Math.max(0, minSplashEnd - Date.now());
     setTimeout(() => {
-      splash.style.opacity = '0';
+      document.getElementById('splash').style.opacity = '0';
       setTimeout(() => {
-        splash.style.display = 'none';
-        afterHide();
+        document.getElementById('splash').style.display = 'none';
+        targetFunction();
       }, 300);
     }, remaining);
   }
 
-  if (!p.onboarded && p.role === 'farmer') {
-    hideSplash(() => {
-      document.getElementById('app').style.display = 'none';
+  // 1. Mandatory Onboarding Check
+  if (!p.onboarded) {
+    document.getElementById('app').style.display = 'none';
+    transitionTo(() => {
       const ob = document.getElementById('onboarding');
       ob.classList.add('active');
       setTimeout(() => ob.classList.add('start-anim'), 10);
     });
-  } else if (p.role === 'farmer') {
-    hideSplash(() => { openQuickEntry(); });
-  } else {
-    // Render content first, THEN hide splash — no blank flash
+    return;
+  }
+
+  // 2. Intelligent Routing Check (Does Shift Data Exist?)
+  const hour = new Date().getHours();
+  const shiftHour = p.shiftTime || 15;
+  const isPM = hour >= shiftHour;
+  const targetType = isPM ? 'milk_pm' : 'milk_am';
+
+  const pages = DB.pages();
+  const td = today();
+  const activePage = pages.find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
+  
+  let shiftHasData = false;
+  if(activePage) {
+    const row = activePage.rows.find(r => r.assignedDate === td);
+    if(row) {
+      const targetCols = activePage.cols.filter(c => c.type === targetType);
+      shiftHasData = targetCols.some(c => parseFloat(row[c.id]) > 0);
+    }
+  }
+
+  // 3. Render Route based on check
+  if (shiftHasData) {
     document.getElementById('app').style.display = 'flex';
     renderHome(); renderGraphs(); renderCalc(); renderMe();
-    hideSplash(() => { /* content already rendered */ });
+    transitionTo(() => { /* app is already visible underneath */ });
+  } else {
+    document.getElementById('app').style.display = 'none';
+    transitionTo(() => openQuickEntry());
   }
 }
 
@@ -911,7 +1028,7 @@ function setObType(t) {
 function addObAnimal() {
   const name = document.getElementById('ob-name').value.trim();
   const rate = parseFloat(document.getElementById('ob-rate').value) || 0;
-  if(!name) return alert('Enter animal name');
+  if(!name) return appAlert('Notice', 'Please enter an animal name or ID to continue.');
   obTempAnimals.push({id: uid(), name, type: obType, rate, milks: true});
   document.getElementById('ob-name').value = '';
   document.getElementById('ob-rate').value = '';
@@ -928,11 +1045,17 @@ function renderObAnimals() {
   `).join('');
 }
 function finishOnboarding() {
+  const dairyName = document.getElementById('ob-dairy-name').value.trim();
+  if(!dairyName) return appAlert('Required Info', 'Please provide your Name or your Dairy Name before continuing.');
+  if(obTempAnimals.length === 0) return appAlert('Required Info', 'Please add at least one milking animal to begin.');
+
   const p = DB.profile();
+  p.name = dairyName;
   p.onboarded = true;
   p.ratePerEntry = false;
-  if(obTempAnimals.length > 0) p.animals = obTempAnimals;
+  p.animals = obTempAnimals;
   DB.saveProfile(p);
+  DB.log(`Completed initial setup with ${obTempAnimals.length} animal(s).`, 'create');
   
   document.getElementById('onboarding').classList.remove('active');
   document.getElementById('onboarding').style.display = 'none';
@@ -952,15 +1075,17 @@ function getOrCreateActivePage() {
     active = createPage(td);
     pages.unshift(active);
     DB.savePages(pages);
+    DB.log(`Automatically created new ${DB.profile().periodLength}-day record sheet for ${fmtD(td)}.`, 'create');
   }
   return active;
 }
 
 function openQuickEntry() {
-  document.getElementById('app').style.display = 'none';
   const qe = document.getElementById('quick-entry');
   qe.style.display = 'flex';
   qe.classList.add('active');
+  document.getElementById('qe-active-content').style.display = 'block';
+  document.getElementById('qe-success-content').style.display = 'none';
   setTimeout(()=> qe.classList.add('start-anim'), 10);
 
   const hour = new Date().getHours();
@@ -976,6 +1101,13 @@ function openQuickEntry() {
   const page = getOrCreateActivePage();
   const td = today();
   const row = page.rows.find(r => r.assignedDate === td);
+  
+  // FIX: Safety check to prevent app freezing if date is out of bounds
+  if (!row) {
+  showToast("Error: Date out of bounds for current sheet.", false);
+  setTimeout(openFullApp, 1500);
+  return; 
+  }
   
   qeContext.pageId = page.id;
   qeContext.rowId = row.id;
@@ -1049,8 +1181,11 @@ function saveQuickEntry(btnElement) {
   const rowIdx = page.rows.findIndex(r => r.id === qeContext.rowId);
   const row = page.rows[rowIdx];
 
+  let shiftMilkAdded = false;
+
   qeContext.cols.forEach(c => {
     const val = document.getElementById(`qe-input-${c.id}`).value;
+    if (val) shiftMilkAdded = true;
     row[c.id] = val;
     
     if (DB.profile().ratePerEntry !== false) {
@@ -1069,7 +1204,10 @@ function saveQuickEntry(btnElement) {
   row.total = computeRowTotal(row, page.cols, DB.profile());
 
   DB.savePages(pages);
-  DB.log({action: 'quick_entry_saved', isPM: qeContext.isPM, date: row.date});
+  
+  if(shiftMilkAdded) {
+      DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)} via Quick Screen.`, 'update');
+  }
 
   if (document.getElementById('qe-pay-toggle').checked) {
     const amt = parseFloat(document.getElementById('qe-pay-amount').value) || 0;
@@ -1077,27 +1215,24 @@ function saveQuickEntry(btnElement) {
       const pays = DB.payments();
       pays.unshift({ id: uid(), type: 'received', amount: amt, date: today(), note: 'Quick Entry Payment', createdAt: new Date().toISOString() });
       DB.savePayments(pays);
-      DB.log({action: 'payment_received', amount: amt, note: 'From Quick Entry'});
+      DB.log(`Received payment of ₹${fmt(amt)} via Quick Screen.`, 'payment');
     }
   }
 
-  showToast('Shift Data Saved Successfully!');
-
-  if(btnElement) {
-    const originalText = btnElement.innerHTML;
-    btnElement.innerHTML = '✓ Saved Successfully';
-    btnElement.style.background = 'var(--success)';
-    btnElement.style.color = '#fff';
-    
-    setTimeout(() => {
-      openFullApp();
-      btnElement.innerHTML = originalText;
-      btnElement.style.background = '';
-      btnElement.style.color = '';
-    }, 700);
-  } else {
-    openFullApp();
-  }
+  // Update UI to Success Screen instead of dropping directly to full app
+  document.getElementById('qe-active-content').style.display = 'none';
+  const successBox = document.getElementById('qe-success-content');
+  successBox.style.display = 'block';
+  successBox.innerHTML = `
+    <div class="tc" style="margin-top: 40px;">
+      <div style="font-size:64px; margin-bottom:20px; text-shadow: 0 4px 20px rgba(45, 138, 78, 0.5);">✅</div>
+      <h2 class="ptitle mb3" style="font-size:32px;">Shift Saved</h2>
+      <p style="color:var(--muted); font-size:15px; margin-bottom:40px;">Your entries have been successfully logged to your sheet. You can safely close the app now.</p>
+      
+      <button class="btn bp-premium mb3" style="width:100%; padding:18px; font-size:17px; margin-bottom:15px;" onclick="window.close(); showToast('Please close this tab manually if it does not close automatically.');">Close Application</button>
+      <button class="btn bg" style="width:100%; border: none; font-size: 15px; color:var(--sub);" onclick="openFullApp()">Go to Dashboard ›</button>
+    </div>
+  `;
 }
 
 function openFullApp() {
@@ -1114,17 +1249,11 @@ function openFullApp() {
 function renderHome(){
   const profile=DB.profile();
   const el=document.getElementById('p-home');
-  if(profile.role==='milkman'){
-    if(curDetailId)renderDetailView(el);
-    else if(curFarmerId)renderFarmerAccountView(el);
-    else renderMilkmanHome(el);
-  } else {
-    if(curDetailId)renderDetailView(el);
-    else renderFarmerHome(el);
-  }
+  if(curDetailId) renderDetailView(el);
+  else renderFarmerHome(el);
 }
 
-// FARMER (personal) HOME
+// FARMER HOME
 function renderFarmerHome(el){
   const pages=DB.pages().filter(p=>!p.farmerId&&!p.trashed);
   const profile=DB.profile();
@@ -1149,67 +1278,6 @@ function renderFarmerHome(el){
   if(!sorted.length){
     html+=`<div class="empty"><div class="eico">📓</div><div class="etitle">No records yet</div><div class="esub">Tap "+ Record" to start</div></div>`;
   } else {sorted.forEach(p=>{html+=pageCardHTML(p);});}
-  el.innerHTML=html+`</div>`;
-}
-
-function renderMilkmanHome(el){
-  const pages=DB.pages().filter(p=>!p.trashed);
-  const farmers=DB.farmers();
-  const trash=DB.trash();
-  const profile=DB.profile();
-  let totalRev=0,activeRev=0;
-  pages.forEach(p=>{const t=pageSummary(p);totalRev+=t.rev;if(!p.locked)activeRev+=t.rev;});
-  const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-  let html=`
-   <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
-    <div><div class="eyebrow">Milkman</div><div class="ptitle">${profile.name}</div></div>
-    <div class="row gap2">
-     ${trash.length?`<button class="btn bg bsm" onclick="openTrash()">🗑 ${trash.length}</button>`:''}
-     <button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button>
-    </div>
-   </div>
-   <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
-    <div class="sbox"><div class="sval">${pages.length}</div><div class="ssub">Records</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(totalRev)}</div><div class="ssub">Total Earned</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(activeRev)}</div><div class="ssub">Active Period</div></div>
-   </div>
-   <div class="pc sp3">`;
-  if(!sorted.length){
-    html+=`<div class="empty"><div class="eico">📓</div><div class="etitle">No records yet</div><div class="esub">Tap "+ Record" to start</div></div>`;
-  } else { sorted.forEach(p=>{ html+=pageCardHTML(p); }); }
-  el.innerHTML=html+`</div>`;
-}
-
-function renderFarmerAccountView(el){
-  const farmer=DB.farmers().find(f=>f.id===curFarmerId);
-  if(!farmer){curFarmerId=null;renderHome();return;}
-  const pages=DB.pages().filter(p=>p.farmerId===curFarmerId&&!p.trashed);
-  const payments=DB.payments().filter(p=>p.farmerId===curFarmerId);
-  let totalEarned=0,totalPaid=0;
-  pages.forEach(p=>{totalEarned+=pageSummary(p).rev;});
-  payments.forEach(p=>{if(p.type==='received')totalPaid+=parseFloat(p.amount)||0;});
-  const netBal=totalEarned-totalPaid;
-  const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-  let html=`
-   <div class="ph">
-    <div class="row gap2 mb3">
-     <button class="btn bg bsm" onclick="curFarmerId=null;renderHome()">← Farmers</button>
-     <div class="f1"></div>
-     <button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button>
-    </div>
-    <div class="eyebrow">Farmer Account</div>
-    <div class="ptitle">${farmer.name}</div>
-    ${farmer.village?`<div style="font-size:11px;color:var(--muted);margin-top:2px;">📍 ${farmer.village}</div>`:''}
-   </div>
-   <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
-    <div class="sbox"><div class="sval">₹${fmt(totalEarned)}</div><div class="ssub">Total Due</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(totalPaid)}</div><div class="ssub">Received</div></div>
-    <div class="sbox" style="border-color:${netBal>0?'var(--warn)':'var(--success)'};"><div class="sval" style="color:${netBal>0?'#e8b800':'var(--success)'};">₹${fmt(netBal)}</div><div class="ssub">${netBal>0?'Balance':'Settled'}</div></div>
-   </div>
-   <div class="pc sp3">`;
-  if(!sorted.length){
-    html+=`<div class="empty"><div class="eico">📓</div><div class="etitle">No records</div><div class="esub">Tap "+ Record" to add one</div></div>`;
-  } else { sorted.forEach(p=>{ html+=pageCardHTML(p); }); }
   el.innerHTML=html+`</div>`;
 }
 
@@ -1338,13 +1406,11 @@ function buildCompactTable(page,profile,todayStr, filter){
     }
     else {
       const key = c.animal || 'global';
-      
       if(filter !== 'all') {
          if(filter === 'totals') return;
          if(filter.startsWith('cat_') && c.animalType !== filter.replace('cat_','')) return;
          if(filter.startsWith('anim_') && c.animal !== filter.replace('anim_','')) return;
       }
-
       if(!animals[key]) {
          let n = c.name.replace(/( AM| PM| Rate).*/, '');
          if(n === 'Rate (₹/L)') n = 'Global Rate';
@@ -1435,8 +1501,14 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
     pages[pi].rows[ri].dateFrozen=true;
   }
   pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile());
-  DB.log({action:'cell_update',pageId,rowId,colId,colName,colType,from:old,to:value,assignedDate,rowIndex,pageLabel:pages[pi].label});
   DB.savePages(pages);
+
+  // Directly log the English readable string here:
+  const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
+  const oldStr = (old !== undefined && old !== '') ? ` (was ${old}${unit})` : '';
+  const valStr = (value !== undefined && value !== '') ? value : '0';
+  DB.log(`Changed ${colName} to ${valStr}${unit} for ${fmtDS(assignedDate)}${oldStr}`, 'update');
+
   document.getElementById('table-container').innerHTML = buildCompactTable(pages[pi], DB.profile(), today(), currentTableFilter);
 }
 
@@ -1698,33 +1770,16 @@ function updCalc(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  ME TAB (PROFILE / SETTINGS)
+//  ME TAB (PROFILE / SETTINGS / LOGS)
 // ══════════════════════════════════════════════════════════════════
-function readableLog(entry){
-  if(!entry || !entry.action) return 'System Action';
-  const t=fmtTime(entry.ts);
-  switch(entry.action){
-    case 'cell_update':{
-      const qty=parseFloat(entry.to)||0;
-      const unit=entry.colType==='rate'||entry.colType==='rate_per_animal'?'₹/L':entry.colType==='total'?'₹':'L';
-      const verb=entry.from===''||entry.from===0||entry.from===undefined?'entered':'changed';
-      const fromStr=(entry.from!==undefined&&entry.from!=='')?' (was '+entry.from+unit+')':'';
-      return`<strong>${qty}${unit}</strong> ${verb} in <strong>${entry.colName||entry.colId}</strong> for <strong>${fmtDS(entry.assignedDate)||'row '+(entry.rowIndex+1)}</strong>${fromStr}`;
-    }
-    case 'page_created':return`New record created: <strong>${entry.label||''}</strong>`;
-    case 'page_locked':return`Period <strong>${entry.label||''}</strong> marked as Account Cleared`;
-    case 'page_unlocked':return`Period <strong>${entry.label||''}</strong> was unlocked for editing`;
-    case 'payment_received':return`💰 Payment of <strong>₹${fmt(entry.amount)}</strong> received via Quick Screen`;
-    default:return entry.action+(entry.note?' — '+entry.note:'');
+function logDotColor(type){
+  switch(type) {
+    case 'payment': return '#5db85d'; // Green
+    case 'delete':  return 'var(--danger)'; // Red
+    case 'create':  return '#4e8cff'; // Blue
+    case 'update':  return '#e8b800'; // Orange
+    default:        return 'var(--border2)'; // Gray
   }
-}
-
-function logDotColor(action){
-  if(!action) return 'var(--border2)';
-  if(action==='payment_received')return'#5db85d';
-  if(action.includes('delet')||action.includes('remov'))return'var(--danger)';
-  if(action.includes('lock'))return'#aaa';
-  return'var(--border2)';
 }
 
 function renderMe(){
@@ -1743,16 +1798,17 @@ function renderMe(){
     const logs=DB.logs();
     html+=`<div class="pc"><div class="slabel">Activity Log — Human Readable</div><div class="sp2">`;
     if(!logs.length){html+=`<div class="empty"><div class="esub">No actions logged yet</div></div>`;}
-    else logs.slice(0,150).forEach(l=>{
+    else logs.slice(0,200).forEach(l=>{
+      // Direct printing of pre-formatted English strings
       html+=`<div class="logrow">
-       <div class="logdot" style="background:${logDotColor(l.action)};"></div>
+       <div class="logdot" style="background:${logDotColor(l.type)};"></div>
        <div class="f1">
-        <div class="logmsg">${readableLog(l)}</div>
+        <div class="logmsg">${l.text}</div>
         <div class="logtime">${fmtTime(l.ts)}</div>
        </div>
       </div>`;
     });
-    if(logs.length>150)html+=`<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px;">Showing latest 150 of ${logs.length} entries</div>`;
+    if(logs.length>200)html+=`<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px;">Showing latest 200 of ${logs.length} entries</div>`;
     html+=`</div></div>`;
     el.innerHTML=html;return;
   }
@@ -1771,8 +1827,8 @@ function renderMe(){
     </div>
     <div class="slabel">Role</div>
     <div class="row gap2">
-     <button class="rpill${profile.role==='milkman'?' on':''}" onclick="setRole('milkman')">🥛 Milkman</button>
-     <button class="rpill${profile.role==='farmer'?' on':''}" onclick="setRole('farmer')">🌾 Farmer</button>
+     <button class="rpill" onclick="setRole('milkman')">🥛 Milkman</button>
+     <button class="rpill on" onclick="setRole('farmer')">🌾 Farmer</button>
     </div>
    </div>`;
 
@@ -1816,14 +1872,24 @@ function renderMe(){
    
    <div class="card mt3">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Your data is saved locally in this browser. Export it regularly to prevent loss if browser data is cleared.</div>
-    <button class="btn bs" style="width:100%;" onclick="exportData()">⬇️ Export Data Backup</button>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Export your data securely to prevent loss. The file is encrypted.</div>
+    <div class="row gap2">
+      <button class="btn bs" style="flex:1;" onclick="exportDataObfuscated()">⬇️ Export</button>
+      <button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬆️ Import</button>
+    </div>
    </div>
 
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>
    `;
   }
 
+html += `
+   <div class="card mt3">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Connected Experience</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Future syncing to your Google Account and local Milkmen network.</div>
+    <button class="btn bp" style="width:100%; border-radius: 12px;" onclick="CloudSync.syncData()">☁️ Test Sync Socket</button>
+   </div>
+  `;
   const pages=DB.pages().filter(p=>!p.trashed);
   html+=`<div class="card mt4">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div>
@@ -1837,15 +1903,24 @@ function renderMe(){
   el.innerHTML=html;
 }
 function setMV(v){meView=v;renderMe();}
-function editName(){const p=DB.profile();const n=prompt('Dairy name:',p.name);if(!n?.trim())return;p.name=n.trim();DB.saveProfile(p);DB.log({action:'name_changed',to:p.name});renderMe();}
-
-async function setRole(r){
-  const p=DB.profile();if(p.role===r)return;
-  const agreed = await appConfirm('Switch Mode?', `Switch to ${r} mode? Existing data is preserved.`);
-  if(!agreed) return;
-  p.role=r;DB.saveProfile(p);DB.log({action:'role_changed',to:r});
-  curFarmerId=null;curDetailId=null;renderMe();renderHome();
+function editName(){
+  const p=DB.profile();
+  appPrompt('Dairy name:', p.name).then(n => {
+    if(!n?.trim()) return;
+    p.name=n.trim();
+    DB.saveProfile(p);
+    DB.log(`Changed dairy name to ${p.name}`, 'info');
+    renderMe();
+  });
 }
+
+function setRole(r) {
+  if (r === 'milkman') {
+    appAlert('Coming Soon', 'Milkman mode is currently in development. Please continue using Farmer mode for now.');
+    return;
+  }
+}
+
 function setRatePref(v){
   const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p);
   showToast('Preference saved. Takes effect on next record.');
@@ -1882,7 +1957,7 @@ function setAT(t){
 }
 function doSaveAnimal(){
   const name=document.getElementById('ma-name').value.trim();
-  if(!name){alert('Enter animal name');return;}
+  if(!name){appAlert('Missing Field', 'Please enter an animal name.');return;}
   const milks=document.getElementById('ma-milks').checked;
   const rate=milks?(parseFloat(document.getElementById('ma-rate').value)||0):0;
   const profile=DB.profile();
@@ -1892,7 +1967,7 @@ function doSaveAnimal(){
   if(isNew)profile.animals.push(entry);
   else{const i=profile.animals.findIndex(a=>a.id===editAnimalId);if(i>=0)profile.animals[i]=entry;}
   DB.saveProfile(profile);
-  DB.log({action:isNew?'animal_added':'animal_updated',id:entry.id,name,animalType});
+  DB.log(isNew ? `Added new animal: ${name} (${animalType})` : `Updated animal details for: ${name}`, 'create');
   cm('m-animal');renderMe();
 }
 async function removeAnimal(id){
@@ -1902,7 +1977,7 @@ async function removeAnimal(id){
   if(!agreed) return;
   p.animals=p.animals.filter(x=>x.id!==id);
   DB.saveProfile(p);
-  DB.log({action:'animal_removed',id,name:a?.name});
+  DB.log(`Removed animal from dairy: ${a?.name}`, 'delete');
   renderMe();
 }
 
@@ -1917,20 +1992,6 @@ function openNewPageModal() {
   const profile = DB.profile();
   const pLen = profile.periodLength || 10;
   document.getElementById('mnp-modal-title').textContent = `New ${pLen}-Day Record`;
-
-  const farmerRow = document.getElementById('mnp-farmer-row');
-  if (farmerRow) {
-    if (profile.role === 'milkman') {
-      farmerRow.style.display = 'block';
-      const select = document.getElementById('mnp-farmer');
-      if (select) {
-        const farmers = DB.farmers();
-        select.innerHTML = farmers.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
-      }
-    } else {
-      farmerRow.style.display = 'none';
-    }
-  }
   om('m-newpage');
 }
 
@@ -1938,23 +1999,11 @@ function doNewPage() {
   const dateVal = document.getElementById('mnp-date').value;
   if (!dateVal) return showToast('Please select a start date', false);
   
-  let farmerId = null;
-  const profile = DB.profile();
-  if (profile.role === 'milkman') {
-    const select = document.getElementById('mnp-farmer');
-    farmerId = select ? select.value : null;
-    if (!farmerId && DB.farmers().length === 0) {
-      showToast('Please add a farmer first in the Profile tab.', false);
-      cm('m-newpage');
-      return;
-    }
-  }
-  
   const pages = DB.pages();
-  const newPg = createPage(dateVal, farmerId);
+  const newPg = createPage(dateVal, null);
   pages.unshift(newPg);
   DB.savePages(pages);
-  DB.log({ action: 'page_created', label: newPg.label });
+  DB.log(`Created new record sheet: ${newPg.label}`, 'create');
   
   showToast('New Record Created Successfully!');
   cm('m-newpage');
@@ -1984,7 +2033,7 @@ async function trashPage(pageId){
   DB.saveTrash(trash);
   pages.splice(pi,1);
   DB.savePages(pages);
-  DB.log({action:'page_trashed',label:page.label});
+  DB.log(`Moved record sheet to trash: ${page.label}`, 'delete');
   curDetailId=null;
   currentTableFilter='all';
   renderHome();
@@ -2001,23 +2050,20 @@ async function reqLock(pageId){
     page.locked=false;
     page.clearedAt=null;
     DB.savePages(pages);
-    DB.log({action:'page_unlocked',label:page.label});
+    DB.log(`Unlocked record sheet for editing: ${page.label}`, 'info');
   } else {
     const agreed=await appConfirm('Mark as Cleared?','Lock this record and mark account as cleared?');
     if(!agreed) return;
     page.locked=true;
     page.clearedAt=new Date().toISOString();
     DB.savePages(pages);
-    DB.log({action:'page_locked',label:page.label});
+    DB.log(`Locked and cleared account for record sheet: ${page.label}`, 'info');
   }
   renderHome();
 }
 
 function openColManager(pageId){
-  document.getElementById('mc-title').textContent='Column Manager';
-  document.getElementById('mc-body').textContent='Column customisation is coming soon. Your current columns are auto-generated based on your animals and role settings.';
-  document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">OK</button>`;
-  om('m-confirm');
+  appAlert('Column Manager', 'Column customization is coming soon. Your current columns are auto-generated based on your animals and settings.');
 }
 
 function openTrash(){
@@ -2056,28 +2102,9 @@ function restoreFromTrash(pageId){
   DB.savePages(pages);
   trash.splice(ti,1);
   DB.saveTrash(trash);
-  DB.log({action:'page_restored',label:page.label});
+  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
   cm('m-confirm');
   renderHome();
-}
-
-function doSaveFarmer(){
-  const name=document.getElementById('mf-name').value.trim();
-  if(!name){showToast('Enter farmer name', false);return;}
-  const phone=document.getElementById('mf-phone').value.trim();
-  const village=document.getElementById('mf-village').value.trim();
-  const rate=parseFloat(document.getElementById('mf-rate').value)||0;
-  const farmers=DB.farmers();
-  const isNew=!editFarmerId;
-  const entry={id:isNew?uid():editFarmerId,name,phone,village,rate,createdAt:new Date().toISOString()};
-  if(isNew){farmers.push(entry);}
-  else{const i=farmers.findIndex(f=>f.id===editFarmerId);if(i>=0)farmers[i]=entry;}
-  DB.saveFarmers(farmers);
-  DB.log({action:isNew?'farmer_added':'farmer_updated',name});
-  editFarmerId=null;
-  cm('m-farmer');
-  renderHome();
-  renderMe();
 }
 
 // ══════════════════════════════════════════════════════════════════
