@@ -282,7 +282,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <body>
 
 <div id="toast-container"></div>
-<input type="file" id="import-file" style="display:none;" onchange="importDataObfuscated(event)" accept=".dat" />
+<input type="file" id="import-file" style="display:none;" onchange="importBackup(event)" accept=".json,.dat" />
 
 <div id="splash" class="full-overlay active">
   <div class="splash-icon">✏️</div>
@@ -474,26 +474,114 @@ const Store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}},
 };
 
+// ══════════════════════════════════════════════════════════════════
+//  BACKUP PAYLOAD ENGINE
+//  Readable section (profile, farmers, active/unlocked pages) stays
+//  plain JSON so the backup can be opened & inspected in any text
+//  editor. Lower-priority bulk data (cleared pages, payments log,
+//  trash, activity logs) is gzip-compressed into a compact "archive"
+//  blob to keep file size small without needing it to be casually
+//  readable.
+// ══════════════════════════════════════════════════════════════════
+const BACKUP_FORMAT = 'dairy-notebook-backup';
+const BACKUP_VERSION = 2;
+
+function b64FromBuffer(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function bufferFromB64(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function compressArchive(obj) {
+  const json = JSON.stringify(obj);
+  if (typeof CompressionStream === 'function') {
+    try {
+      const enc = new TextEncoder().encode(json);
+      const stream = new Blob([enc]).stream().pipeThrough(new CompressionStream('gzip'));
+      const buf = await new Response(stream).arrayBuffer();
+      return { compressed: true, encoding: 'gzip-base64', data: b64FromBuffer(buf) };
+    } catch (e) {
+      console.warn('Compression unavailable, storing archive uncompressed.', e);
+    }
+  }
+  return { compressed: false, encoding: 'utf8-base64', data: b64FromBuffer(new TextEncoder().encode(json)) };
+}
+
+async function decompressArchive(archive) {
+  if (!archive || !archive.data) return {};
+  if (archive.compressed && typeof DecompressionStream === 'function') {
+    const buf = bufferFromB64(archive.data);
+    const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const text = await new Response(stream).text();
+    return JSON.parse(text);
+  }
+  const buf = bufferFromB64(archive.data);
+  const text = new TextDecoder().decode(buf);
+  return JSON.parse(text);
+}
+
+// Builds the full backup payload. pretty=true pretty-prints the JSON
+// (used for user-facing exports so it's easy to read/diff in a text editor).
+async function buildBackupPayload(pretty) {
+  const profile = Store.get('mdn_profile') || null;
+  const farmers = Store.get('mdn_farmers') || [];
+  const allPages = Store.get('mdn_pages') || [];
+  const payments = Store.get('mdn_payments') || [];
+  const trash = Store.get('mdn_trash') || [];
+  const logs = Store.get('mdn_logs') || [];
+
+  const activePages = allPages.filter(p => !p.locked);
+  const clearedPages = allPages.filter(p => p.locked);
+
+  const archive = await compressArchive({ clearedPages, payments, trash, logs });
+
+  const payload = {
+    app: 'Milk Dairy Notebook',
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    readable: { profile, farmers, activePages },
+    archive
+  };
+  return JSON.stringify(payload, null, pretty ? 2 : 0);
+}
+
+// Restores a parsed backup payload (new format) back into localStorage.
+async function restoreBackupPayload(payload) {
+  const archiveData = await decompressArchive(payload.archive);
+  const readable = payload.readable || {};
+  const activePages = readable.activePages || [];
+  const clearedPages = archiveData.clearedPages || [];
+
+  if (readable.profile) Store.set('mdn_profile', readable.profile);
+  Store.set('mdn_farmers', readable.farmers || []);
+  Store.set('mdn_pages', [...activePages, ...clearedPages]);
+  Store.set('mdn_payments', archiveData.payments || []);
+  Store.set('mdn_trash', archiveData.trash || []);
+  Store.set('mdn_logs', archiveData.logs || []);
+}
+
 // Automatic Background Packet Saver (OPFS safely wrapped to prevent UI hang)
 const AutoBackup = {
   async trigger() {
     try {
       if (!navigator.storage || !navigator.storage.getDirectory) return;
       const dir = await navigator.storage.getDirectory();
-      const fileHandle = await dir.getFileHandle('dairy_backup_auto.dat', { create: true });
+      const fileHandle = await dir.getFileHandle('dairy_backup_auto.json', { create: true });
       const writable = await fileHandle.createWritable();
-      
-      let backup = {
-        mdn_profile: localStorage.getItem('mdn_profile') || null,
-        mdn_pages: localStorage.getItem('mdn_pages') || null,
-        mdn_farmers: localStorage.getItem('mdn_farmers') || null,
-        mdn_payments: localStorage.getItem('mdn_payments') || null,
-        mdn_trash: localStorage.getItem('mdn_trash') || null,
-        mdn_logs: localStorage.getItem('mdn_logs') || null
-      };
-
-      const encodedPayload = btoa(encodeURIComponent(JSON.stringify(backup)));
-      await writable.write(encodedPayload);
+      const payloadStr = await buildBackupPayload(false);
+      await writable.write(payloadStr);
       await writable.close();
     } catch (e) {
       console.log("Background Backup Warning: OPFS not available or restricted context.", e);
@@ -676,26 +764,16 @@ function submitAppPrompt(val) {
 }
 
 // Share/Export Backup File Feature
-function shareDataObfuscated() {
+async function shareBackup() {
   try {
-      // Synchronous creation of the data object guarantees we don't lose the User Gesture requirement for Android navigator.share
-      let backup = {
-          mdn_profile: localStorage.getItem('mdn_profile') || null,
-          mdn_pages: localStorage.getItem('mdn_pages') || null,
-          mdn_farmers: localStorage.getItem('mdn_farmers') || null,
-          mdn_payments: localStorage.getItem('mdn_payments') || null,
-          mdn_trash: localStorage.getItem('mdn_trash') || null,
-          mdn_logs: localStorage.getItem('mdn_logs') || null
-      };
-
-      const encodedPayload = btoa(encodeURIComponent(JSON.stringify(backup)));
-      const file = new File([encodedPayload], `dairy_backup_${today()}.dat`, { type: "text/plain" });
+      const payloadStr = await buildBackupPayload(true); // pretty=true: human-readable JSON
+      const file = new File([payloadStr], `dairy_backup_${today()}.json`, { type: "application/json" });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
           navigator.share({
               files: [file],
               title: 'Dairy App Backup',
-              text: 'Secure backup file for Dairy Notebook.'
+              text: 'Backup file for Dairy Notebook (readable + compact archive).'
           }).then(() => {
               showToast("Share sheet opened successfully.");
           }).catch((err) => {
@@ -724,24 +802,39 @@ function fallbackDownload(file) {
     showToast("Backup downloaded locally.");
 }
 
-function importDataObfuscated(e) {
+function importBackup(e) {
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
   reader.onload = async function(ev) {
     try {
         const rawContent = ev.target.result;
-        const decodedJSON = JSON.parse(decodeURIComponent(atob(rawContent)));
-        const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
-        if(confirmed) {
-            for(let key in decodedJSON) {
-                if(key.startsWith('mdn_')) localStorage.setItem(key, decodedJSON[key]);
+        let payload = null;
+        try { payload = JSON.parse(rawContent); } catch (parseErr) { payload = null; }
+
+        if (payload && payload.format === BACKUP_FORMAT) {
+            // Current readable + archive backup format
+            const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
+            if(confirmed) {
+                await restoreBackupPayload(payload);
+                showToast("Import successful! Reloading...");
+                setTimeout(() => location.reload(), 1500);
             }
-            showToast("Import successful! Reloading...");
-            setTimeout(() => location.reload(), 1500);
+        } else {
+            // Legacy base64-obfuscated .dat backup (older app versions)
+            const decodedJSON = JSON.parse(decodeURIComponent(atob(rawContent)));
+            const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
+            if(confirmed) {
+                for(let key in decodedJSON) {
+                    if(key.startsWith('mdn_')) localStorage.setItem(key, decodedJSON[key]);
+                }
+                showToast("Import successful! Reloading...");
+                setTimeout(() => location.reload(), 1500);
+            }
         }
     } catch (err) {
-        appAlert("Import Failed", "The file provided is not a valid or secure backup format.");
+        console.error(err);
+        appAlert("Import Failed", "The file provided is not a valid backup format.");
     }
     e.target.value = ''; 
   };
@@ -1892,9 +1985,9 @@ function renderMe(){
    
    <div class="card mt3">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Your data is saved automatically. Share a backup to external apps or import an existing backup file.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Your data is saved automatically. Backups are readable JSON for your active sheets, with older/cleared data compacted to save space.</div>
     <div class="row gap2">
-      <button class="btn bp" style="flex:1;" onclick="shareDataObfuscated()">⬆️ Share Backup</button>
+      <button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button>
       <button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button>
     </div>
    </div>
@@ -2127,86 +2220,6 @@ function moi(e,id){if(e.target.id===id)cm(id);}
 })();
 
 initApp();
-</script>
-</body>
-</html>OT
-// ══════════════════════════════════════════════════════════════════
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
-  AutoBackup.trigger(); // Trigger initial background snapshot
-})();
-
-initApp();
-</script>
-</body>
-</html>
-();
-  const now=Date.now();
-  document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
-  if(!trash.length){
-    document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
-    document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
-  } else {
-    let bodyHtml='<div class="sp2">';
-    trash.forEach(p=>{
-      const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000));
-      bodyHtml+=`<div class="trash-card">
-        <div style="font-weight:700;font-size:13px;">${p.label}</div>
-        <div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div>
-        <button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button>
-      </div>`;
-    });
-    bodyHtml+='</div>';
-    document.getElementById('mc-body').innerHTML=bodyHtml;
-    document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
-  }
-  om('m-confirm');
-}
-
-function restoreFromTrash(pageId){
-  const trash=DB.trash();
-  const ti=trash.findIndex(p=>p.id===pageId);
-  if(ti<0) return;
-  const page=trash[ti];
-  page.trashed=false;
-  delete page.trashedAt;
-  const pages=DB.pages();
-  pages.unshift(page);
-  DB.savePages(pages);
-  trash.splice(ti,1);
-  DB.saveTrash(trash);
-  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
-  cm('m-confirm');
-  renderHome();
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  MODAL HELPERS
-// ══════════════════════════════════════════════════════════════════
-function om(id){document.getElementById(id).classList.add('open');}
-function cm(id){document.getElementById(id).classList.remove('open');}
-function moi(e,id){if(e.target.id===id)cm(id);}
-
-// ══════════════════════════════════════════════════════════════════
-//  BOOT
-// ══════════════════════════════════════════════════════════════════
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
-})();
-
-initApp();
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW registration failed:', err));
-  });
-}
 </script>
 </body>
 </html>
