@@ -433,10 +433,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <button class="btn bd-trigger mb3 w-100" id="mnp-date-trigger" onclick="openThemedCalendar('mnp-date')">Choose Start Date</button>
  <input type="hidden" id="mnp-date"/>
 
- <div id="mnp-farmer-row" style="display:none;margin-bottom:12px;">
-  <label class="flabel">Farmer</label>
-  <select class="sel" id="mnp-farmer"></select>
- </div>
  <div class="mact">
   <button class="btn bs" onclick="cm('m-newpage')">Cancel</button>
   <button class="btn bp" onclick="doNewPage()">Create Page</button>
@@ -527,7 +523,6 @@ async function decompressArchive(archive) {
 
 async function buildBackupPayload(pretty) {
   const profile = Store.get('mdn_profile') || null;
-  const farmers = Store.get('mdn_farmers') || [];
   const allPages = Store.get('mdn_pages') || [];
   const payments = Store.get('mdn_payments') || [];
   const trash = Store.get('mdn_trash') || [];
@@ -543,7 +538,7 @@ async function buildBackupPayload(pretty) {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    readable: { profile, farmers, activePages },
+    readable: { profile, activePages },
     archive
   };
   return JSON.stringify(payload, null, pretty ? 2 : 0);
@@ -556,7 +551,6 @@ async function restoreBackupPayload(payload) {
   const clearedPages = archiveData.clearedPages || [];
 
   if (readable.profile) Store.set('mdn_profile', readable.profile);
-  Store.set('mdn_farmers', readable.farmers || []);
   Store.set('mdn_pages', [...activePages, ...clearedPages]);
   Store.set('mdn_payments', archiveData.payments || []);
   Store.set('mdn_trash', archiveData.trash || []);
@@ -584,7 +578,6 @@ const DB={
   saveProfile:(p)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); },
   pages:()=>{
     const p = Store.get('mdn_pages')||[];
-    // Auto-migrate any old "S.No" data directly to the new Date format seamlessly on load
     p.forEach(pg => {
         pg.cols.forEach(c => {
             if (c.type === 'sr' || c.id === 'sr' || c.name === 'S.No') {
@@ -597,8 +590,6 @@ const DB={
     return p;
   },
   savePages:(p)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); AutoBackup.trigger(); },
-  farmers:()=>Store.get('mdn_farmers')||[],
-  saveFarmers:(f)=>{ Store.set('mdn_farmers',f); AutoBackup.trigger(); },
   payments:()=>Store.get('mdn_payments')||[],
   savePayments:(p)=>{ Store.set('mdn_payments',p); AutoBackup.trigger(); },
   trash:()=>Store.get('mdn_trash')||[],
@@ -961,7 +952,7 @@ function pageSummary(p){
   return{milk,rev,cow,buf,goat,other};
 }
 
-function createPage(startDate,farmerId){
+function createPage(startDate){
   const profile=DB.profile();
   const pLen = profile.periodLength || 10;
   const end=addDays(startDate, pLen - 1);
@@ -969,7 +960,7 @@ function createPage(startDate,farmerId){
   const label=sD.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' – '+eD.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const cols=defaultColumns(profile);
   return{
-    id:uid(),label,startDate,endDate:end,farmerId:farmerId||null,
+    id:uid(),label,startDate,endDate:end,
     cols,
     rows:Array.from({length: pLen},(_,i)=>{
       const rowDate=addDays(startDate,i);
@@ -981,9 +972,9 @@ function createPage(startDate,farmerId){
   };
 }
 
-let curTab='home',curDetailId=null,curFarmerId=null;
+let curTab='home',curDetailId=null;
 let meView='profile', gChartType='overall', gChartFilter='category';
-let editFarmerId=null,editAnimalId=null,animalType='cow';
+let editAnimalId=null,animalType='cow';
 
 let touchStartX = 0; let touchEndX = 0; let ignoreSwipe = false;
 const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
@@ -1015,9 +1006,8 @@ function handleSwipe() {
   }
 
   if (curDetailId && diff > SWIPE_THRESHOLD) { closeDetail(); return; }
-  if (curFarmerId && !curDetailId && diff > SWIPE_THRESHOLD) { curFarmerId = null; renderHome(); return; }
 
-  if (!curDetailId && !curFarmerId) {
+  if (!curDetailId) {
       let currentIdx = TAB_ORDER.indexOf(curTab);
       if (diff < -SWIPE_THRESHOLD && currentIdx < TAB_ORDER.length - 1) {
           let nextTab = TAB_ORDER[currentIdx + 1];
@@ -1093,7 +1083,7 @@ function initApp() {
 }
 
 function goTab(id,btn){
-  if(id === 'home') { curDetailId = null; curFarmerId = null; }
+  if(id === 'home') { curDetailId = null; }
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('active');
@@ -1343,11 +1333,11 @@ function renderHome(){
   const profile=DB.profile();
   const el=document.getElementById('p-home');
   if(curDetailId) renderDetailView(el);
-  else renderFarmerHome(el);
+  else renderHomeContent(el);
 }
 
-function renderFarmerHome(el){
-  const pages=DB.pages().filter(p=>!p.farmerId&&!p.trashed);
+function renderHomeContent(el){
+  const pages=DB.pages().filter(p=>!p.trashed);
   const profile=DB.profile();
   const trash=DB.trash();
   let rev=0,pend=0;
@@ -1401,9 +1391,6 @@ function renderDetailView(el){
   if(pi<0){curDetailId=null;renderHome();return;}
   const page=pages[pi];
   const profile=DB.profile();
-  const farmer=curFarmerId?DB.farmers().find(f=>f.id===curFarmerId):null;
-  const t=pageSummary(page);
-  const backLabel=farmer?farmer.name:'Home';
   const todayStr=today();
 
   let printLabel = "Show All Columns";
@@ -1417,7 +1404,7 @@ function renderDetailView(el){
   let html=`
    <div class="ph">
     <div class="row gap2 mb3">
-     <button class="btn bg bsm" onclick="closeDetail()">← ${backLabel}</button>
+     <button class="btn bg bsm" onclick="closeDetail()">← Home</button>
      <div class="f1"></div>
      <button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button>
      <button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button>
@@ -1521,7 +1508,6 @@ function buildCompactTable(page,profile,todayStr, filter){
   animalKeys.forEach((k, idx) => {
     const g = animals[k];
     g.cols.forEach((c, cidx) => {
-       // Explicitly enforcing an empty string instead of fallback "RATE" for clean aesthetics!
        let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':'';
        if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4);
        const sepClass = (cidx === g.cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
@@ -2053,7 +2039,7 @@ function doNewPage() {
   if (!dateVal) return showToast('Please select a start date', false);
   
   const pages = DB.pages();
-  const newPg = createPage(dateVal, null);
+  const newPg = createPage(dateVal);
   pages.unshift(newPg);
   DB.savePages(pages);
   DB.log(`Created new record sheet: ${newPg.label}`, 'create');
@@ -2132,6 +2118,44 @@ function openTrash(){
     bodyHtml+='</div>';
     document.getElementById('mc-body').innerHTML=bodyHtml;
     document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+  }
+  om('m-confirm');
+}
+
+function restoreFromTrash(pageId){
+  const trash=DB.trash();
+  const ti=trash.findIndex(p=>p.id===pageId);
+  if(ti<0) return;
+  const page=trash[ti];
+  page.trashed=false;
+  delete page.trashedAt;
+  const pages=DB.pages();
+  pages.unshift(page);
+  DB.savePages(pages);
+  trash.splice(ti,1);
+  DB.saveTrash(trash);
+  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
+  cm('m-confirm');
+  renderHome();
+}
+
+function om(id){document.getElementById(id).classList.add('open');}
+function cm(id){document.getElementById(id).classList.remove('open');}
+function moi(e,id){if(e.target.id===id)cm(id);}
+
+(()=>{
+  const now=Date.now();
+  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
+  DB.saveTrash(trash);
+  AnalyticsEngine.build(); 
+  AutoBackup.trigger(); 
+})();
+
+initApp();
+</script>
+</body>
+</html>
+erHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
   }
   om('m-confirm');
 }
