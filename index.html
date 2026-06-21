@@ -6,8 +6,13 @@
 <title>Milk Dairy Notebook</title>
 <link rel="manifest" href="manifest.json"/>
 <meta name="theme-color" content="#000000"/>
-<link rel="icon" href="icons/icon-192.png"/>
-<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<meta name="background-color" content="#000000"/>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Dairy Notebook"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;background:#000;}
@@ -187,7 +192,7 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .finp:disabled{opacity:.35;cursor:not-allowed;}
 
 /* MODAL */
-.moverlay{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.9);backdrop-filter:blur(5px);display:flex;align-items:flex-end;pointer-events:none;opacity:0;transition:opacity .2s;}
+.moverlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.9);backdrop-filter:blur(5px);display:flex;align-items:flex-end;pointer-events:none;opacity:0;transition:opacity .2s;}
 .moverlay.open{pointer-events:all;opacity:1;}
 .mbox{background:var(--bg1);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;width:100%;max-width:500px;margin:0 auto;padding:20px;transform:translateY(16px);transition:transform .25s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto;}
 .moverlay.open .mbox{transform:translateY(0);}
@@ -225,6 +230,9 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .filter-group-header { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; margin:12px 0 6px 4px; letter-spacing:0.5px; }
 
 /* THEMED CALENDAR SPECIFIC CSS */
+#m-calendar-sheet {
+  z-index: 400 !important;
+}
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
 .cal-head { font-weight: 700; color: var(--sub); font-size: 11px; padding: 5px 0; text-transform: uppercase; }
 .cal-day { padding: 10px 0; border-radius: 8px; font-weight: 600; font-size: 13px; background: var(--bg2); border: 1px solid transparent; }
@@ -468,15 +476,7 @@ const Store={
 
 // Automatic Background Packet Saver (OPFS safely wrapped to prevent UI hang)
 const AutoBackup = {
-  _timer: null,
-  trigger() {
-    // Coalesce rapid bursts of saves (e.g. completing setup triggers several
-    // DB writes in a row) into a single backup write, so we don't hammer
-    // the storage API with many near-simultaneous requests.
-    if (this._timer) clearTimeout(this._timer);
-    this._timer = setTimeout(() => { this._timer = null; this._run(); }, 500);
-  },
-  async _run() {
+  async trigger() {
     try {
       if (!navigator.storage || !navigator.storage.getDirectory) return;
       const dir = await navigator.storage.getDirectory();
@@ -724,58 +724,28 @@ function fallbackDownload(file) {
     showToast("Backup downloaded locally.");
 }
 
-async function processImportedBackup(rawContent) {
-  try {
-      const decodedJSON = JSON.parse(decodeURIComponent(atob(rawContent)));
-      const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
-      if(confirmed) {
-          for(let key in decodedJSON) {
-              if(key.startsWith('mdn_')) localStorage.setItem(key, decodedJSON[key]);
-          }
-          showToast("Import successful! Reloading...");
-          setTimeout(() => location.reload(), 1500);
-      }
-  } catch (err) {
-      appAlert("Import Failed", "The file provided is not a valid or secure backup format.");
-  }
-}
-
 function importDataObfuscated(e) {
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = function(ev) {
-    processImportedBackup(ev.target.result);
-    e.target.value = '';
+  reader.onload = async function(ev) {
+    try {
+        const rawContent = ev.target.result;
+        const decodedJSON = JSON.parse(decodeURIComponent(atob(rawContent)));
+        const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
+        if(confirmed) {
+            for(let key in decodedJSON) {
+                if(key.startsWith('mdn_')) localStorage.setItem(key, decodedJSON[key]);
+            }
+            showToast("Import successful! Reloading...");
+            setTimeout(() => location.reload(), 1500);
+        }
+    } catch (err) {
+        appAlert("Import Failed", "The file provided is not a valid or secure backup format.");
+    }
+    e.target.value = ''; 
   };
   reader.readAsText(file);
-}
-
-// If we were just launched via the OS share sheet (another app shared a
-// .dat backup file directly to us), the service worker stashed it in
-// Cache Storage and redirected here with ?shared=1. Pick it up and run it
-// through the exact same import flow as a manual file pick.
-async function checkForSharedFile() {
-  if (!location.search.includes('shared=1')) return;
-  history.replaceState({}, '', location.pathname);
-  try {
-    if (!('caches' in window)) return;
-    const cache = await caches.open('mdn-share-target-v1');
-    const res = await cache.match('shared-backup');
-    if (res) {
-      const rawContent = await res.text();
-      await cache.delete('shared-backup');
-      await processImportedBackup(rawContent);
-    }
-  } catch (err) {
-    console.error('Could not read shared file:', err);
-  }
-}
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(err => {
-    console.log('Service worker registration failed (share-from-other-apps will be unavailable):', err);
-  });
 }
 
 // Global Filter Variables
@@ -1029,9 +999,9 @@ function initApp() {
   const activePage = pages.find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
   
   let shiftHasData = false;
-  if(activePage && Array.isArray(activePage.rows)) {
+  if(activePage) {
     const row = activePage.rows.find(r => r.assignedDate === td);
-    if(row && Array.isArray(activePage.cols)) {
+    if(row) {
       const targetCols = activePage.cols.filter(c => c.type === targetType);
       shiftHasData = targetCols.some(c => parseFloat(row[c.id]) > 0);
     }
@@ -2149,46 +2119,94 @@ function moi(e,id){if(e.target.id===id)cm(id);}
 //  BOOT
 // ══════════════════════════════════════════════════════════════════
 (()=>{
-  try {
-    const now=Date.now();
-    const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-    DB.saveTrash(trash);
-    AnalyticsEngine.build();
-    AutoBackup.trigger();
-  } catch(e) {
-    console.error('Boot sequence error (non-fatal):', e);
-  }
+  const now=Date.now();
+  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
+  DB.saveTrash(trash);
+  AnalyticsEngine.build(); 
+  AutoBackup.trigger(); 
 })();
 
-try {
-  initApp();
-} catch(e) {
-  console.error('initApp failed, falling back to home screen:', e);
-  const splash = document.getElementById('splash');
-  if (splash) splash.style.display = 'none';
-  const ob = document.getElementById('onboarding');
-  if (ob) ob.classList.remove('active');
-  const app = document.getElementById('app');
-  if (app) app.style.display = 'flex';
+initApp();
+</script>
+</body>
+</html>OT
+// ══════════════════════════════════════════════════════════════════
+(()=>{
+  const now=Date.now();
+  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
+  DB.saveTrash(trash);
+  AnalyticsEngine.build(); 
+  AutoBackup.trigger(); // Trigger initial background snapshot
+})();
+
+initApp();
+</script>
+</body>
+</html>
+();
+  const now=Date.now();
+  document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
+  if(!trash.length){
+    document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
+    document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+  } else {
+    let bodyHtml='<div class="sp2">';
+    trash.forEach(p=>{
+      const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000));
+      bodyHtml+=`<div class="trash-card">
+        <div style="font-weight:700;font-size:13px;">${p.label}</div>
+        <div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div>
+        <button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button>
+      </div>`;
+    });
+    bodyHtml+='</div>';
+    document.getElementById('mc-body').innerHTML=bodyHtml;
+    document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+  }
+  om('m-confirm');
 }
 
-// Watchdog: if anything async still leaves the splash on screen, force it away.
-setTimeout(() => {
-  const splash = document.getElementById('splash');
-  if (splash && splash.style.display !== 'none') {
-    splash.style.display = 'none';
-    const app = document.getElementById('app');
-    const ob = document.getElementById('onboarding');
-    if (ob && ob.classList.contains('active')) {
-      // onboarding already showing, leave it
-    } else if (app) {
-      app.style.display = 'flex';
-    }
-  }
-}, 5000);
+function restoreFromTrash(pageId){
+  const trash=DB.trash();
+  const ti=trash.findIndex(p=>p.id===pageId);
+  if(ti<0) return;
+  const page=trash[ti];
+  page.trashed=false;
+  delete page.trashedAt;
+  const pages=DB.pages();
+  pages.unshift(page);
+  DB.savePages(pages);
+  trash.splice(ti,1);
+  DB.saveTrash(trash);
+  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
+  cm('m-confirm');
+  renderHome();
+}
 
-checkForSharedFile();
+// ══════════════════════════════════════════════════════════════════
+//  MODAL HELPERS
+// ══════════════════════════════════════════════════════════════════
+function om(id){document.getElementById(id).classList.add('open');}
+function cm(id){document.getElementById(id).classList.remove('open');}
+function moi(e,id){if(e.target.id===id)cm(id);}
 
+// ══════════════════════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════════════════════
+(()=>{
+  const now=Date.now();
+  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
+  DB.saveTrash(trash);
+  AnalyticsEngine.build(); 
+})();
+
+initApp();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW registration failed:', err));
+  });
+}
 </script>
 </body>
 </html>
