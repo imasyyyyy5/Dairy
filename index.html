@@ -252,6 +252,7 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .cal-day.empty-cell { background: transparent; pointer-events: none; }
 .cal-day.selected { background: #fff; color: #000; font-weight: 800; }
 .cal-day.today-marker { border-color: var(--border2); color: var(--success); }
+.cal-day.disabled { opacity: 0.25; pointer-events: none; }
 
 /* PAYMENT ENTRY */
 .payrow{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px; margin-bottom: 8px;}
@@ -953,12 +954,14 @@ function importBackup(e) {
 let currentTableFilter = 'all';
 
 let activeCalendarTargetInputId = '';
+let activeCalendarMinDate = null;
 let calendarCurrentYear = new Date().getFullYear();
 let calendarCurrentMonth = new Date().getMonth();
 
-function openThemedCalendar(targetHiddenInputId) {
+function openThemedCalendar(targetHiddenInputId, minDate = null) {
   activeCalendarTargetInputId = targetHiddenInputId;
-  const currentVal = document.getElementById(targetHiddenInputId).value || today();
+  activeCalendarMinDate = minDate;
+  const currentVal = document.getElementById(targetHiddenInputId).value || minDate || today();
   const [y, m, d] = currentVal.split('-').map(Number);
   calendarCurrentYear = y; calendarCurrentMonth = m - 1;
   drawCalendarGrid();
@@ -980,10 +983,14 @@ function drawCalendarGrid() {
     const formatMonthStr = String(calendarCurrentMonth + 1).padStart(2, '0');
     const formatDayStr = String(day).padStart(2, '0');
     const computedISODate = `${calendarCurrentYear}-${formatMonthStr}-${formatDayStr}`;
+    const isDisabled = !!(activeCalendarMinDate && computedISODate < activeCalendarMinDate);
     let stateClasses = '';
     if (computedISODate === currentVal) stateClasses += ' selected';
     if (computedISODate === todayStr) stateClasses += ' today-marker';
-    daysHtml += `<button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">${day}</button>`;
+    if (isDisabled) stateClasses += ' disabled';
+    daysHtml += isDisabled
+      ? `<button class="cal-day${stateClasses}">${day}</button>`
+      : `<button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">${day}</button>`;
   }
   document.getElementById('calendar-days-container').innerHTML = daysHtml;
 }
@@ -2171,11 +2178,22 @@ async function removeAnimal(id){
   renderMe();
 }
 
+// Returns the latest endDate across all non-trashed pages, or null if none exist.
+function getLatestPageEndDate() {
+  const pages = DB.pages().filter(p => !p.trashed);
+  if (!pages.length) return null;
+  return pages.reduce((latest, p) => (!latest || p.endDate > latest) ? p.endDate : latest, null);
+}
+
 function openNewPageModal() {
-  const currentInitialDate = today();
-  document.getElementById('mnp-date').value = currentInitialDate;
-  document.getElementById('mnp-date-trigger').textContent = fmtD(currentInitialDate);
-  
+  const latestEnd = getLatestPageEndDate();
+  const minStart = latestEnd ? addDays(latestEnd, 1) : null;
+  const suggestedStart = minStart || today();
+
+  document.getElementById('mnp-date').value = suggestedStart;
+  document.getElementById('mnp-date-trigger').textContent = fmtD(suggestedStart);
+  document.getElementById('mnp-date-trigger').setAttribute('onclick', `openThemedCalendar('mnp-date', ${minStart ? `'${minStart}'` : 'null'})`);
+
   const profile = DB.profile();
   const pLen = profile.periodLength || 10;
   document.getElementById('mnp-modal-title').textContent = `New ${pLen}-Day Record`;
@@ -2190,8 +2208,15 @@ function doNewPage() {
     const pages = DB.pages();
     const newPg = createPage(dateVal);
 
-    const overlapping = pages.find(p => !p.locked && !p.trashed &&
+    // Records must never overlap — if one ends 23 Jun, the next must start 24 Jun or later.
+    const overlapping = pages.find(p => !p.trashed &&
       newPg.startDate <= p.endDate && newPg.endDate >= p.startDate);
+
+    if (overlapping) {
+      const nextAllowed = addDays(overlapping.endDate, 1);
+      appAlert('Dates Overlap', `This range overlaps "${overlapping.label}" (ends ${fmtD(overlapping.endDate)}). Please choose ${fmtD(nextAllowed)} or later.`);
+      return;
+    }
 
     pages.unshift(newPg);
     DB.savePages(pages);
@@ -2199,12 +2224,7 @@ function doNewPage() {
 
     cm('m-newpage');
     renderHome();
-
-    if (overlapping) {
-      showToast('Created — but its dates overlap "' + overlapping.label + '".', false);
-    } else {
-      showToast('New Record Created Successfully!');
-    }
+    showToast('New Record Created Successfully!');
   } catch (err) {
     console.error('doNewPage failed:', err);
     appAlert('Could Not Create Record', 'Something went wrong while creating the new sheet. Please try again, and if it keeps happening, let us know what date/period you used.');
