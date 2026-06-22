@@ -30,7 +30,7 @@
     }
   ],
   "share_target": {
-    "action": "/import-shared-file",
+    "action": "./import-shared-file",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
