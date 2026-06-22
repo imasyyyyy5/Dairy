@@ -2614,7 +2614,83 @@ async function editPageLength(pageId) {
   AnalyticsEngine.build(); 
   AutoBackup.trigger(); 
 })();
+// Function to handle files shared directly to the app
+async function handleSharedFile() {
+  const urlParams = new URLSearchParams(window.location.search);
+  
+  if (urlParams.get('shared_import') === 'pending') {
+    try {
+      // 1. Open the cache and get the file the Service Worker saved
+      const cache = await caches.open('dairy-shared-file-cache');
+      const response = await cache.match('/temp-shared-backup.pdf');
+      
+      if (response) {
+        const blob = await response.blob();
+        const file = new File([blob], "shared_backup.pdf", { type: "application/pdf" });
+        
+        // 2. Clean up the cache so it doesn't trigger again
+        await cache.delete('/temp-shared-backup.pdf');
+        
+        // 3. Clean the URL so the parameter is removed
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // 4. Pass it directly to your existing import logic
+        processDirectFileImport(file);
+      }
+    } catch (e) {
+      console.error("Failed to process shared file", e);
+      appAlert("Import Error", "Could not process the shared file.");
+    }
+  }
+}
 
+// A helper function that re-uses your exact import logic but accepts a File object directly
+function processDirectFileImport(file) {
+  const reader = new FileReader();
+  
+  reader.onload = async function(ev) {
+    try {
+        const rawContent = ev.target.result;
+        let payloadString = rawContent;
+
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+            const startMarker = '###DAIRY_BACKUP_BEGIN###';
+            const endMarker = '###DAIRY_BACKUP_END###';
+            const startIndex = rawContent.indexOf(startMarker);
+            const endIndex = rawContent.indexOf(endMarker);
+            
+            if (startIndex !== -1 && endIndex !== -1) {
+                payloadString = rawContent.substring(startIndex + startMarker.length, endIndex).trim();
+            } else {
+                return appAlert("Invalid PDF", "This PDF does not contain Dairy App backup data.");
+            }
+        }
+
+        let payload = null;
+        try { payload = JSON.parse(payloadString); } catch (parseErr) { payload = null; }
+
+        if (payload && payload.format === BACKUP_FORMAT) {
+            const confirmed = await appConfirm("Import Shared Data?", "This will OVERWRITE your current app data entirely. Continue?");
+            if(confirmed) {
+                await restoreBackupPayload(payload);
+                showToast("Import successful! Reloading...");
+                setTimeout(() => location.reload(), 1500);
+            }
+        } else {
+            appAlert("Import Failed", "The data extracted from the file is invalid or corrupted.");
+        }
+    } catch (err) {
+        console.error(err);
+        appAlert("Import Failed", "Could not read the backup file.");
+    }
+  };
+  
+  reader.readAsText(file);
+}
+
+// Call this immediately when the app starts
+handleSharedFile();
+  
 initApp();
 </script>
 </body>
