@@ -118,6 +118,18 @@ select{-webkit-appearance:none;}
 .panel{display:none;position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 .panel.active{display:block;}
 
+/* INSTALL REMINDER BANNER */
+.install-banner{display:none;align-items:center;gap:8px;padding:9px 14px;padding-top:max(9px, env(safe-area-inset-top,0px));background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;}
+.install-banner.show{display:flex;}
+.install-banner-icon{font-size:15px;filter:grayscale(1);flex-shrink:0;}
+.install-banner-text{flex:1;font-size:12px;font-weight:700;cursor:pointer;}
+.install-banner-close{background:none;border:none;color:var(--muted);font-size:13px;padding:6px;cursor:pointer;line-height:1;flex-shrink:0;}
+
+/* INSTALL GUIDE STEPS */
+.ig-step{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.5;}
+.ig-step:last-child{border-bottom:none;}
+.ig-num{font-size:17px;flex-shrink:0;width:24px;text-align:center;}
+
 #bnav{display:flex;background:var(--bg1);border-top:1px solid var(--border);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0); z-index: 100;}
 .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px 7px;gap:3px;position:relative;}
 .nb svg{width:21px;height:21px;stroke:var(--muted);transition:.15s;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;}
@@ -367,6 +379,11 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
 
 <div id="app" style="display:none;">
+ <div id="install-banner" class="install-banner">
+  <span class="install-banner-icon">🔔</span>
+  <span class="install-banner-text" onclick="showInstallGuide()">Best in app version</span>
+  <button class="install-banner-close" onclick="dismissInstallBanner()">✕</button>
+ </div>
  <div id="main">
   <div id="p-home" class="panel active"></div>
   <div id="p-graphs" class="panel"></div>
@@ -403,6 +420,12 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div class="mh"><span class="mt" id="mc-title">Confirm Action</span><button class="mx" onclick="submitAppConfirm(false)">✕</button></div>
  <div class="mbody" id="mc-body"></div>
  <div class="mact" id="mc-act"></div>
+</div></div>
+
+<div class="moverlay" id="m-install-guide" onclick="moi(event,'m-install-guide')"><div class="mbox">
+ <div class="mh"><span class="mt">📲 Install This App</span><button class="mx" onclick="cm('m-install-guide')">✕</button></div>
+ <div id="install-guide-steps"></div>
+ <div class="mact"><button class="btn bp" style="flex:1;" onclick="cm('m-install-guide')">Got It</button></div>
 </div></div>
 
 <div class="moverlay" id="m-filter-sheet" onclick="moi(event,'m-filter-sheet')"><div class="mbox">
@@ -557,18 +580,88 @@ async function restoreBackupPayload(payload) {
   Store.set('mdn_logs', archiveData.logs || []);
 }
 
+// Automatic Background Packet Saver.
+// Tries OPFS first (best for large files); if OPFS is unavailable in this
+// browsing context (e.g. some embedded/WebView contexts, or browsers that
+// haven't implemented it), it falls back to IndexedDB, which has near-
+// universal support. Neither path requests any special permission or
+// bypasses any browser restriction — both are standard, same-origin,
+// no-prompt storage APIs.
 const AutoBackup = {
   async trigger() {
     try {
-      if (!navigator.storage || !navigator.storage.getDirectory) return;
+      const payloadStr = await buildBackupPayload(false);
+      const savedViaOPFS = await AutoBackup.saveToOPFS(payloadStr);
+      if (!savedViaOPFS) await AutoBackup.saveToIndexedDB(payloadStr);
+    } catch (e) {
+      console.log("AutoBackup: could not generate backup payload.", e);
+    }
+  },
+
+  async saveToOPFS(payloadStr) {
+    try {
+      if (!navigator.storage || !navigator.storage.getDirectory) return false;
       const dir = await navigator.storage.getDirectory();
       const fileHandle = await dir.getFileHandle('dairy_backup_auto.json', { create: true });
       const writable = await fileHandle.createWritable();
-      const payloadStr = await buildBackupPayload(false);
       await writable.write(payloadStr);
       await writable.close();
+      return true;
     } catch (e) {
-      console.log("Background Backup Warning: OPFS not available or restricted context.", e);
+      console.log("AutoBackup: OPFS unavailable in this context, falling back to IndexedDB.", e);
+      return false;
+    }
+  },
+
+  openIDB() {
+    return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) { reject(new Error('IndexedDB not supported')); return; }
+      const req = indexedDB.open('dairy-notebook-db', 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains('backups')) {
+          req.result.createObjectStore('backups', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async saveToIndexedDB(payloadStr) {
+    try {
+      const db = await AutoBackup.openIDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('backups', 'readwrite');
+        tx.objectStore('backups').put({ id: 'auto', data: payloadStr, savedAt: new Date().toISOString() });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (e) {
+      console.log("AutoBackup: IndexedDB fallback also failed. No background snapshot saved this time.", e);
+    }
+  },
+
+  // Reads back whichever snapshot exists (OPFS preferred, IndexedDB fallback).
+  // Useful for recovery if localStorage itself is ever cleared or corrupted.
+  async read() {
+    try {
+      if (navigator.storage && navigator.storage.getDirectory) {
+        const dir = await navigator.storage.getDirectory();
+        const fileHandle = await dir.getFileHandle('dairy_backup_auto.json', { create: false });
+        const file = await fileHandle.getFile();
+        return await file.text();
+      }
+    } catch (e) { /* fall through to IndexedDB */ }
+    try {
+      const db = await AutoBackup.openIDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('backups', 'readonly');
+        const req = tx.objectStore('backups').get('auto');
+        req.onsuccess = () => resolve(req.result ? req.result.data : null);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) {
+      return null;
     }
   }
 };
@@ -727,6 +820,20 @@ function submitAppConfirm(result) {
   if(confirmResolution) { confirmResolution(result); confirmResolution = null; }
 }
 
+// Like appConfirm, but lets you supply custom button labels/values instead
+// of the fixed Cancel/Confirm pair. Reuses the same modal & resolution flow.
+function appChoice(title, body, choices) {
+  return new Promise((resolve) => {
+    confirmResolution = resolve;
+    document.getElementById('mc-title').textContent = title;
+    document.getElementById('mc-body').textContent = body;
+    document.getElementById('mc-act').innerHTML = choices.map((c, i) =>
+      `<button class="btn ${i === choices.length - 1 ? 'bd' : 'bs'}" onclick="submitAppConfirm('${c.value}')">${c.label}</button>`
+    ).join('');
+    om('m-confirm');
+  });
+}
+
 function appAlert(title, body) {
   return new Promise((resolve) => {
     alertResolution = resolve;
@@ -756,25 +863,41 @@ function submitAppPrompt(val) {
 async function shareBackup() {
   try {
       const payloadStr = await buildBackupPayload(true);
-      const file = new File([payloadStr], `dairy_backup_${today()}.json`, { type: "application/json" });
+      // Chrome's Web Share API only allows files in a handful of broad
+      // categories (image/video/audio/text) plus a short list of document
+      // types. application/json is NOT in that list, which is why sharing
+      // was silently falling back to a download. We try the readable .json
+      // file first (in case a browser does support it), then fall back to
+      // an identical text/plain copy, which IS in the supported "text" category.
+      const jsonFile = new File([payloadStr], `dairy_backup_${today()}.json`, { type: "application/json" });
+      const txtFile  = new File([payloadStr], `dairy_backup_${today()}.txt`,  { type: "text/plain" });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({
-              files: [file],
-              title: 'Dairy App Backup',
-              text: 'Backup file for Dairy Notebook (readable + compact archive).'
-          }).then(() => {
+      let shareFile = null;
+      if (navigator.canShare && navigator.canShare({ files: [jsonFile] })) shareFile = jsonFile;
+      else if (navigator.canShare && navigator.canShare({ files: [txtFile] })) shareFile = txtFile;
+
+      if (shareFile) {
+          try {
+              await navigator.share({
+                  files: [shareFile],
+                  title: 'Dairy App Backup',
+                  text: 'Backup file for Dairy Notebook (readable + compact archive).'
+              });
               showToast("Share sheet opened successfully.");
-          }).catch((err) => {
-              console.log("Share cancelled or failed", err);
-              fallbackDownload(file);
-          });
+          } catch (err) {
+              if (err && err.name === 'AbortError') return; // user simply cancelled the share sheet
+              console.log("Share failed", err);
+              const wantsDownload = await appConfirm("Sharing Didn't Go Through", "Would you like to download the backup file instead?");
+              if (wantsDownload) fallbackDownload(jsonFile);
+          }
       } else {
-          fallbackDownload(file);
+          // Sharing is genuinely unavailable here — ask before downloading, don't just do it silently.
+          const wantsDownload = await appConfirm("Sharing Unavailable", "Your browser can't share files directly right now. Download the backup file instead?");
+          if (wantsDownload) fallbackDownload(jsonFile);
       }
   } catch (err) {
       console.error("Backup file generation error:", err);
-      appAlert("Error", "Could not generate backup file. Trying fallback download.");
+      appAlert("Error", "Could not generate backup file.");
   }
 }
 
@@ -1075,7 +1198,7 @@ function initApp() {
   if (shiftHasData) {
     document.getElementById('app').style.display = 'flex';
     renderHome(); renderGraphs(); renderCalc(); renderMe();
-    transitionTo(() => {});
+    transitionTo(() => checkInstallReminders(false));
   } else {
     document.getElementById('app').style.display = 'none';
     transitionTo(() => openQuickEntry());
@@ -1131,11 +1254,13 @@ function finishOnboarding() {
   DB.saveProfile(p);
   DB.log(`Completed initial setup with ${obTempAnimals.length} animal(s).`, 'create');
   
+  justOnboarded = true;
   document.getElementById('onboarding').classList.remove('active');
   document.getElementById('onboarding').style.display = 'none';
   openQuickEntry();
 }
 
+let justOnboarded = false;
 let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null };
 
 function getOrCreateActivePage() {
@@ -1167,10 +1292,18 @@ function openQuickEntry() {
   document.getElementById('qe-greeting').textContent = hour < 12 ? 'Good Morning' : (hour < 17 ? 'Good Afternoon' : 'Good Evening');
   document.getElementById('qe-date-label').textContent = fmtD(today());
 
-  const page = getOrCreateActivePage();
-  const td = today();
-  const row = page.rows.find(r => r.assignedDate === td);
-  
+  let page, row;
+  try {
+    page = getOrCreateActivePage();
+    const td = today();
+    row = page.rows.find(r => r.assignedDate === td);
+  } catch (err) {
+    console.error('Failed to load/create today\'s record sheet:', err);
+    showToast("Couldn't open today's record sheet. Please try again.", false);
+    setTimeout(openFullApp, 1500);
+    return;
+  }
+
   if (!row) {
     showToast("Error: Date out of bounds for current sheet.", false);
     setTimeout(openFullApp, 1500);
@@ -1327,6 +1460,8 @@ function openFullApp() {
   qe.style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   renderHome(); renderGraphs(); renderCalc(); renderMe();
+  checkInstallReminders(justOnboarded);
+  justOnboarded = false;
 }
 
 function renderHome(){
@@ -1890,6 +2025,19 @@ function renderMe(){
     </div>
    </div>`;
 
+  if (!isAppInstalled() && localStorage.getItem('mdn_install_banner_pref') === 'later') {
+    html+=`<div class="card" onclick="showInstallGuide()" style="cursor:pointer;border-color:rgba(78,140,255,0.3);">
+     <div class="row gap2" style="align-items:center;">
+      <span style="font-size:20px;">📲</span>
+      <div class="f1">
+       <div style="font-weight:800;font-size:13px;">Install the app</div>
+       <div style="font-size:11px;color:var(--muted);margin-top:1px;">Tap for a step-by-step guide</div>
+      </div>
+      <span style="color:var(--muted);font-size:16px;">›</span>
+     </div>
+    </div>`;
+  }
+
   html+=`
    <div class="card">
     <div class="row gap2 mb3" style="justify-content:space-between;">
@@ -2035,18 +2183,32 @@ function openNewPageModal() {
 }
 
 function doNewPage() {
-  const dateVal = document.getElementById('mnp-date').value;
-  if (!dateVal) return showToast('Please select a start date', false);
-  
-  const pages = DB.pages();
-  const newPg = createPage(dateVal);
-  pages.unshift(newPg);
-  DB.savePages(pages);
-  DB.log(`Created new record sheet: ${newPg.label}`, 'create');
-  
-  showToast('New Record Created Successfully!');
-  cm('m-newpage');
-  renderHome();
+  try {
+    const dateVal = document.getElementById('mnp-date').value;
+    if (!dateVal) return showToast('Please select a start date', false);
+
+    const pages = DB.pages();
+    const newPg = createPage(dateVal);
+
+    const overlapping = pages.find(p => !p.locked && !p.trashed &&
+      newPg.startDate <= p.endDate && newPg.endDate >= p.startDate);
+
+    pages.unshift(newPg);
+    DB.savePages(pages);
+    DB.log(`Created new record sheet: ${newPg.label}`, 'create');
+
+    cm('m-newpage');
+    renderHome();
+
+    if (overlapping) {
+      showToast('Created — but its dates overlap "' + overlapping.label + '".', false);
+    } else {
+      showToast('New Record Created Successfully!');
+    }
+  } catch (err) {
+    console.error('doNewPage failed:', err);
+    appAlert('Could Not Create Record', 'Something went wrong while creating the new sheet. Please try again, and if it keeps happening, let us know what date/period you used.');
+  }
 }
 
 function closeDetail(){
@@ -2143,197 +2305,93 @@ function om(id){document.getElementById(id).classList.add('open');}
 function cm(id){document.getElementById(id).classList.remove('open');}
 function moi(e,id){if(e.target.id===id)cm(id);}
 
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
-  AutoBackup.trigger(); 
-})();
+// ══════════════════════════════════════════════════════════════════
+//  INSTALL REMINDER SYSTEM (PWA "Add to Home Screen" nudges)
+// ══════════════════════════════════════════════════════════════════
+function isAppInstalled() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.navigator.standalone === true ||
+         document.referrer.startsWith('android-app://');
+}
 
-initApp();
-</script>
-</body>
-</html>
-erHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+// Call this whenever the main app becomes visible. justFinishedSetup=true
+// opens the full step-by-step guide once, right after onboarding.
+function checkInstallReminders(justFinishedSetup) {
+  if (isAppInstalled()) { hideInstallBanner(); return; }
+
+  if (justFinishedSetup) {
+    setTimeout(() => showInstallGuide(), 600);
   }
-  om('m-confirm');
-}
 
-function restoreFromTrash(pageId){
-  const trash=DB.trash();
-  const ti=trash.findIndex(p=>p.id===pageId);
-  if(ti<0) return;
-  const page=trash[ti];
-  page.trashed=false;
-  delete page.trashedAt;
-  const pages=DB.pages();
-  pages.unshift(page);
-  DB.savePages(pages);
-  trash.splice(ti,1);
-  DB.saveTrash(trash);
-  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
-  cm('m-confirm');
-  renderHome();
-}
-
-function om(id){document.getElementById(id).classList.add('open');}
-function cm(id){document.getElementById(id).classList.remove('open');}
-function moi(e,id){if(e.target.id===id)cm(id);}
-
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
-  AutoBackup.trigger(); 
-})();
-
-initApp();
-</script>
-</body>
-</html>
- cleared?');
-    if(!agreed) return;
-    page.locked=true;
-    page.clearedAt=new Date().toISOString();
-    DB.savePages(pages);
-    DB.log(`Locked and cleared account for record sheet: ${page.label}`, 'info');
-  }
-  renderHome();
-}
-
-function openTrash(){
-  const trash=DB.trash();
-  const now=Date.now();
-  document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
-  if(!trash.length){
-    document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
-    document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+  const pref = localStorage.getItem('mdn_install_banner_pref');
+  if (pref === 'never' || pref === 'later') {
+    hideInstallBanner();
   } else {
-    let bodyHtml='<div class="sp2">';
-    trash.forEach(p=>{
-      const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000));
-      bodyHtml+=`<div class="trash-card">
-        <div style="font-weight:700;font-size:13px;">${p.label}</div>
-        <div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div>
-        <button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button>
-      </div>`;
-    });
-    bodyHtml+='</div>';
-    document.getElementById('mc-body').innerHTML=bodyHtml;
-    document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
+    showInstallBanner();
   }
-  om('m-confirm');
 }
 
-function restoreFromTrash(pageId){
-  const trash=DB.trash();
-  const ti=trash.findIndex(p=>p.id===pageId);
-  if(ti<0) return;
-  const page=trash[ti];
-  page.trashed=false;
-  delete page.trashedAt;
-  const pages=DB.pages();
-  pages.unshift(page);
-  DB.savePages(pages);
-  trash.splice(ti,1);
-  DB.saveTrash(trash);
-  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
-  cm('m-confirm');
-  renderHome();
+function showInstallBanner() {
+  const b = document.getElementById('install-banner');
+  if (b) b.classList.add('show');
+}
+function hideInstallBanner() {
+  const b = document.getElementById('install-banner');
+  if (b) b.classList.remove('show');
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  MODAL HELPERS
-// ══════════════════════════════════════════════════════════════════
-function om(id){document.getElementById(id).classList.add('open');}
-function cm(id){document.getElementById(id).classList.remove('open');}
-function moi(e,id){if(e.target.id===id)cm(id);}
+function dismissInstallBanner() {
+  appChoice("Hide this reminder?", "You can still install anytime from your Profile tab.", [
+    { label: "I'll do later", value: "later" },
+    { label: "Never show again", value: "never" }
+  ]).then(choice => {
+    if (!choice) return; // closed via outside tap with no explicit choice
+    localStorage.setItem('mdn_install_banner_pref', choice);
+    hideInstallBanner();
+    if (curTab === 'me') renderMe();
+  });
+}
 
-// ══════════════════════════════════════════════════════════════════
-//  BOOT
-// ══════════════════════════════════════════════════════════════════
+function showInstallGuide() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  let steps;
+
+  if (isAndroid) {
+    steps = [
+      ['⋮', 'Tap the three-dot menu in the top-right corner of Chrome.'],
+      ['➕', 'Tap "Add to Home screen" or "Install app".'],
+      ['✅', 'Tap "Install" to confirm.'],
+      ['🎉', 'The app icon now opens full-screen — no browser bar, faster, and works offline.']
+    ];
+  } else if (isIOS) {
+    steps = [
+      ['📤', 'Tap the Share icon at the bottom of Safari.'],
+      ['📋', 'Scroll down and tap "Add to Home Screen".'],
+      ['✅', 'Tap "Add" in the top-right corner.'],
+      ['🎉', 'The app icon now opens full-screen, just like a real app.']
+    ];
+  } else {
+    steps = [
+      ['⊕', 'Click the install icon in the address bar (or open the ⋮ menu).'],
+      ['✅', 'Click "Install".'],
+      ['🎉', 'The app now opens in its own window, separate from your browser.']
+    ];
+  }
+
+  document.getElementById('install-guide-steps').innerHTML = steps.map(([icon, text]) =>
+    `<div class="ig-step"><span class="ig-num">${icon}</span><span>${text}</span></div>`
+  ).join('');
+  om('m-install-guide');
+}
+
 (()=>{
   const now=Date.now();
   const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
   DB.saveTrash(trash);
   AnalyticsEngine.build(); 
   AutoBackup.trigger(); 
-})();
-
-initApp();
-</script>
-</body>
-</html>OT
-// ══════════════════════════════════════════════════════════════════
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
-  AutoBackup.trigger(); // Trigger initial background snapshot
-})();
-
-initApp();
-</script>
-</body>
-</html>
-();
-  const now=Date.now();
-  document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
-  if(!trash.length){
-    document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
-    document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
-  } else {
-    let bodyHtml='<div class="sp2">';
-    trash.forEach(p=>{
-      const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000));
-      bodyHtml+=`<div class="trash-card">
-        <div style="font-weight:700;font-size:13px;">${p.label}</div>
-        <div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div>
-        <button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button>
-      </div>`;
-    });
-    bodyHtml+='</div>';
-    document.getElementById('mc-body').innerHTML=bodyHtml;
-    document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
-  }
-  om('m-confirm');
-}
-
-function restoreFromTrash(pageId){
-  const trash=DB.trash();
-  const ti=trash.findIndex(p=>p.id===pageId);
-  if(ti<0) return;
-  const page=trash[ti];
-  page.trashed=false;
-  delete page.trashedAt;
-  const pages=DB.pages();
-  pages.unshift(page);
-  DB.savePages(pages);
-  trash.splice(ti,1);
-  DB.saveTrash(trash);
-  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
-  cm('m-confirm');
-  renderHome();
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  MODAL HELPERS
-// ══════════════════════════════════════════════════════════════════
-function om(id){document.getElementById(id).classList.add('open');}
-function cm(id){document.getElementById(id).classList.remove('open');}
-function moi(e,id){if(e.target.id===id)cm(id);}
-
-// ══════════════════════════════════════════════════════════════════
-//  BOOT
-// ══════════════════════════════════════════════════════════════════
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
 })();
 
 initApp();
