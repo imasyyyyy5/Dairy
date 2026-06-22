@@ -42,3 +42,28 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request))
   );
 });
+self.addEventListener('fetch', (event) => {
+  // Check if this is the incoming shared file
+  if (event.request.method === 'POST' && event.request.url.includes('/import-shared-file')) {
+    event.respondWith((async () => {
+      try {
+        // Extract the file from the incoming POST request
+        const formData = await event.request.formData();
+        const file = formData.get('backup_file');
+        
+        if (file) {
+          // Store the file temporarily in the Cache API
+          const cache = await caches.open('dairy-shared-file-cache');
+          await cache.put('/temp-shared-backup.pdf', new Response(file));
+        }
+        
+        // Redirect the user to the main app with a special URL parameter
+        return Response.redirect('/?shared_import=pending', 303);
+      } catch (error) {
+        console.error("Error receiving shared file:", error);
+        return Response.redirect('/?shared_import=error', 303);
+      }
+    })());
+  }
+});
+
