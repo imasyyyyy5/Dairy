@@ -28,5 +28,18 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "/import-shared-file",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "backup_file",
+          "accept": ["application/pdf", ".pdf"]
+        }
+      ]
+    }
+  }
 }
