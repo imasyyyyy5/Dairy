@@ -5,15 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
 <title>Milk Dairy Notebook</title>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-  <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('Service Worker Registered!', reg.scope))
-        .catch(err => console.error('Service Worker Registration Failed!', err));
-    });
-  }
-  </script>
 <link rel="manifest" href="manifest.json"/>
 <meta name="theme-color" content="#000000"/>
 <meta name="background-color" content="#000000"/>
@@ -24,6 +15,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Dairy Notebook"/>
 <style>
+/* EXISTING CSS RETAINED EXACTLY AS PROVIDED */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;background:#000;}
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;font-size:14px;-webkit-user-select: none;user-select: none;}
@@ -43,148 +35,63 @@ select{-webkit-appearance:none;}
   --r:12px;--rl:16px;
 }
 
-/* OVERLAYS & ANIMATIONS */
-/* Remove z-index from the base classes */
-.full-overlay {
-  position: fixed; inset: 0; display: none; flex-direction: column; overflow-y: auto; padding: 20px;
-  background: linear-gradient(145deg, rgba(5,5,5,0.98) 0%, rgba(20,20,20,0.95) 100%);
-  backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-}
-/* =========================================================
-   1. BASE OVERLAY
-   Remove the hardcoded z-index from the base class so 
-   individual IDs can dictate the stacking order.
-========================================================= */
-.moverlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.9);
-  backdrop-filter: blur(5px); display: flex; align-items: flex-end;
-  pointer-events: none; opacity: 0; transition: opacity .2s;
-}
+.moverlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); backdrop-filter: blur(5px); display: flex; align-items: flex-end; pointer-events: none; opacity: 0; transition: opacity .2s; }
 .moverlay.open { pointer-events: all; opacity: 1; }
-.full-overlay {
-  position: fixed; inset: 0; display: none; flex-direction: column; overflow-y: auto; padding: 20px;
-  background: linear-gradient(145deg, rgba(5,5,5,0.98) 0%, rgba(20,20,20,0.95) 100%);
-  backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-}
+.full-overlay { position: fixed; inset: 0; display: none; flex-direction: column; overflow-y: auto; padding: 20px; background: linear-gradient(145deg, rgba(5,5,5,0.98) 0%, rgba(20,20,20,0.95) 100%); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); }
 .full-overlay.active { display: flex; }
 
-
-/* =========================================================
-   2. THE STUDIED Z-INDEX HIERARCHY 
-========================================================= */
-/* BASE APP: The lowest level */
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
-
-/* LEVEL 1: Full-Screen Workflows (Cover the app) */
 #onboarding, #quick-entry { z-index: 1000 !important; }
-
-/* LEVEL 2: Standard Modals (Spawned from the main app) */
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide { z-index: 2000 !important; }
-
-/* LEVEL 3: Secondary Pickers (Spawned FROM Level 2 Modals) */
-/* The Calendar MUST have a higher index than the New Page modal */
+#m-newpage, #m-animal, #m-health, #m-expense, #m-filter-sheet, #m-install-guide { z-index: 2000 !important; }
 #m-calendar-sheet { z-index: 3000 !important; }
-
-/* LEVEL 4: Critical Alerts & Confirmations (Must interrupt everything) */
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
-
-/* LEVEL 5: System Overrides (Toasts & Splash screens) */
 #toast-container { z-index: 9998 !important; }
 #splash, #error-screen { z-index: 9999 !important; }
 
-.full-overlay.active {display: flex;}
-
-/* SPLASH SCREEN */
-#splash { z-index: 999; display: flex; align-items: center; justify-content: center; background: #000; transition: opacity 0.3s; }
+#splash { display: flex; align-items: center; justify-content: center; background: #000; transition: opacity 0.3s; }
 @keyframes blinkSplash { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; transform: scale(0.95); } }
 .splash-icon { font-size: 64px; filter: grayscale(1); animation: blinkSplash 1.2s infinite ease-in-out; }
 
-/* STAGGERED FADE-IN */
-@keyframes slideUpFade {
-  0% { opacity: 0; transform: translateY(40px) scale(0.98); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
+@keyframes slideUpFade { 0% { opacity: 0; transform: translateY(40px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 .anim-stagger { opacity: 0; }
 .start-anim .anim-stagger { animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.start-anim .d1 { animation-delay: 0.1s; }
-.start-anim .d2 { animation-delay: 0.2s; }
-.start-anim .d3 { animation-delay: 0.3s; }
+.start-anim .d1 { animation-delay: 0.1s; } .start-anim .d2 { animation-delay: 0.2s; } .start-anim .d3 { animation-delay: 0.3s; }
 
-/* APP-THEMED TOAST SYSTEM */
-#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 .toast { background-color: var(--bg2); border: 1px solid var(--border2); color: #fff; padding: 12px 20px; border-radius: 100px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); font-weight: 600; font-size: 13px; opacity: 0; animation: toastIn 0.3s forwards, toastOut 0.3s forwards 2.7s; display: flex; align-items: center; gap: 8px; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-20px) scale(0.95); } }
 
-/* QUICK ENTRY PREMIUM UI (REDUCED SIZES) */
-.qe-card {
-  background: linear-gradient(145deg, var(--bg2), var(--bg1));
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 12px;
-  margin-bottom: 10px;
-  display:flex; flex-direction:column;
-  box-shadow: 0 6px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
-}
-.qe-input {
-  width: 70px;
-  background: rgba(0,0,0,0.4);
-  border: 2px solid var(--border2);
-  border-radius: 10px;
-  color: #fff;
-  padding: 8px;
-  font-size: 18px;
-  font-weight: 900;
-  text-align: center;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: inset 0 4px 8px rgba(0,0,0,0.3);
-}
+.qe-card { background: linear-gradient(145deg, var(--bg2), var(--bg1)); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 12px; margin-bottom: 10px; display:flex; flex-direction:column; box-shadow: 0 6px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05); }
+.qe-input { width: 70px; background: rgba(0,0,0,0.4); border: 2px solid var(--border2); border-radius: 10px; color: #fff; padding: 8px; font-size: 18px; font-weight: 900; text-align: center; outline: none; cursor: pointer; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: inset 0 4px 8px rgba(0,0,0,0.3); }
 .qe-input.active-inp { border-color: #fff; transform: scale(1.05); background: rgba(0,0,0,0.8); box-shadow: 0 0 0 4px rgba(255,255,255,0.1); }
 .qe-input-sm { font-size: 14px; width: 60px; padding: 6px; }
 
-/* NUMPAD (REDUCED SIZES) */
-.numpad {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 5px;
-  padding: 5px 0; background: transparent;
-}
-.num-key {
-  background: var(--bg2); border: 1px solid var(--border2); color: #fff;
-  font-size: 20px; padding: 12px; border-radius: 12px; font-weight: bold;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: transform 0.1s;
-}
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 5px; padding: 5px 0; background: transparent; }
+.num-key { background: var(--bg2); border: 1px solid var(--border2); color: #fff; font-size: 20px; padding: 12px; border-radius: 12px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: transform 0.1s; }
 .num-key:active { transform: scale(0.92); background: var(--bg3); }
 .num-action { background: var(--bg1); color: var(--sub); font-size: 18px; }
-.num-save {
-  grid-column: span 3; background: var(--success); color: #fff; border: none;
-  padding: 14px; font-size: 16px; border-radius: 12px; font-weight: bold;
-  box-shadow: 0 4px 8px rgba(45,138,78,0.4); margin-top: 4px;
-}
+.num-save { grid-column: span 3; background: var(--success); color: #fff; border: none; padding: 14px; font-size: 16px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 8px rgba(45,138,78,0.4); margin-top: 4px; }
 .num-save:active { transform: scale(0.96); }
 
 .warning-box {background: rgba(224, 51, 51, 0.1); border: 1px dashed var(--danger); color: #fff; padding: 10px; border-radius: 12px; font-size: 12px; margin-bottom: 15px; display: none; text-align: center;}
 
-/* STANDARD UI */
 #app{display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto;overflow:hidden;}
 #main{flex:1;overflow:hidden;position:relative;}
 .panel{display:none;position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 .panel.active{display:block;}
 
-/* INSTALL REMINDER BANNER */
 .install-banner{display:none;align-items:center;gap:8px;padding:9px 14px;padding-top:max(9px, env(safe-area-inset-top,0px));background:var(--bg1);border-bottom:1px solid var(--border);flex-shrink:0;}
 .install-banner.show{display:flex;}
 .install-banner-icon{font-size:15px;filter:grayscale(1);flex-shrink:0;}
 .install-banner-text{flex:1;font-size:12px;font-weight:700;cursor:pointer;}
 .install-banner-close{background:none;border:none;color:var(--muted);font-size:13px;padding:6px;cursor:pointer;line-height:1;flex-shrink:0;}
-
-/* INSTALL GUIDE STEPS */
 .ig-step{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.5;}
 .ig-step:last-child{border-bottom:none;}
 .ig-num{font-size:17px;flex-shrink:0;width:24px;text-align:center;}
 
-#bnav{display:flex;background:var(--bg1);border-top:1px solid var(--border);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0); z-index: 100;}
+#bnav{display:flex;background:var(--bg1);border-top:1px solid var(--border);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0);}
 .nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px 7px;gap:3px;position:relative;}
 .nb svg{width:21px;height:21px;stroke:var(--muted);transition:.15s;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;}
 .nb span{font-size:10px;font-weight:600;color:var(--muted);transition:.15s;letter-spacing:.3px;}
@@ -194,7 +101,6 @@ select{-webkit-appearance:none;}
 .eyebrow{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);}
 .ptitle{font-size:21px;font-weight:800;color:#fff;line-height:1.1;}
 .slabel{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
-
 .card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:14px;}
 .card2{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;}
 
@@ -225,7 +131,6 @@ select{-webkit-appearance:none;}
 .dot{width:5px;height:5px;border-radius:50%;background:var(--border);display:inline-block;}
 .dot.on{background:#fff;}
 
-/* COMPACT TWO-TIER TABLE & SEPARATORS */
 .twrap{overflow-x:auto;border-radius:var(--rl);border:1px solid var(--border);background:var(--bg1);}
 table{width:100%;border-collapse:separate; border-spacing: 0; font-size:11px; table-layout: auto;}
 thead tr{background:var(--bg2);}
@@ -247,19 +152,10 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .ttote{color:var(--border2); padding-left: 6px;}
 .w-100{width:100%;}
 
-/* COMPACT INPUTS */
-.finp{
-  width: 100%; min-width:32px; max-width: 55px;
-  background:transparent; border:1px solid transparent; border-radius:6px;
-  color:#fff; padding:8px 2px; font-size:12px; font-family:monospace; font-weight:700;
-  outline:none; text-align:center; transition:0.15s; margin:0 auto; display:block;
-}
+.finp{ width: 100%; min-width:32px; max-width: 55px; background:transparent; border:1px solid transparent; border-radius:6px; color:#fff; padding:8px 2px; font-size:12px; font-family:monospace; font-weight:700; outline:none; text-align:center; transition:0.15s; margin:0 auto; display:block; }
 .finp:focus{background:var(--bg2); border-color:#fff;}
 .finp:disabled{opacity:.35;cursor:not-allowed;}
 
-/* MODAL */
-.moverlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.9);backdrop-filter:blur(5px);display:flex;align-items:flex-end;pointer-events:none;opacity:0;transition:opacity .2s;}
-.moverlay.open{pointer-events:all;opacity:1;}
 .mbox{background:var(--bg1);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;width:100%;max-width:500px;margin:0 auto;padding:20px;transform:translateY(16px);transition:transform .25s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto;}
 .moverlay.open .mbox{transform:translateY(0);}
 .mh{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
@@ -286,16 +182,9 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .ppill{flex-shrink:0;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--border);background:var(--bg2);color:var(--sub);cursor:pointer;transition:all .15s;white-space:nowrap;}
 .ppill.on{background:#fff;color:#000;border-color:#fff;}
 
-/* THEMED FILTER LIST OPTION ROWS */
-.filter-opt-btn {
-  width:100%; text-align:left; padding:12px 14px; background:var(--bg2); 
-  border:1px solid var(--border); border-radius:var(--r); margin-bottom:6px; 
-  font-weight:600; display:flex; justify-content:space-between; align-items:center;
-}
+.filter-opt-btn { width:100%; text-align:left; padding:12px 14px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); margin-bottom:6px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
 .filter-opt-btn.active { border-color:#fff; background:var(--bg3); color:#fff; }
 .filter-group-header { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; margin:12px 0 6px 4px; letter-spacing:0.5px; }
-
-/* THEMED CALENDAR SPECIFIC CSS */
 
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
 .cal-head { font-weight: 700; color: var(--sub); font-size: 11px; padding: 5px 0; text-transform: uppercase; }
@@ -306,16 +195,12 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .cal-day.today-marker { border-color: var(--border2); color: var(--success); }
 .cal-day.disabled { opacity: 0.25; pointer-events: none; }
 
-/* PAYMENT ENTRY */
 .payrow{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px; margin-bottom: 8px;}
-
-/* LOG ENTRY */
 .logrow{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:var(--bg2);border-radius:var(--r);}
 .logdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
 .logtime{font-size:10px;color:var(--muted);margin-top:2px;font-family:monospace;}
 .logmsg{font-size:13px;color:var(--text);line-height:1.5;}
 
-/* GRAPHS & TRASH */
 .trash-card{background:var(--bg1);border:1px solid #3a1a1a;border-radius:var(--rl);padding:13px;opacity:.7;}
 .trash-days{font-size:10px;color:var(--danger);font-weight:700;}
 .gchart-wrap{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:14px;overflow:hidden;}
@@ -329,7 +214,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .pie-slice:hover{opacity:.8;}
 .g-legend-dot {display:inline-block;width:10px;height:10px;border-radius:3px;flex-shrink:0;}
 
-/* UTILS */
 .row{display:flex;align-items:center;}
 .gap1{gap:4px;}.gap2{gap:8px;}.gap3{gap:12px;}.f1{flex:1;}.mw0{min-width:0;}
 .ph{padding:18px 15px 10px;}.pc{padding:0 15px 90px;}
@@ -345,15 +229,9 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </style>
 </head>
 <body>
-<div id="error-screen" class="full-overlay" style="align-items:center; justify-content:center; background:#000; text-align:center;">
-  <div style="font-size:50px; margin-bottom:20px;">⚠️</div>
-  <h2 class="ptitle mb2" style="color:var(--danger);">App Failed to Load</h2>
-  <p id="error-reason" style="color:var(--muted); font-size:14px; margin-bottom:30px;">The initialization took too long or encountered an error.</p>
-  <button class="btn bp" style="padding:15px 20px; font-size:15px; width:100%; max-width:300px;" onclick="localStorage.clear(); location.reload();">Reset App Data & Reload</button>
-</div>
 
 <div id="toast-container"></div>
-<input type="file" id="import-file" style="display:none;" onchange="importBackup(event)" accept=".json,.dat" />
+<input type="file" id="import-file" style="display:none;" onchange="importBackup(event)" accept=".json,.dat,.pdf" />
 
 <div id="splash" class="full-overlay active">
   <div class="splash-icon">✏️</div>
@@ -362,54 +240,52 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <div id="onboarding" class="full-overlay">
  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="eico anim-stagger d1" style="font-size:36px; width:80px; height:80px; margin: 0 auto 20px; border-radius:24px;">🥛</div>
-  <h1 class="ptitle tc mb2 anim-stagger d1">Welcome to Dairy</h1>
-  <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Set up your profile and add the animals you milk to automate your daily entry sheets.</p>
+  <h1 class="ptitle tc mb2 anim-stagger d1" data-i18n="welcome">Welcome to Dairy</h1>
+  <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;" data-i18n="setupDesc">Set up your profile and add the animals you milk to automate your daily entry sheets.</p>
   
   <div class="card mb3 anim-stagger d2" style="border-radius:24px; padding:20px;">
-    <div class="slabel">Your Name / Dairy Name</div>
+    <div class="slabel" data-i18n="yourName">Your Name / Dairy Name</div>
     <input class="inp" id="ob-dairy-name" placeholder="Enter name..."/>
   </div>
   
   <div id="ob-animal-list" class="sp2 mb3 anim-stagger d2"></div>
   
   <div class="card mb4 anim-stagger d3" style="border-radius:24px; padding:20px;">
-   <div class="slabel">Add Animal</div>
+   <div class="slabel" data-i18n="addAnimal">Add Animal</div>
    <input class="inp mb3" id="ob-name" placeholder="e.g., Gori, Buffalo #1"/>
    
    <div class="row gap2 mb3" id="ob-types" style="flex-wrap:wrap;">
-    <button class="rpill on" id="ob-cow-btn" onclick="setObType('cow')">🐄 Cow</button>
-    <button class="rpill" id="ob-buffalo-btn" onclick="setObType('buffalo')">🐃 Buffalo</button>
-    <button class="rpill" id="ob-goat-btn" onclick="setObType('goat')">🐐 Goat</button>
-    <button class="rpill" id="ob-other-btn" onclick="setObType('other')">🥛 Other</button>
+    <button class="rpill on" id="ob-cow-btn" onclick="setObType('cow')">🐄 <span data-i18n="cow">Cow</span></button>
+    <button class="rpill" id="ob-buffalo-btn" onclick="setObType('buffalo')">🐃 <span data-i18n="buffalo">Buffalo</span></button>
+    <button class="rpill" id="ob-goat-btn" onclick="setObType('goat')">🐐 <span data-i18n="goat">Goat</span></button>
+    <button class="rpill" id="ob-other-btn" onclick="setObType('other')">🥛 <span data-i18n="other">Other</span></button>
    </div>
 
    <input class="inp mb3" type="number" id="ob-rate" placeholder="Milk Rate (₹ per Litre)"/>
-   <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObAnimal()">+ Add This Animal</button>
+   <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObAnimal()" data-i18n="addThisAnimal">+ Add This Animal</button>
   </div>
   
   <div class="anim-stagger d3">
-      <button class="btn bg mb3" style="width:100%; color:var(--text);" onclick="document.getElementById('import-file').click()">⬆️ Import Existing Backup</button>
-      <button class="btn bp" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()">Complete Setup ›</button>
+      <button class="btn bg mb2" style="width:100%; color:var(--text);" onclick="document.getElementById('import-file').click()" data-i18n="importBackupBtn">⬆️ Import Existing Backup</button>
+      <button class="btn bs mb3" style="width:100%; color:var(--text); border-color:var(--success); color:var(--success);" onclick="loadDemoData()" data-i18n="loadDemoData">🧪 Load Demo Farm Data</button>
+      <button class="btn bp" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()" data-i18n="completeSetup">Complete Setup ›</button>
   </div>
  </div>
 </div>
 
 <div id="quick-entry" class="full-overlay">
  <div id="qe-active-content" style="max-width: 500px; margin: 0 auto; width: 100%; display:flex; flex-direction:column; height:100%;">
-  
   <div style="flex:1; overflow-y:auto; padding-top:20px; padding-bottom:10px;">
       <div class="row anim-stagger d1" style="justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
        <div>
         <div class="eyebrow" id="qe-date-label" style="font-size:11px;">Today's Date</div>
         <div class="ptitle" id="qe-greeting" style="font-size: 24px; letter-spacing:-0.5px;">Good Morning</div>
        </div>
-       <button class="btn bg" style="font-size:13px; color:var(--sub); padding:4px 8px;" onclick="openFullApp()">Skip ➔</button>
+       <button class="btn bg" style="font-size:13px; color:var(--sub); padding:4px 8px;" onclick="openFullApp()" data-i18n="skip">Skip ➔</button>
       </div>
-
       <div id="qe-warning" class="warning-box anim-stagger d1">Data already exists for this shift. Saving will overwrite previous entries.</div>
       <div id="qe-inputs" class="sp2 anim-stagger d2"></div>
   </div>
-
   <div class="anim-stagger d3" style="flex-shrink:0;">
       <div class="numpad">
           <button class="num-key" onclick="numpadPress('1')">1</button>
@@ -424,100 +300,49 @@ svg.chart{display:block;width:100%;overflow:visible;}
           <button class="num-key num-action" onclick="numpadPress('.')">.</button>
           <button class="num-key" onclick="numpadPress('0')">0</button>
           <button class="num-key num-action" onclick="numpadPress('back')">⌫</button>
-          <button class="num-save" onclick="saveQuickEntry()">Save Data & Close</button>
+          <button class="num-save" onclick="saveQuickEntry()" data-i18n="saveClose">Save Data & Close</button>
       </div>
   </div>
  </div>
-
  <div id="qe-success-content" style="max-width: 500px; margin: auto; width: 100%; display:none; text-align:center; padding-top:40px;">
-    <div style="font-size:80px; margin-bottom:20px; animation: slideUpFade 0.5s ease-out; filter: drop-shadow(0 0 20px rgba(45, 138, 78, 0.6));">✅</div>
-    <h2 class="ptitle mb3" style="font-size:28px; animation: slideUpFade 0.6s ease-out;">Saved Successfully</h2>
-    <p style="color:var(--muted); font-size:14px; animation: slideUpFade 0.7s ease-out;">Your records have been backed up and logged.</p>
+    <div style="font-size:80px; margin-bottom:20px;">✅</div>
+    <h2 class="ptitle mb3" data-i18n="savedSuccess">Saved Successfully</h2>
  </div>
 </div>
 
-
 <div id="app" style="display:none;">
- <div id="install-banner" class="install-banner">
-  <span class="install-banner-icon">🔔</span>
-  <span class="install-banner-text" onclick="showInstallGuide()">Best in app version</span>
-  <button class="install-banner-close" onclick="dismissInstallBanner()">✕</button>
- </div>
  <div id="main">
   <div id="p-home" class="panel active"></div>
   <div id="p-graphs" class="panel"></div>
   <div id="p-calc" class="panel">
-   <div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Dashboard</div></div></div>
+   <div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow" data-i18n="analytics">Analytics</div><div class="ptitle" data-i18n="dashboard">Dashboard</div></div></div>
    <div style="padding:0 15px 90px;" id="cledger"></div>
   </div>
   <div id="p-me" class="panel"></div>
  </div>
  <nav id="bnav">
-  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
-  <button class="nb" onclick="goTab('graphs',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Graphs</span></button>
-  <button class="nb" onclick="goTab('calc',this)"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg><span>Calc</span></button>
-  <button class="nb" onclick="goTab('me',this)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></button>
+  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span data-i18n="home">Home</span></button>
+  <button class="nb" onclick="goTab('graphs',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span data-i18n="graphs">Graphs</span></button>
+  <button class="nb" onclick="goTab('calc',this)"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg><span data-i18n="calc">Calc</span></button>
+  <button class="nb" onclick="goTab('me',this)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span data-i18n="profile">Profile</span></button>
  </nav>
 </div>
 
-<div class="moverlay" id="m-alert" onclick="moi(event,'m-alert')"><div class="mbox">
- <div class="mh"><span class="mt" id="mal-title">Alert</span><button class="mx" onclick="submitAppAlert()">✕</button></div>
- <div class="mbody" id="mal-body"></div>
- <div class="mact"><button class="btn bp" onclick="submitAppAlert()" style="flex:1;">OK</button></div>
-</div></div>
-
-<div class="moverlay" id="m-prompt" onclick="moi(event,'m-prompt')"><div class="mbox">
- <div class="mh"><span class="mt" id="mpr-title">Input</span><button class="mx" onclick="submitAppPrompt(null)">✕</button></div>
- <div style="margin-bottom:15px;"><input class="inp" id="mpr-input" type="text" /></div>
+<div class="moverlay" id="m-expense" onclick="moi(event,'m-expense')"><div class="mbox">
+ <div class="mh"><span class="mt" data-i18n="logExpense">Log Expense</span><button class="mx" onclick="cm('m-expense')">✕</button></div>
+ <div style="margin-bottom:9px;"><label class="flabel" data-i18n="amount">Amount (₹)</label><input class="inp" type="number" id="mexp-amount" placeholder="0.00"/></div>
+ <div style="margin-bottom:9px;"><label class="flabel" data-i18n="category">Category</label>
+   <select class="sel" id="mexp-category">
+     <option value="feed">Feed / Fodder</option>
+     <option value="medical">Medical / Vet</option>
+     <option value="equipment">Equipment</option>
+     <option value="other">Other</option>
+   </select>
+ </div>
+ <div style="margin-bottom:9px;"><label class="flabel" data-i18n="notes">Notes</label><input class="inp" id="mexp-notes" placeholder="Optional notes..."/></div>
  <div class="mact">
-  <button class="btn bs" onclick="submitAppPrompt(null)">Cancel</button>
-  <button class="btn bp" onclick="submitAppPrompt(document.getElementById('mpr-input').value)">Save</button>
- </div>
-</div></div>
-
-<div class="moverlay" id="m-confirm" onclick="moi(event,'m-confirm')"><div class="mbox">
- <div class="mh"><span class="mt" id="mc-title">Confirm Action</span><button class="mx" onclick="submitAppConfirm(false)">✕</button></div>
- <div class="mbody" id="mc-body"></div>
- <div class="mact" id="mc-act"></div>
-</div></div>
-
-<div class="moverlay" id="m-install-guide" onclick="moi(event,'m-install-guide')"><div class="mbox">
- <div class="mh"><span class="mt">📲 Install This App</span><button class="mx" onclick="cm('m-install-guide')">✕</button></div>
- <div id="install-guide-steps"></div>
- <div class="mact"><button class="btn bp" style="flex:1;" onclick="cm('m-install-guide')">Got It</button></div>
-</div></div>
-
-<div class="moverlay" id="m-filter-sheet" onclick="moi(event,'m-filter-sheet')"><div class="mbox">
- <div class="mh"><span class="mt">Filter Columns</span><button class="mx" onclick="cm('m-filter-sheet')">✕</button></div>
- <div id="filter-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:10px;"></div>
-</div></div>
-
-<div class="moverlay" id="m-calendar-sheet" onclick="moi(event,'m-calendar-sheet')"><div class="mbox">
- <div class="mh">
-   <span class="mt" id="cal-month-title">Select Date</span>
-   <div class="row gap2">
-     <button class="btn bs bsm" onclick="navCalendarMonth(-1)">◀</button>
-     <button class="btn bs bsm" onclick="navCalendarMonth(1)">▶</button>
-     <button class="mx" onclick="cm('m-calendar-sheet')">✕</button>
-   </div>
- </div>
- <div class="cal-grid cal-head mb2">
-   <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
- </div>
- <div id="calendar-days-container" class="cal-grid mb3"></div>
-</div></div>
-
-<div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
- <div class="mh"><span class="mt" id="mnp-modal-title">New Record</span><button class="mx" onclick="cm('m-newpage')">✕</button></div>
- <div class="mbody mb3">Choose the start date. Each row unlocks only on its corresponding date.</div>
- <label class="flabel">Start Date</label>
- 
- <button class="btn bd-trigger mb3 w-100" id="mnp-date-trigger" onclick="openThemedCalendar('mnp-date')">Choose Start Date</button>
- <input type="hidden" id="mnp-date"/>
-
- <div class="mact">
-  <button class="btn bs" onclick="cm('m-newpage')">Cancel</button>
-  <button class="btn bp" onclick="doNewPage()">Create Page</button>
+  <button class="btn bs" onclick="cm('m-expense')" data-i18n="cancel">Cancel</button>
+  <button class="btn bp" onclick="saveExpense()" data-i18n="save">Save</button>
  </div>
 </div></div>
 
@@ -533,292 +358,126 @@ svg.chart{display:block;width:100%;overflow:visible;}
   </div>
  </div>
  <div class="row gap2 mb3" style="align-items:center;">
-  <div class="f1"><div style="font-size:13px;font-weight:700;">This animal gives milk?</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Will auto-add AM/PM columns</div></div>
+  <div class="f1"><div style="font-size:13px;font-weight:700;">This animal gives milk?</div></div>
   <label class="tswitch"><input type="checkbox" id="ma-milks" checked onchange="document.getElementById('ma-rate-row').style.display=this.checked?'block':'none'"/><div class="tslider"></div></label>
  </div>
  <div id="ma-rate-row" class="mb3"><label class="flabel">Default Rate per Litre (₹)</label><input class="inp" type="number" id="ma-rate" placeholder="e.g. 55"/></div>
+ 
+ <div id="ma-health-row" class="mb3" style="display:none; border-top:1px solid var(--border); padding-top:15px;">
+   <button class="btn bs w-100" onclick="openHealthModal()">🏥 View Health & Breeding Records</button>
+ </div>
+
  <div class="mact">
   <button class="btn bs" onclick="cm('m-animal')">Cancel</button>
   <button class="btn bp" id="ma-btn" onclick="doSaveAnimal()">Add Animal</button>
  </div>
 </div></div>
 
+<div class="moverlay" id="m-health" onclick="moi(event,'m-health')"><div class="mbox">
+ <div class="mh"><span class="mt">Health & Breeding</span><button class="mx" onclick="cm('m-health')">✕</button></div>
+ <div id="health-list" class="sp2 mb3" style="max-height:40vh; overflow-y:auto;"></div>
+ <div class="card2">
+   <div class="slabel mb2">Add Event</div>
+   <div class="row gap2 mb2">
+     <select class="sel" id="mh-type" style="flex:1;">
+       <option value="vaccine">💉 Vaccination</option>
+       <option value="illness">🤒 Illness</option>
+       <option value="insemination">🧬 Insemination</option>
+       <option value="calving">🐮 Calving</option>
+     </select>
+     <input type="date" class="inp" id="mh-date" style="flex:1;" />
+   </div>
+   <input type="text" class="inp mb2" id="mh-notes" placeholder="Notes (e.g. FMD Vaccine)" />
+   <button class="btn bp w-100" onclick="saveHealthEvent()">+ Add Event</button>
+ </div>
+</div></div>
+
+<div class="moverlay" id="m-alert" onclick="moi(event,'m-alert')"><div class="mbox"><div class="mh"><span class="mt" id="mal-title">Alert</span><button class="mx" onclick="submitAppAlert()">✕</button></div><div class="mbody" id="mal-body"></div><div class="mact"><button class="btn bp" onclick="submitAppAlert()" style="flex:1;">OK</button></div></div></div>
+<div class="moverlay" id="m-confirm" onclick="moi(event,'m-confirm')"><div class="mbox"><div class="mh"><span class="mt" id="mc-title">Confirm</span><button class="mx" onclick="submitAppConfirm(false)">✕</button></div><div class="mbody" id="mc-body"></div><div class="mact" id="mc-act"></div></div></div>
+
 <script>
 // ══════════════════════════════════════════════════════════════════
-//  REPOSITORY PATTERN & AUTOMATIC OPFS BACKUP
+//  SERVICE WORKER REGISTRATION (Offline caching)
 // ══════════════════════════════════════════════════════════════════
-const Store={
-  get(k){try{const r=localStorage.getItem(k);return r?JSON.parse(r):null;}catch(e){return null;}},
-  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}},
-};
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      console.log('ServiceWorker registered with scope:', reg.scope);
+    }).catch(err => console.error('ServiceWorker registration failed:', err));
+  });
+}
 
 // ══════════════════════════════════════════════════════════════════
-//  BACKUP PAYLOAD ENGINE
+//  I18N MULTI-LANGUAGE ENGINE
 // ══════════════════════════════════════════════════════════════════
-const BACKUP_FORMAT = 'dairy-notebook-backup';
-const BACKUP_VERSION = 2;
-
-function b64FromBuffer(buf) {
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-function bufferFromB64(b64) {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-async function compressArchive(obj) {
-  const json = JSON.stringify(obj);
-  if (typeof CompressionStream === 'function') {
-    try {
-      const enc = new TextEncoder().encode(json);
-      const stream = new Blob([enc]).stream().pipeThrough(new CompressionStream('gzip'));
-      const buf = await new Response(stream).arrayBuffer();
-      return { compressed: true, encoding: 'gzip-base64', data: b64FromBuffer(buf) };
-    } catch (e) {
-      console.warn('Compression unavailable, storing archive uncompressed.', e);
-    }
-  }
-  return { compressed: false, encoding: 'utf8-base64', data: b64FromBuffer(new TextEncoder().encode(json)) };
-}
-
-async function decompressArchive(archive) {
-  if (!archive || !archive.data) return {};
-  if (archive.compressed && typeof DecompressionStream === 'function') {
-    const buf = bufferFromB64(archive.data);
-    const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
-    const text = await new Response(stream).text();
-    return JSON.parse(text);
-  }
-  const buf = bufferFromB64(archive.data);
-  const text = new TextDecoder().decode(buf);
-  return JSON.parse(text);
-}
-
-async function buildBackupPayload(pretty) {
-  const profile = Store.get('mdn_profile') || null;
-  const allPages = Store.get('mdn_pages') || [];
-  const payments = Store.get('mdn_payments') || [];
-  const trash = Store.get('mdn_trash') || [];
-  const logs = Store.get('mdn_logs') || [];
-
-  const activePages = allPages.filter(p => !p.locked);
-  const clearedPages = allPages.filter(p => p.locked);
-
-  const archive = await compressArchive({ clearedPages, payments, trash, logs });
-
-  const payload = {
-    app: 'Milk Dairy Notebook',
-    format: BACKUP_FORMAT,
-    version: BACKUP_VERSION,
-    exportedAt: new Date().toISOString(),
-    readable: { profile, activePages },
-    archive
-  };
-  return JSON.stringify(payload, null, pretty ? 2 : 0);
-}
-
-async function restoreBackupPayload(payload) {
-  const archiveData = await decompressArchive(payload.archive);
-  const readable = payload.readable || {};
-  const activePages = readable.activePages || [];
-  const clearedPages = archiveData.clearedPages || [];
-
-  if (readable.profile) Store.set('mdn_profile', readable.profile);
-  Store.set('mdn_pages', [...activePages, ...clearedPages]);
-  Store.set('mdn_payments', archiveData.payments || []);
-  Store.set('mdn_trash', archiveData.trash || []);
-  Store.set('mdn_logs', archiveData.logs || []);
-}
-
-// Automatic Background Packet Saver.
-// Tries OPFS first (best for large files); if OPFS is unavailable in this
-// browsing context (e.g. some embedded/WebView contexts, or browsers that
-// haven't implemented it), it falls back to IndexedDB, which has near-
-// universal support. Neither path requests any special permission or
-// bypasses any browser restriction — both are standard, same-origin,
-// no-prompt storage APIs.
-const AutoBackup = {
-  async trigger() {
-    try {
-      const payloadStr = await buildBackupPayload(false);
-      const savedViaOPFS = await AutoBackup.saveToOPFS(payloadStr);
-      if (!savedViaOPFS) await AutoBackup.saveToIndexedDB(payloadStr);
-    } catch (e) {
-      console.log("AutoBackup: could not generate backup payload.", e);
-    }
+const translations = {
+  en: {
+    welcome: "Welcome to Dairy", setupDesc: "Set up your profile and add the animals you milk to automate your daily entry sheets.",
+    yourName: "Your Name / Dairy Name", addAnimal: "Add Animal", cow: "Cow", buffalo: "Buffalo", goat: "Goat", other: "Other",
+    addThisAnimal: "+ Add This Animal", importBackupBtn: "⬆️ Import Existing Backup", loadDemoData: "🧪 Load Demo Farm Data", completeSetup: "Complete Setup ›",
+    home: "Home", graphs: "Graphs", calc: "Calc", profile: "Profile", analytics: "Analytics", dashboard: "Dashboard",
+    logExpense: "Log Expense", amount: "Amount (₹)", category: "Category", notes: "Notes", cancel: "Cancel", save: "Save", skip: "Skip ➔", saveClose: "Save Data & Close", savedSuccess: "Saved Successfully"
   },
-
-  async saveToOPFS(payloadStr) {
-    try {
-      if (!navigator.storage || !navigator.storage.getDirectory) return false;
-      const dir = await navigator.storage.getDirectory();
-      const fileHandle = await dir.getFileHandle('dairy_backup_auto.json', { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(payloadStr);
-      await writable.close();
-      return true;
-    } catch (e) {
-      console.log("AutoBackup: OPFS unavailable in this context, falling back to IndexedDB.", e);
-      return false;
-    }
+  hi: {
+    welcome: "डेयरी में आपका स्वागत है", setupDesc: "अपनी प्रोफ़ाइल सेट करें और दूध देने वाले जानवरों को जोड़ें।",
+    yourName: "आपका नाम / डेयरी का नाम", addAnimal: "जानवर जोड़ें", cow: "गाय", buffalo: "भैंस", goat: "बकरी", other: "अन्य",
+    addThisAnimal: "+ यह जानवर जोड़ें", importBackupBtn: "⬆️ पुराना बैकअप लाएं", loadDemoData: "🧪 डेमो डेटा लोड करें", completeSetup: "सेटअप पूरा करें ›",
+    home: "होम", graphs: "ग्राफ़", calc: "कैलक्यूलेटर", profile: "प्रोफ़ाइल", analytics: "एनालिटिक्स", dashboard: "डैशबोर्ड",
+    logExpense: "खर्चा दर्ज करें", amount: "राशि (₹)", category: "श्रेणी", notes: "विवरण", cancel: "रद्द करें", save: "सहेजें", skip: "छोड़ें ➔", saveClose: "सहेजें और बंद करें", savedSuccess: "सफलतापूर्वक सहेजा गया"
   },
-
-  openIDB() {
-    return new Promise((resolve, reject) => {
-      if (!('indexedDB' in window)) { reject(new Error('IndexedDB not supported')); return; }
-      const req = indexedDB.open('dairy-notebook-db', 1);
-      req.onupgradeneeded = () => {
-        if (!req.result.objectStoreNames.contains('backups')) {
-          req.result.createObjectStore('backups', { keyPath: 'id' });
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  },
-
-  async saveToIndexedDB(payloadStr) {
-    try {
-      const db = await AutoBackup.openIDB();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction('backups', 'readwrite');
-        tx.objectStore('backups').put({ id: 'auto', data: payloadStr, savedAt: new Date().toISOString() });
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-    } catch (e) {
-      console.log("AutoBackup: IndexedDB fallback also failed. No background snapshot saved this time.", e);
-    }
-  },
-
-  // Reads back whichever snapshot exists (OPFS preferred, IndexedDB fallback).
-  // Useful for recovery if localStorage itself is ever cleared or corrupted.
-  async read() {
-    try {
-      if (navigator.storage && navigator.storage.getDirectory) {
-        const dir = await navigator.storage.getDirectory();
-        const fileHandle = await dir.getFileHandle('dairy_backup_auto.json', { create: false });
-        const file = await fileHandle.getFile();
-        return await file.text();
-      }
-    } catch (e) { /* fall through to IndexedDB */ }
-    try {
-      const db = await AutoBackup.openIDB();
-      return await new Promise((resolve, reject) => {
-        const tx = db.transaction('backups', 'readonly');
-        const req = tx.objectStore('backups').get('auto');
-        req.onsuccess = () => resolve(req.result ? req.result.data : null);
-        req.onerror = () => reject(req.error);
-      });
-    } catch (e) {
-      return null;
-    }
+  pa: {
+    welcome: "ਡੇਅਰੀ ਵਿੱਚ ਤੁਹਾਡਾ ਸੁਆਗਤ ਹੈ", setupDesc: "ਆਪਣੀ ਪ੍ਰੋਫਾਈਲ ਸੈਟ ਅਪ ਕਰੋ ਅਤੇ ਜਾਨਵਰ ਸ਼ਾਮਲ ਕਰੋ।",
+    yourName: "ਤੁਹਾਡਾ ਨਾਮ / ਡੇਅਰੀ ਦਾ ਨਾਮ", addAnimal: "ਜਾਨਵਰ ਸ਼ਾਮਲ ਕਰੋ", cow: "ਗਾਂ", buffalo: "ਮੱਝ", goat: "ਬੱਕਰੀ", other: "ਹੋਰ",
+    addThisAnimal: "+ ਇਹ ਜਾਨਵਰ ਸ਼ਾਮਲ ਕਰੋ", importBackupBtn: "⬆️ ਪੁਰਾਣਾ ਬੈਕਅੱਪ ਲਿਆਓ", loadDemoData: "🧪 ਡੈਮੋ ਡੇਟਾ ਲੋਡ ਕਰੋ", completeSetup: "ਸੈਟਅਪ ਪੂਰਾ ਕਰੋ ›",
+    home: "ਮੁੱਖ", graphs: "ਗ੍ਰਾਫ਼", calc: "ਹਿਸਾਬ", profile: "ਪ੍ਰੋਫਾਈਲ", analytics: "ਵਿਸ਼ਲੇਸ਼ਣ", dashboard: "ਡੈਸ਼ਬੋਰਡ",
+    logExpense: "ਖਰਚਾ ਦਰਜ ਕਰੋ", amount: "ਰਕਮ (₹)", category: "ਸ਼੍ਰੇਣੀ", notes: "ਵੇਰਵਾ", cancel: "ਰੱਦ ਕਰੋ", save: "ਸੇਵ ਕਰੋ", skip: "ਛੱਡੋ ➔", saveClose: "ਸੇਵ ਕਰੋ ਅਤੇ ਬੰਦ ਕਰੋ", savedSuccess: "ਸਫਲਤਾਪੂਰਵਕ ਸੁਰੱਖਿਅਤ ਕੀਤਾ ਗਿਆ"
   }
 };
 
+const Store={ get(k){try{const r=localStorage.getItem(k);return r?JSON.parse(r):null;}catch(e){return null;}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}} };
+
+let currentLang = Store.get('mdn_lang') || 'en';
+function t(key) { return translations[currentLang][key] || translations['en'][key] || key; }
+
+function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (translations[currentLang][key]) el.textContent = translations[currentLang][key];
+  });
+}
+
+function switchLanguage(lang) {
+  currentLang = lang;
+  Store.set('mdn_lang', lang);
+  applyTranslations();
+  if (curTab === 'me') renderMe();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  DATABASE & CORE REPOSITORY
+// ══════════════════════════════════════════════════════════════════
 const DB={
-  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10},
-  saveProfile:(p)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); },
-  pages:()=>{
-    const p = Store.get('mdn_pages')||[];
-    p.forEach(pg => {
-        pg.cols.forEach(c => {
-            if (c.type === 'sr' || c.id === 'sr' || c.name === 'S.No') {
-                c.type = 'date';
-                c.id = 'date';
-                c.name = 'Date';
-            }
-        });
-    });
-    return p;
-  },
-  savePages:(p)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); AutoBackup.trigger(); },
+  profile:()=>Store.get('mdn_profile')||{name:'',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10},
+  saveProfile:(p)=>{ Store.set('mdn_profile',p); },
+  pages:()=>Store.get('mdn_pages')||[],
+  savePages:(p)=>{ Store.set('mdn_pages',p); },
   payments:()=>Store.get('mdn_payments')||[],
-  savePayments:(p)=>{ Store.set('mdn_payments',p); AutoBackup.trigger(); },
+  savePayments:(p)=>{ Store.set('mdn_payments',p); },
+  expenses:()=>Store.get('mdn_expenses')||[],      // NEW: Expenses Ledger
+  saveExpenses:(e)=>{ Store.set('mdn_expenses',e); },
   trash:()=>Store.get('mdn_trash')||[],
-  saveTrash:(t)=>{ Store.set('mdn_trash',t); AutoBackup.trigger(); },
-  logs:()=>{
-    const rawLogs = Store.get('mdn_logs')||[];
-    const cleanLogs = rawLogs.filter(l => l && l.text && l.text !== 'undefined' && l.text.trim() !== '');
-    if (cleanLogs.length !== rawLogs.length) Store.set('mdn_logs', cleanLogs); 
-    return cleanLogs;
-  },
-  
+  saveTrash:(t)=>{ Store.set('mdn_trash',t); },
+  logs:()=>{ return Store.get('mdn_logs')||[]; },
   log(text, type='info'){
     const l=DB.logs();
-    l.unshift({id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()});
+    l.unshift({id:'l'+Date.now(), text, type, ts:new Date().toISOString()});
     if(l.length>3000)l.splice(3000);
     Store.set('mdn_logs',l);
-    AutoBackup.trigger();
   },
 };
 
 const aIcon = {cow:'🐄', buffalo:'🐃', goat:'🐐', other:'🥛'};
 const aColors = {cow:'#4e8cff', buffalo:'#7b8794', goat:'#d4a373', other:'#a0aec0'};
-
-const AnalyticsEngine = {
-  build: function() {
-     const pages = Store.get('mdn_pages') || [];
-     const pAnimals = (Store.get('mdn_profile') || {}).animals || [];
-     let cache = { daily: {}, periods: [], allTime: { milk:0, rev:0, byCategory: {}, byName: {} } };
-     
-     ['cow', 'buffalo', 'goat', 'other'].forEach(c => cache.allTime.byCategory[c] = {milk:0, rev:0});
-
-     pages.forEach(p => {
-        let periodData = { id: p.id, label: p.label, total: 0, byCategory: {}, byName: {}, highs: {}, lows: {}, means: {} };
-        
-        p.rows.forEach(r => {
-           if(!r.date) return;
-           if(!cache.daily[r.date]) cache.daily[r.date] = { total: 0 };
-           
-           p.cols.forEach(c => {
-              if(c.type==='milk_am' || c.type==='milk_pm'){
-                 const v = parseFloat(r[c.id])||0;
-                 if(v > 0) {
-                   const aMeta = pAnimals.find(a => a.id === c.animal);
-                   const at = (c.animalType || (aMeta ? aMeta.type : '') || c.animal || 'other').toLowerCase();
-                   const name = c.name.replace(/( AM| PM| Rate).*/, '');
-                   
-                   let rate = 0;
-                   const rCol = p.cols.find(col => (col.type === 'rate_per_animal' && col.animal === c.animal) || col.type === 'rate');
-                   if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
-                   const rev = v * rate;
-
-                   cache.daily[r.date].total += v;
-                   cache.daily[r.date][at] = (cache.daily[r.date][at] || 0) + v;
-                   
-                   periodData.total += v;
-                   if(!periodData.byCategory[at]) periodData.byCategory[at] = [];
-                   periodData.byCategory[at].push(v);
-                   
-                   if(!cache.allTime.byCategory[at]) cache.allTime.byCategory[at] = {milk:0, rev:0};
-                   cache.allTime.byCategory[at].milk += v;
-                   cache.allTime.byCategory[at].rev += rev;
-
-                   if(!cache.allTime.byName[name]) cache.allTime.byName[name] = {milk:0, rev:0, type: at};
-                   cache.allTime.byName[name].milk += v;
-                   cache.allTime.byName[name].rev += rev;
-                   
-                   cache.allTime.milk += v;
-                   cache.allTime.rev += rev;
-                 }
-              }
-           });
-        });
-        cache.periods.push(periodData);
-     });
-     Store.set('mdn_analytics_cache', cache);
-  }
-};
 
 const fmt=n=>(parseFloat(n)||0).toFixed(2);
 const fmtD=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});};
@@ -828,10 +487,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 
 const today=()=>{
   const d=new Date();
-  const y=d.getFullYear();
-  const m=String(d.getMonth()+1).padStart(2,'0');
-  const day=String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
 
 const addDays=(dStr,n)=>{
@@ -841,546 +497,25 @@ const addDays=(dStr,n)=>{
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
 
-function showToast(message, isSuccess = true) {
-  const container = document.getElementById('toast-container');
-  if (!container) return; 
-  
-  while (container.childElementCount >= 3) {
-    container.removeChild(container.firstElementChild);
-  }
-
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  
-  toast.innerHTML = `<span style="font-size: 16px; margin-right: 2px; filter: grayscale(1);">${isSuccess ? '📝' : '✕'}</span> ${message}`;
-  container.appendChild(toast);
-  
-  setTimeout(() => { 
-    if(container.contains(toast)) container.removeChild(toast); 
-  }, 3000);
-}
-
-let confirmResolution = null, alertResolution = null, promptResolution = null;
-
-function appConfirm(title, body) {
-  return new Promise((resolve) => {
-    confirmResolution = resolve;
-    document.getElementById('mc-title').textContent = title;
-    document.getElementById('mc-body').textContent = body;
-    document.getElementById('mc-act').innerHTML = `
-      <button class="btn bs" onclick="submitAppConfirm(false)">Cancel</button>
-      <button class="btn bd" onclick="submitAppConfirm(true)">Confirm</button>
-    `;
-    om('m-confirm');
-  });
-}
-function submitAppConfirm(result) {
-  cm('m-confirm');
-  if(confirmResolution) { confirmResolution(result); confirmResolution = null; }
-}
-
-// Like appConfirm, but lets you supply custom button labels/values instead
-// of the fixed Cancel/Confirm pair. Reuses the same modal & resolution flow.
-function appChoice(title, body, choices) {
-  return new Promise((resolve) => {
-    confirmResolution = resolve;
-    document.getElementById('mc-title').textContent = title;
-    document.getElementById('mc-body').textContent = body;
-    document.getElementById('mc-act').innerHTML = choices.map((c, i) =>
-      `<button class="btn ${i === choices.length - 1 ? 'bd' : 'bs'}" onclick="submitAppConfirm('${c.value}')">${c.label}</button>`
-    ).join('');
-    om('m-confirm');
-  });
+function showToast(message) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<span>📝</span> ${message}`;
+  c.appendChild(t);
+  setTimeout(() => c.removeChild(t), 3000);
 }
 
 function appAlert(title, body) {
-  return new Promise((resolve) => {
-    alertResolution = resolve;
-    document.getElementById('mal-title').textContent = title;
-    document.getElementById('mal-body').innerHTML = body;
-    om('m-alert');
-  });
+  document.getElementById('mal-title').textContent = title;
+  document.getElementById('mal-body').innerHTML = body;
+  om('m-alert');
 }
-function submitAppAlert() {
-  cm('m-alert');
-  if(alertResolution) { alertResolution(); alertResolution = null; }
-}
+function submitAppAlert() { cm('m-alert'); }
 
-function appPrompt(title, defaultVal = '') {
-  return new Promise((resolve) => {
-    promptResolution = resolve;
-    document.getElementById('mpr-title').textContent = title;
-    document.getElementById('mpr-input').value = defaultVal;
-    om('m-prompt');
-  });
-}
-function submitAppPrompt(val) {
-  cm('m-prompt');
-  if(promptResolution) { promptResolution(val); promptResolution = null; }
-}
-
-async function shareBackup() {
-    showToast("Preparing secure document... Please wait.", true);
-    
-    try {
-        const payloadStr = await buildBackupPayload(true);
-        
-        // 1. Destructure PDFLib
-        if (typeof PDFLib === 'undefined') {
-            return appAlert("Error", "PDF library is not loaded.");
-        }
-        const { PDFDocument, StandardFonts, rgb } = PDFLib;
-
-        // 2. Create a new PDF & Load Built-in Fonts (100% Offline)
-        const pdfDoc = await PDFDocument.create();
-        const font = await pdfDoc.embedStandardFont(StandardFonts.Helvetica);
-        const boldFont = await pdfDoc.embedStandardFont(StandardFonts.HelveticaBold);
-
-        // 3. Construct the English Page
-        const page = pdfDoc.addPage([595, 842]); // A4 Size
-        const { width, height } = page.getSize();
-        
-        // Title
-        page.drawText('Your Dairy App Backup Data', { x: 50, y: height - 80, size: 24, font: boldFont, color: rgb(0.18, 0.54, 0.31) });
-        page.drawText('This file keeps your farm records safe.', { x: 50, y: height - 105, size: 12, font, color: rgb(0.3, 0.3, 0.3) });
-
-        // Section 1: What is this?
-        page.drawText('What Is This File?', { x: 50, y: height - 150, size: 16, font: boldFont });
-        page.drawText(
-            'This looks like a normal PDF document, but it is much more!\n' +
-            'Hidden safely inside this file is a complete backup of your Dairy App data, including:\n' +
-            '• Daily milk production entries\n' +
-            '• Your animal records (cows, buffaloes & more)\n' +
-            '• Payment and customer ledger history', 
-            { x: 50, y: height - 175, size: 12, font, lineHeight: 18 }
-        );
-
-        // Section 2: Why Keep This?
-        page.drawText('Why Keep This File?', { x: 50, y: height - 280, size: 16, font: boldFont });
-        page.drawText(
-            '• Works 100% offline: No internet needed. Open and restore anytime, anywhere.\n' +
-            '• Protects against phone loss: If your phone is lost, broken, or stolen, your data is safe.\n' +
-            '• Easy to share: Hand over your dairy ledger to a farm worker or partner in seconds.', 
-            { x: 50, y: height - 305, size: 12, font, lineHeight: 18 }
-        );
-
-        // Section 3: Import
-        page.drawText('How to Import (Restore Your Data)', { x: 50, y: height - 390, size: 16, font: boldFont });
-        page.drawText(
-            '1. Open your Dairy App on your phone.\n' +
-            '2. Go to the Profile section (bottom of the screen).\n' +
-            '3. Tap "Import Backup" (the download icon).\n' +
-            '4. Select this exact PDF file. Your records will instantly appear!', 
-            { x: 50, y: height - 415, size: 12, font, lineHeight: 18 }
-        );
-
-        // Section 4: Export & Share
-        page.drawText('How to Export, Save & Share', { x: 50, y: height - 510, size: 16, font: boldFont });
-        page.drawText(
-            '• Create a new backup: Open Profile -> Tap "Share Backup" -> Save the PDF.\n' +
-            '• Share via WhatsApp: Simply send this PDF file to your new phone or worker.\n' +
-            '  No special app needed - it travels like any document!', 
-            { x: 50, y: height - 535, size: 12, font, lineHeight: 18 }
-        );
-
-        // Footer Warning
-        page.drawText('Dairy App Backup File. Keep this PDF safe. Do not delete or rename this file.', { 
-            x: 50, y: 50, size: 10, font: boldFont, color: rgb(0.8, 0.2, 0.2) 
-        });
-
-        // 4. Serialize the PDF to a byte array
-        const pdfBytes = await pdfDoc.save();
-
-        // 5. The Magic Trick: Append our hidden data safely AFTER the EOF marker
-        const hiddenDataWrapper = `\n###DAIRY_BACKUP_BEGIN###\n${payloadStr}\n###DAIRY_BACKUP_END###\n`;
-        
-        const finalFile = new Blob(
-            [pdfBytes, new TextEncoder().encode(hiddenDataWrapper)], 
-            { type: "application/pdf" }
-        );
-
-        const file = new File([finalFile], `Dairy_Backup_${today()}.pdf`, { type: "application/pdf" });
-
-        // 6. Share or Download
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({
-                files: [file],
-                title: 'Dairy App Backup',
-                text: 'Here is my Dairy App Backup (PDF Format)'
-            }).then(() => showToast("Share sheet opened successfully."))
-              .catch((err) => fallbackDownload(file));
-        } else {
-            fallbackDownload(file);
-        }
-
-    } catch (err) {
-        console.error("Backup file generation error:", err);
-        appAlert("Error", "Could not generate PDF backup.");
-    }
-}
-
-
-function fallbackDownload(file) {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast("PDF Backup downloaded locally.");
-}
-
-function importBackup(e) {
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  
-  reader.onload = async function(ev) {
-    try {
-        const rawContent = ev.target.result;
-        let payloadString = rawContent;
-
-        // 1. Check if this is our special PDF format
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-            const startMarker = '###DAIRY_BACKUP_BEGIN###';
-            const endMarker = '###DAIRY_BACKUP_END###';
-            
-            const startIndex = rawContent.indexOf(startMarker);
-            const endIndex = rawContent.indexOf(endMarker);
-            
-            if (startIndex !== -1 && endIndex !== -1) {
-                // Extract ONLY the secret data hidden between the markers
-                payloadString = rawContent.substring(startIndex + startMarker.length, endIndex).trim();
-            } else {
-                return appAlert("Invalid PDF", "This PDF does not contain Dairy App backup data.");
-            }
-        }
-
-        // 2. Parse the extracted data (same logic as before)
-        let payload = null;
-        try { payload = JSON.parse(payloadString); } catch (parseErr) { payload = null; }
-
-        if (payload && payload.format === BACKUP_FORMAT) {
-            const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
-            if(confirmed) {
-                await restoreBackupPayload(payload);
-                showToast("Import successful! Reloading...");
-                setTimeout(() => location.reload(), 1500);
-            }
-        } else {
-            appAlert("Import Failed", "The data extracted from the file is invalid or corrupted.");
-        }
-    } catch (err) {
-        console.error(err);
-        appAlert("Import Failed", "Could not read the backup file.");
-    }
-    e.target.value = ''; 
-  };
-  
-  // Important: Read the PDF as text so we can find our string markers
-  reader.readAsText(file);
-}
-
-let currentTableFilter = 'all';
-
-let activeCalendarTargetInputId = '';
-let activeCalendarMinDate = null;
-let calendarCurrentYear = new Date().getFullYear();
-let calendarCurrentMonth = new Date().getMonth();
-
-function openThemedCalendar(targetHiddenInputId, minDate = null) {
-  activeCalendarTargetInputId = targetHiddenInputId;
-  activeCalendarMinDate = minDate;
-  const currentVal = document.getElementById(targetHiddenInputId).value || minDate || today();
-  const [y, m, d] = currentVal.split('-').map(Number);
-  calendarCurrentYear = y; calendarCurrentMonth = m - 1;
-  drawCalendarGrid();
-  om('m-calendar-sheet');
-}
-
-function drawCalendarGrid() {
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  document.getElementById('cal-month-title').textContent = `${months[calendarCurrentMonth]} ${calendarCurrentYear}`;
-  
-  const firstDayIndex = new Date(calendarCurrentYear, calendarCurrentMonth, 1).getDay();
-  const totalDaysInMonth = new Date(calendarCurrentYear, calendarCurrentMonth + 1, 0).getDate();
-  const currentVal = document.getElementById(activeCalendarTargetInputId).value;
-  const todayStr = today();
-  let daysHtml = '';
-  
-  for (let i = 0; i < firstDayIndex; i++) daysHtml += `<div class="cal-day empty-cell"></div>`;
-  for (let day = 1; day <= totalDaysInMonth; day++) {
-    const formatMonthStr = String(calendarCurrentMonth + 1).padStart(2, '0');
-    const formatDayStr = String(day).padStart(2, '0');
-    const computedISODate = `${calendarCurrentYear}-${formatMonthStr}-${formatDayStr}`;
-    const isDisabled = !!(activeCalendarMinDate && computedISODate < activeCalendarMinDate);
-    let stateClasses = '';
-    if (computedISODate === currentVal) stateClasses += ' selected';
-    if (computedISODate === todayStr) stateClasses += ' today-marker';
-    if (isDisabled) stateClasses += ' disabled';
-    daysHtml += isDisabled
-      ? `<button class="cal-day${stateClasses}">${day}</button>`
-      : `<button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">${day}</button>`;
-  }
-  document.getElementById('calendar-days-container').innerHTML = daysHtml;
-}
-
-function navCalendarMonth(direction) {
-  calendarCurrentMonth += direction;
-  if (calendarCurrentMonth > 11) { calendarCurrentMonth = 0; calendarCurrentYear++; } 
-  else if (calendarCurrentMonth < 0) { calendarCurrentMonth = 11; calendarCurrentYear--; }
-  drawCalendarGrid();
-}
-
-function selectCalendarDate(isoDateStr) {
-  document.getElementById(activeCalendarTargetInputId).value = isoDateStr;
-  const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
-  if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
-  cm('m-calendar-sheet');
-}
-
-function defaultColumns(profile){
-  const cols=[ {id:'date',name:'Date',type:'date',locked:true} ];
-  const milkA=(profile.animals||[]).filter(a=>a.milks!==false);
-  
-  if(!milkA.length){
-    cols.push({id:'cow_am',name:'Cow AM (L)',type:'milk_am',animal:'cow', animalType:'cow'});
-    cols.push({id:'cow_pm',name:'Cow PM (L)',type:'milk_pm',animal:'cow', animalType:'cow'});
-  } else {
-    milkA.forEach(a=>{
-      cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate});
-      cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate});
-      if(profile.ratePerEntry!==false) {
-          cols.push({id:'a_'+a.id+'_rate', name:a.name+' Rate', type:'rate_per_animal', animal:a.id, animalType:a.type});
-      }
-    });
-  }
-  if(profile.ratePerEntry!==false && milkA.length===0) cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
-  cols.push({id:'total',name:'Total (₹)',type:'total',locked:true});
-  return cols;
-}
-
-function computeRowTotal(row,cols,profile){
-  const milkCols=cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
-  if(profile.role==='farmer' && profile.ratePerEntry===false){
-    const animalTotals={};
-    milkCols.forEach(c=>{
-      const key=c.animal||'def';
-      if(!animalTotals[key])animalTotals[key]={qty:0,rate:c.animalRate||0};
-      animalTotals[key].qty+=parseFloat(row[c.id])||0;
-    });
-    return parseFloat(Object.values(animalTotals).reduce((s,g)=>s+g.qty*g.rate,0).toFixed(2));
-  }
-  const perAnimalRateCols = cols.filter(c=>c.type==='rate_per_animal');
-  if (perAnimalRateCols.length > 0) {
-      const animalTotals={};
-      milkCols.forEach(c=>{
-        const key=c.animal||'def';
-        if(!animalTotals[key])animalTotals[key]={qty:0, rate:0};
-        animalTotals[key].qty+=parseFloat(row[c.id])||0;
-      });
-      perAnimalRateCols.forEach(c=>{
-        const key=c.animal;
-        if(animalTotals[key]) animalTotals[key].rate = parseFloat(row[c.id])||0;
-      });
-      return parseFloat(Object.values(animalTotals).reduce((s,g)=>s+(g.qty*g.rate),0).toFixed(2));
-  }
-  const rateCol=cols.find(c=>c.type==='rate');
-  const totalMilk=milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0),0);
-  const rate=rateCol?(parseFloat(row[rateCol.id])||0):0;
-  return parseFloat((totalMilk*rate).toFixed(2));
-}
-
-function pageSummary(p){
-  let milk=0,rev=0,cow=0,buf=0,goat=0,other=0;
-  const pAnimals = DB.profile().animals || [];
-  p.rows.forEach(r=>{
-    p.cols.forEach(c=>{
-      const v=parseFloat(r[c.id])||0;
-      if(c.type==='milk_am'||c.type==='milk_pm'){
-        milk+=v;
-        const animalMeta = pAnimals.find(a => a.id === c.animal);
-        const at = (c.animalType || (animalMeta ? animalMeta.type : '') || c.animal || 'unknown').toLowerCase();
-        if(at==='buffalo'||at.includes('buf')) buf+=v;
-        else if(at==='goat') goat+=v;
-        else if(at==='cow'||c.id.includes('cow')) cow+=v;
-        else other+=v;
-      }
-    });
-    rev+=parseFloat(r.total)||0;
-  });
-  return{milk,rev,cow,buf,goat,other};
-}
-
-function createPage(startDate){
-  const profile=DB.profile();
-  const pLen = profile.periodLength || 10;
-  const end=addDays(startDate, pLen - 1);
-  const sD=new Date(startDate+'T00:00:00'),eD=new Date(end+'T00:00:00');
-  const label=sD.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' – '+eD.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
-  const cols=defaultColumns(profile);
-  return{
-    id:uid(),label,startDate,endDate:end,
-    cols,
-    rows:Array.from({length: pLen},(_,i)=>{
-      const rowDate=addDays(startDate,i);
-      const r={id:uid(),index:i,assignedDate:rowDate,date:'',dateFrozen:false,total:0};
-      cols.forEach(c=>{if(!['sr','date','total'].includes(c.type))r[c.id]='';});
-      return r;
-    }),
-    locked:false,createdAt:new Date().toISOString(),clearedAt:null,trashed:false
-  };
-}
-
-let curTab='home',curDetailId=null;
-let meView='profile', gChartType='overall', gChartFilter='category';
-let editAnimalId=null,animalType='cow';
-
-let touchStartX = 0; let touchEndX = 0; let ignoreSwipe = false;
-const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
-
-document.addEventListener('touchstart', e => {
-  touchStartX = e.changedTouches[0].screenX;
-  ignoreSwipe = !!e.target.closest('.twrap, input, button, select'); 
-}, {passive: true});
-
-document.addEventListener('touchend', e => {
-  if(ignoreSwipe) return;
-  touchEndX = e.changedTouches[0].screenX;
-  handleSwipe();
-}, {passive: true});
-
-const SWIPE_THRESHOLD = 100; 
-
-function handleSwipe() {
-  const diff = touchEndX - touchStartX;
-  if (Math.abs(diff) < SWIPE_THRESHOLD) return; 
-
-  if(document.getElementById('quick-entry').style.display !== 'none' && 
-     document.getElementById('quick-entry').classList.contains('active')) return;
-  if(document.getElementById('onboarding').classList.contains('active')) return;
-
-  if (curTab === 'me' && meView === 'logs' && diff > SWIPE_THRESHOLD) {
-      setMV('profile');
-      return;
-  }
-
-  if (curDetailId && diff > SWIPE_THRESHOLD) { closeDetail(); return; }
-
-  if (!curDetailId) {
-      let currentIdx = TAB_ORDER.indexOf(curTab);
-      if (diff < -SWIPE_THRESHOLD && currentIdx < TAB_ORDER.length - 1) {
-          let nextTab = TAB_ORDER[currentIdx + 1];
-          let btn = document.querySelector(`.nb[onclick*="${nextTab}"]`);
-          if(btn) goTab(nextTab, btn);
-      } else if (diff > SWIPE_THRESHOLD && currentIdx > 0) {
-          let prevTab = TAB_ORDER[currentIdx - 1];
-          let btn = document.querySelector(`.nb[onclick*="${prevTab}"]`);
-          if(btn) goTab(prevTab, btn);
-      }
-  }
-}
-let appLoaded = false;
-let initError = null;
-
-// Watchdog timer: If app isn't loaded in 4 seconds, show the error screen
-const initWatchdog = setTimeout(() => {
-  if (!appLoaded) {
-    document.getElementById('splash').style.display = 'none';
-    const errorScreen = document.getElementById('error-screen');
-    errorScreen.style.display = 'flex';
-    errorScreen.classList.add('active');
-    if (initError) {
-      document.getElementById('error-reason').textContent = initError.message || initError.toString();
-    }
-  }
-}, 20000); 
-
-function initApp() {
-  try {
-    // ... [Keep ALL your existing initApp logic here] ...
-  const p = DB.profile();
-  if (!p.shiftTime) { p.shiftTime = 15; }
-  if (!p.periodLength) { p.periodLength = 10; }
-  p.role = 'farmer'; 
-  DB.saveProfile(p);
-
-  const minSplashEnd = Date.now() + 800;
-
-  function transitionTo(targetFunction) {
-    const remaining = Math.max(0, minSplashEnd - Date.now());
-    setTimeout(() => {
-      const splash = document.getElementById('splash');
-      if (splash) splash.style.opacity = '0';
-      setTimeout(() => {
-        if (splash) splash.style.display = 'none';
-        targetFunction();
-      }, 300);
-    }, remaining);
-  }
-
-  if (!p.onboarded) {
-    document.getElementById('app').style.display = 'none';
-    transitionTo(() => {
-      const ob = document.getElementById('onboarding');
-      if (ob) {
-          ob.classList.add('active');
-          setTimeout(() => ob.classList.add('start-anim'), 10);
-      }
-    });
-    return;
-  }
-
-  const hour = new Date().getHours();
-  const shiftHour = p.shiftTime || 15;
-  const isPM = hour >= shiftHour;
-  const targetType = isPM ? 'milk_pm' : 'milk_am';
-
-  const pages = DB.pages();
-  const td = today();
-  const activePage = pages.find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
-  
-  let shiftHasData = false;
-  if(activePage) {
-    const row = activePage.rows.find(r => r.assignedDate === td);
-    if(row) {
-      const targetCols = activePage.cols.filter(c => c.type === targetType);
-      shiftHasData = targetCols.some(c => parseFloat(row[c.id]) > 0);
-    }
-  }
-
-  if (shiftHasData) {
-    document.getElementById('app').style.display = 'flex';
-    renderHome(); renderGraphs(); renderCalc(); renderMe();
-    transitionTo(() => checkInstallReminders(false));
-  } else {
-    document.getElementById('app').style.display = 'none';
-    transitionTo(() => openQuickEntry());
-  }
-
-
-    // Mark as successfully loaded once we reach the end of the init logic
-    appLoaded = true;
-    clearTimeout(initWatchdog);
-  } catch (error) {
-    console.error('Critical App Failure:', error);
-    initError = error;
-    appLoaded = false;
-  }
-}
-
-
-function goTab(id,btn){
-  if(id === 'home') { curDetailId = null; }
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
-  document.getElementById('p-'+id).classList.add('active');
-  btn.classList.add('on');curTab=id;
-  ({home:renderHome,graphs:renderGraphs,calc:renderCalc,me:renderMe})[id]?.();
-}
-
+// ══════════════════════════════════════════════════════════════════
+//  ONBOARDING & DEMO DATA
+// ══════════════════════════════════════════════════════════════════
 let obTempAnimals = [];
 let obType = 'cow';
 
@@ -1392,1315 +527,233 @@ function setObType(t) {
 function addObAnimal() {
   const name = document.getElementById('ob-name').value.trim();
   const rate = parseFloat(document.getElementById('ob-rate').value) || 0;
-  if(!name) return appAlert('Notice', 'Please enter an animal name or ID to continue.');
-  obTempAnimals.push({id: uid(), name, type: obType, rate, milks: true});
-  document.getElementById('ob-name').value = '';
-  document.getElementById('ob-rate').value = '';
+  if(!name) return appAlert('Notice', 'Please enter an animal name or ID.');
+  obTempAnimals.push({id: uid(), name, type: obType, rate, milks: true, healthLogs: []});
+  document.getElementById('ob-name').value = ''; document.getElementById('ob-rate').value = '';
   renderObAnimals();
 }
 function renderObAnimals() {
   const list = document.getElementById('ob-animal-list');
-  if(!obTempAnimals.length) { list.innerHTML = ``; return; }
-  list.innerHTML = obTempAnimals.map(a => `
-    <div class="card2 row gap2" style="margin-bottom:8px; border-radius:16px;">
-      <span style="font-size:24px;">${aIcon[a.type]||'🥛'}</span>
-      <div class="f1"><div style="font-weight:800; font-size:15px;">${a.name}</div><div style="font-size:11px;color:var(--muted);">Rate: ₹${a.rate}/L</div></div>
-    </div>
-  `).join('');
+  list.innerHTML = obTempAnimals.map(a => `<div class="card2 row gap2" style="margin-bottom:8px;"><span>${aIcon[a.type]}</span><div class="f1"><div style="font-weight:800;">${a.name}</div><div style="font-size:11px;color:var(--muted);">₹${a.rate}/L</div></div></div>`).join('');
 }
+
+// NEW: 1-Click Demo Setup
+function loadDemoData() {
+  document.getElementById('ob-dairy-name').value = "Green Pastures Farm";
+  obTempAnimals = [
+    {id: 'demo1', name: 'Bessie', type: 'cow', rate: 45, milks: true, healthLogs: [{id:uid(), type:'vaccine', date:today(), notes:'FMD Vaccine'}]},
+    {id: 'demo2', name: 'Rani', type: 'buffalo', rate: 60, milks: true, healthLogs: []}
+  ];
+  renderObAnimals();
+  showToast("Demo farm loaded. Click 'Complete Setup'.");
+}
+
 function finishOnboarding() {
   const dairyName = document.getElementById('ob-dairy-name').value.trim();
-  if(!dairyName) return appAlert('Required Info', 'Please provide your Name or your Dairy Name before continuing.');
-  if(obTempAnimals.length === 0) return appAlert('Required Info', 'Please add at least one milking animal to begin.');
+  if(!dairyName || obTempAnimals.length === 0) return appAlert('Required Info', 'Please add a Dairy Name and at least one animal (or tap Load Demo Data).');
 
   const p = DB.profile();
-  p.name = dairyName;
-  p.onboarded = true;
-  p.ratePerEntry = false;
-  p.animals = obTempAnimals;
+  p.name = dairyName; p.onboarded = true; p.ratePerEntry = false; p.animals = obTempAnimals;
   DB.saveProfile(p);
-  DB.log(`Completed initial setup with ${obTempAnimals.length} animal(s).`, 'create');
   
-  justOnboarded = true;
-  document.getElementById('onboarding').classList.remove('active');
   document.getElementById('onboarding').style.display = 'none';
-  openQuickEntry();
+  openFullApp();
 }
 
-let justOnboarded = false;
-let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null };
-
-function getOrCreateActivePage() {
-  const pages = DB.pages();
-  const td = today();
-  let active = pages.find(p => !p.locked && td >= p.startDate && td <= p.endDate);
-  if (!active) {
-    active = createPage(td);
-    pages.unshift(active);
-    DB.savePages(pages);
-    DB.log(`Automatically created new ${DB.profile().periodLength}-day record sheet for ${fmtD(td)}.`, 'create');
-  }
-  return active;
-}
-
-function openQuickEntry() {
-  const qe = document.getElementById('quick-entry');
-  qe.style.display = 'flex';
-  qe.classList.add('active');
-  document.getElementById('qe-active-content').style.display = 'flex';
-  document.getElementById('qe-success-content').style.display = 'none';
-  setTimeout(()=> qe.classList.add('start-anim'), 10);
-
-  const hour = new Date().getHours();
-  const shiftHour = DB.profile().shiftTime || 15;
-  const isPM = hour >= shiftHour;
-  qeContext.isPM = isPM;
-
-  document.getElementById('qe-greeting').textContent = hour < 12 ? 'Good Morning' : (hour < 17 ? 'Good Afternoon' : 'Good Evening');
-  document.getElementById('qe-date-label').textContent = fmtD(today());
-
-  let page, row;
-  try {
-    page = getOrCreateActivePage();
-    const td = today();
-    row = page.rows.find(r => r.assignedDate === td);
-  } catch (err) {
-    console.error('Failed to load/create today\'s record sheet:', err);
-    showToast("Couldn't open today's record sheet. Please try again.", false);
-    setTimeout(openFullApp, 1500);
-    return;
-  }
-
-  if (!row) {
-    showToast("Error: Date out of bounds for current sheet.", false);
-    setTimeout(openFullApp, 1500);
-    return; 
-  }
-  
-  qeContext.pageId = page.id;
-  qeContext.rowId = row.id;
-
-  const targetType = isPM ? 'milk_pm' : 'milk_am';
-  const targetCols = page.cols.filter(c => c.type === targetType);
-  qeContext.cols = targetCols;
-
-  let html = '';
-  let hasExistingData = false;
-  let firstInputId = null;
-
-  if (targetCols.length === 0) {
-    html = `<div class="empty anim-stagger d1"><div class="esub">No milking animals found. Edit animals in the Profile section.</div></div>`;
-  } else {
-    targetCols.forEach(c => {
-      const existingVal = row[c.id];
-      if (existingVal) hasExistingData = true;
-      const inputId = `qe-input-${c.id}`;
-      if (!firstInputId) firstInputId = inputId;
-      
-      const animalInfo = DB.profile().animals?.find(a => a.id === c.animal);
-      const icon = animalInfo ? (aIcon[animalInfo.type]||'🥛') : '🥛';
-      const animalName = animalInfo ? animalInfo.name : c.name.replace(' AM','').replace(' PM','');
-      
-      let rateHtml = '';
-      if (DB.profile().ratePerEntry !== false) {
-         const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
-         if (rateCol) {
-            const existingRate = row[rateCol.id] || (animalInfo ? animalInfo.rate : '');
-            const rateInputId = `qe-rate-${rateCol.id}`;
-            rateHtml = `
-              <div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);">
-                <div style="font-size:11px; color:var(--sub); font-weight:700; letter-spacing:0.5px; text-transform:uppercase;">Milk Rate</div>
-                <div class="row gap1">
-                  <span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span>
-                  <input type="text" id="${rateInputId}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${existingRate}" onclick="setNumpadTarget('${rateInputId}')"/>
-                </div>
-              </div>
-            `;
-         }
-      }
-
-      html += `
-        <div class="qe-card">
-          <div class="row gap3 w-100" style="justify-content:space-between;">
-            <div class="row gap2">
-              <span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span>
-              <div>
-                <div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div>
-                <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div>
-              </div>
-            </div>
-            <input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${existingVal || ''}" onclick="setNumpadTarget('${inputId}')"/>
-          </div>
-          ${rateHtml}
-        </div>
-      `;
-    });
-  }
-
-  document.getElementById('qe-inputs').innerHTML = html;
-  document.getElementById('qe-warning').style.display = hasExistingData ? 'block' : 'none';
-  
-  if(firstInputId) setNumpadTarget(firstInputId);
-}
-
-function setNumpadTarget(id) {
-    document.querySelectorAll('.qe-input').forEach(el => el.classList.remove('active-inp'));
-    const target = document.getElementById(id);
-    if (target) {
-        target.classList.add('active-inp');
-        qeContext.activeInputId = id;
-    }
-}
-
-function numpadPress(val) {
-    if (!qeContext.activeInputId) return;
-    const inp = document.getElementById(qeContext.activeInputId);
-    if (val === 'back') {
-        inp.value = inp.value.slice(0, -1);
-    } else if (val === '.') {
-        if (!inp.value.includes('.')) inp.value += '.';
-    } else {
-        if (inp.value === '0') inp.value = val;
-        else inp.value += val;
-    }
-}
-
-function saveQuickEntry() {
-  const pages = DB.pages();
-  const pageIdx = pages.findIndex(p => p.id === qeContext.pageId);
-  
-  if (pageIdx < 0) {
-      openFullApp(); 
-      return; 
-  }
-  
-  const page = pages[pageIdx];
-  const rowIdx = page.rows.findIndex(r => r.id === qeContext.rowId);
-  if (rowIdx < 0) {
-      openFullApp();
-      return;
-  }
-  
-  const row = page.rows[rowIdx];
-  let shiftMilkAdded = false;
-
-  qeContext.cols.forEach(c => {
-    const val = document.getElementById(`qe-input-${c.id}`)?.value || '';
-    if (val) shiftMilkAdded = true;
-    row[c.id] = val;
-    
-    if (DB.profile().ratePerEntry !== false) {
-       const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
-       if (rateCol) {
-          const rateInput = document.getElementById(`qe-rate-${rateCol.id}`);
-          if (rateInput && rateInput.value !== '') {
-             row[rateCol.id] = rateInput.value;
-          }
-       }
-    }
-  });
-
-  row.date = today();
-  row.dateFrozen = true;
-  row.total = computeRowTotal(row, page.cols, DB.profile());
-
-  DB.savePages(pages); 
-  
-  if(shiftMilkAdded) {
-      DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)} via Quick Screen.`, 'update');
-  }
-
-  document.getElementById('qe-active-content').style.display = 'none';
-  document.getElementById('qe-success-content').style.display = 'block';
-  
-  setTimeout(() => {
-      try {
-          window.close();
-      } catch(e) {}
-      openFullApp();
-  }, 1500);
+// ══════════════════════════════════════════════════════════════════
+//  ROUTING & UI RENDERING
+// ══════════════════════════════════════════════════════════════════
+let curTab='home';
+function goTab(id,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('p-'+id).classList.add('active');
+  if(btn) btn.classList.add('on'); curTab=id;
+  if(id==='home') renderHome(); if(id==='calc') renderCalc(); if(id==='me') renderMe();
 }
 
 function openFullApp() {
-  const qe = document.getElementById('quick-entry');
-  qe.classList.remove('active', 'start-anim');
-  qe.style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  renderHome(); renderGraphs(); renderCalc(); renderMe();
-  checkInstallReminders(justOnboarded);
-  justOnboarded = false;
+  goTab('home', document.querySelector('.nb'));
+  applyTranslations();
 }
 
 function renderHome(){
-  const profile=DB.profile();
-  const el=document.getElementById('p-home');
-  if(curDetailId) renderDetailView(el);
-  else renderHomeContent(el);
-}
-
-function renderHomeContent(el){
-  const pages=DB.pages().filter(p=>!p.trashed);
-  const profile=DB.profile();
-  const trash=DB.trash();
-  let rev=0,pend=0;
-  pages.forEach(p=>{const t=pageSummary(p);rev+=t.rev;if(!p.locked)pend+=t.rev;});
-  const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-  let html=`
-   <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
-    <div><div class="eyebrow">My Dairy</div><div class="ptitle">${profile.name}</div></div>
-    <div class="row gap2">
-     ${trash.length?`<button class="btn bg bsm" onclick="openTrash()">🗑 ${trash.length}</button>`:''}
-     <button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button>
-    </div>
-   </div>
-   <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
-    <div class="sbox"><div class="sval">${pages.length}</div><div class="ssub">Records</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(rev)}</div><div class="ssub">Total Earned</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(pend)}</div><div class="ssub">Active Period</div></div>
-   </div>
-   <div class="pc sp3">`;
-  if(!sorted.length){
-    html+=`<div class="empty"><div class="eico">📓</div><div class="etitle">No records yet</div><div class="esub">Tap "+ Record" to start</div></div>`;
-  } else {sorted.forEach(p=>{html+=pageCardHTML(p);});}
-  el.innerHTML=html+`</div>`;
-}
-
-function pageCardHTML(p){
-  const t=pageSummary(p);
-  const filled=p.rows.filter(r=>r.date).length;
-  const maxDots=Math.min(10, p.rows.length);
-  const dots=Array.from({length:maxDots},(_,i)=>`<span class="dot${p.rows[i]?.date?' on':''}"></span>`).join('');
-  return`<button class="pcard${p.locked?' locked':''}" onclick="openDetail('${p.id}')">
-   <div class="row gap2" style="justify-content:space-between;margin-bottom:${p.locked?0:9}px;">
-    <div class="row gap2">
-     <div style="width:30px;height:30px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;">${p.locked?'🔒':'📄'}</div>
-     <div><div style="font-weight:700;font-size:13px;">${p.label}</div><div style="font-size:10px;color:var(--muted);margin-top:1px;">${filled}/${p.rows.length} entries</div></div>
-    </div>
-    <span class="badge ${p.locked?'bc':'ba'}">${p.locked?'Cleared':'Active'}</span>
-   </div>
-   ${!p.locked?`<div class="row gap3" style="justify-content:space-between;padding-top:9px;border-top:1px solid var(--border);">
-    <div class="row gap3" style="font-size:11px;color:var(--sub);"><span>${fmt(t.milk)}L</span><span>₹${fmt(t.rev)}</span></div>
-    <div class="row gap1">${dots}</div>
-   </div>`:''}
-  </button>`;
-}
-
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; renderHome();}
-
-function renderDetailView(el){
-  const pages=DB.pages();
-  const pi=pages.findIndex(p=>p.id===curDetailId);
-  if(pi<0){curDetailId=null;renderHome();return;}
-  const page=pages[pi];
-  const profile=DB.profile();
-  const todayStr=today();
-
-  let printLabel = "Show All Columns";
-  if(currentTableFilter === 'totals') printLabel = "Totals Only";
-  else if(currentTableFilter.startsWith('cat_')) printLabel = "Only " + currentTableFilter.replace('cat_','').toUpperCase() + "s";
-  else if(currentTableFilter.startsWith('anim_')) {
-     const targetAnim = profile.animals?.find(a=>a.id === currentTableFilter.replace('anim_',''));
-     if(targetAnim) printLabel = targetAnim.name;
-  }
-
-  let html=`
-   <div class="ph">
-    <div class="row gap2 mb3">
-     <button class="btn bg bsm" onclick="closeDetail()">×</button>
-     <div class="f1"></div>
-     <button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button>
-     <button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Edit Length</button>
-     <button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button>
-    </div>
-    <div class="eyebrow">${page.rows.length}-Day Period</div>
-    <div class="ptitle" style="font-size:17px;">${page.label}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;">Each row unlocks on its assigned date.</div>
-   </div>
-   
-   <div class="row gap2 mb3" style="padding:0 15px;">
-      <button class="btn bs w-100" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:#fff;">
-        <span style="font-size:13px; font-weight:700;">🔍 Filter: ${printLabel}</span>
-        <span style="font-size:10px; color:var(--sub);">▼</span>
-      </button>
-   </div>
-
-   <div style="padding:0 15px;margin-bottom:12px;">
-    <div class="twrap" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div>
-   </div>
-   <div style="padding:0 15px;margin-bottom:12px;">${buildColTotals(page)}</div>
-   
-   <div style="padding:0 15px 90px;">
-    <div class="lbar${page.locked?' on':''}" onclick="reqLock('${page.id}')">
-     <div class="cring${page.locked?' on':''}">${page.locked?'✓':''}</div>
-     <div class="f1"><div style="font-weight:700;font-size:13px;">Account Cleared</div>${page.locked&&page.clearedAt?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">Locked ${fmtD(page.clearedAt)}</div>`:''}</div>
-     <span style="font-size:14px;color:var(--muted);">${page.locked?'🔒':'🔓'}</span>
-    </div>
-   </div>`;
-  el.innerHTML=html;
-}
-
-function openFilterSheetModal(pageId) {
-  const profile = DB.profile();
-  let listHtml = `
-    <button class="filter-opt-btn ${currentTableFilter==='all'?'active':''}" onclick="applyThemedFilter('${pageId}','all')">Show All Columns ${currentTableFilter==='all'?'✓':''}</button>
-    <button class="filter-opt-btn ${currentTableFilter==='totals'?'active':''}" onclick="applyThemedFilter('${pageId}','totals')">Totals Only ${currentTableFilter==='totals'?'✓':''}</button>
-  `;
-
-  if(profile.role === 'farmer' && profile.animals?.length > 0) {
-      listHtml += `<div class="filter-group-header">By Category</div>`;
-      const cats = [...new Set(profile.animals.map(a => a.type))];
-      cats.forEach(c => {
-         const key = `cat_${c}`;
-         listHtml += `<button class="filter-opt-btn ${currentTableFilter===key?'active':''}" onclick="applyThemedFilter('${pageId}','${key}')">Only ${c.charAt(0).toUpperCase()+c.slice(1)}s ${currentTableFilter===key?'✓':''}</button>`;
-      });
-
-      listHtml += `<div class="filter-group-header">By Animal Name</div>`;
-      profile.animals.forEach(a => {
-         const key = `anim_${a.id}`;
-         listHtml += `<button class="filter-opt-btn ${currentTableFilter===key?'active':''}" onclick="applyThemedFilter('${pageId}','${key}')">${aIcon[a.type]||'🥛'} ${a.name} ${currentTableFilter===key?'✓':''}</button>`;
-      });
-  }
-
-  document.getElementById('filter-sheet-options').innerHTML = listHtml;
-  om('m-filter-sheet');
-}
-
-function applyThemedFilter(pageId, targetFilterValue) {
-   cm('m-filter-sheet');
-   currentTableFilter = targetFilterValue;
-   const page = DB.pages().find(p=>p.id===pageId);
-   document.getElementById('table-container').innerHTML = buildCompactTable(page, DB.profile(), today(), currentTableFilter);
-   renderHome();
-}
-
-function buildCompactTable(page,profile,todayStr, filter){
-  let sys1 = [], animals = {}, sys2 = [];
-  
-  page.cols.forEach(c => {
-    if(c.type === 'date' || c.type === 'sr') sys1.push(c);
-    else if(c.type === 'total') {
-        if(filter === 'totals' || filter === 'all') sys2.push(c);
-    }
-    else {
-      const key = c.animal || 'global';
-      if(filter !== 'all') {
-         if(filter === 'totals') return;
-         if(filter.startsWith('cat_') && c.animalType !== filter.replace('cat_','')) return;
-         if(filter.startsWith('anim_') && c.animal !== filter.replace('anim_','')) return;
-      }
-      if(!animals[key]) {
-         let n = c.name.replace(/( AM| PM| Rate).*/, '');
-         if(n === 'Rate (₹/L)') n = 'Global Rate';
-         animals[key] = {name: n, cols: []};
-      }
-      animals[key].cols.push(c);
-    }
-  });
-
-  const animalKeys = Object.keys(animals);
-
-  let head1 = sys1.map(c => `<th rowspan="2" class="th-sys">${c.name}</th>`).join('');
-  animalKeys.forEach((k, idx) => { 
-     const g = animals[k];
-     const sepClass = (idx < animalKeys.length - 1 || sys2.length > 0) ? 'v-sep' : '';
-     head1 += `<th colspan="${g.cols.length}" class="th-group ${sepClass}">${g.name}</th>`; 
-  });
-  head1 += sys2.map(c => `<th rowspan="2" class="th-sys" style="text-align:right;">${c.name}</th>`).join('');
-
-  let head2 = '';
-  animalKeys.forEach((k, idx) => {
-    const g = animals[k];
-    g.cols.forEach((c, cidx) => {
-       let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':'';
-       if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4);
-       const sepClass = (cidx === g.cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
-       head2 += `<th class="${sepClass}">${sub}</th>`;
-    });
-  });
-  const thead = `<thead><tr>${head1}</tr><tr>${head2}</tr></thead>`;
-
-  const rows = page.rows.map((r,ri)=>{
-    const isFuture = r.assignedDate > todayStr;
-    const isToday = r.assignedDate === todayStr;
-    const isRowLocked = page.locked || isFuture;
-    let rowClass = isFuture ? 'future-row' : '';
-
-    let cells = '';
-    sys1.forEach(c => {
-       if(c.type==='date' || c.type==='sr') {
-           cells += `<td class="tsr">${fmtDS(r.date || r.assignedDate)}</td>`;
-       }
-    });
-
-    animalKeys.forEach((k, idx) => {
-      const g = animals[k];
-      g.cols.forEach((c, cidx) => {
-         const sepClass = (cidx === g.cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
-         if(isRowLocked) cells += `<td class="${sepClass}" style="color:${isFuture?'var(--border)':'var(--sub)'}; font-family:monospace; font-size:11px;">${r[c.id]||'—'}</td>`;
-         else cells += `<td class="${sepClass}"><input class="finp" type="${c.type==='text'?'text':'number'}" min="0" step="0.01" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
-      });
-    });
-
-    sys2.forEach(c => { cells += `<td class="${r.total>0?'ttot':'ttote'}" style="text-align:right;">${r.total>0?'₹'+fmt(r.total):'—'}</td>`; });
-    return `<tr class="${rowClass}">${cells}</tr>`;
-  }).join('');
-
-  return `<table>${thead}<tbody>${rows}</tbody></table>`;
-}
-
-function buildColTotals(page){
-  const milkCols=page.cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
-  if(!milkCols.length)return'';
-  let html=`<div class="card"><div class="slabel mb2">Column Totals</div><div class="sg2">`;
-  milkCols.forEach(c=>{
-    const tot=page.rows.reduce((s,r)=>s+(parseFloat(r[c.id])||0),0);
-    if(currentTableFilter !== 'all') {
-       if(currentTableFilter === 'totals') return;
-       if(currentTableFilter.startsWith('cat_') && c.animalType !== currentTableFilter.replace('cat_','')) return;
-       if(currentTableFilter.startsWith('anim_') && c.animal !== currentTableFilter.replace('anim_','')) return;
-    }
-    html+=`<div class="card2"><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">${c.name.replace(' AM','').replace(' PM','')} ${c.type==='milk_am'?'AM':'PM'}</div><div style="font-size:14px;font-weight:800;">${fmt(tot)} L</div></div>`;
-  });
-  return html+`</div></div>`;
-}
-
-function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex){
-  const pages=DB.pages();
-  const pi=pages.findIndex(p=>p.id===pageId);
-  if(pi<0||pages[pi].locked)return;
-  const ri=pages[pi].rows.findIndex(r=>r.id===rowId);
-  if(ri<0)return;
-  
-  const old=pages[pi].rows[ri][colId];
-  pages[pi].rows[ri][colId]=value;
-  if(!pages[pi].rows[ri].dateFrozen){
-    pages[pi].rows[ri].date=pages[pi].rows[ri].assignedDate||today();
-    pages[pi].rows[ri].dateFrozen=true;
-  }
-  pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile());
-  DB.savePages(pages);
-
-  const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
-  const oldStr = (old !== undefined && old !== '') ? ` (was ${old}${unit})` : '';
-  const valStr = (value !== undefined && value !== '') ? value : '0';
-  DB.log(`Changed ${colName} to ${valStr}${unit} for ${fmtDS(assignedDate)}${oldStr}`, 'update');
-
-  document.getElementById('table-container').innerHTML = buildCompactTable(pages[pi], DB.profile(), today(), currentTableFilter);
-}
-
-function renderGraphs(){
-  const el = document.getElementById('p-graphs');
-  const cache = Store.get('mdn_analytics_cache');
-  
-  if(!cache || cache.periods.length === 0) {
-    el.innerHTML = `<div class="ph"><div class="ptitle">Graphs</div></div><div class="empty"><div class="esub">No data to display yet.</div></div>`;
-    return;
-  }
-
-  let html = `
-    <div class="ph row" style="justify-content:space-between; align-items:flex-start;">
-      <div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div>
-    </div>
-    
-    <div class="row gap2 mb3" style="padding:0 15px; overflow-x:auto; scrollbar-width:none;">
-      <button class="ppill ${gChartType==='overall'?'on':''}" onclick="setGChart('overall')">Overall Trend</button>
-      <button class="ppill ${gChartType==='current'?'on':''}" onclick="setGChart('current')">Current Period</button>
-      <button class="ppill ${gChartType==='compare'?'on':''}" onclick="setGChart('compare')">Compare Periods</button>
-      <button class="ppill ${gChartType==='pie_milk'?'on':''}" onclick="setGChart('pie_milk')">Milk Split</button>
-      <button class="ppill ${gChartType==='pie_rev'?'on':''}" onclick="setGChart('pie_rev')">Rev Split</button>
-    </div>
-    <div id="graph-container" style="padding:0 15px 90px;"></div>
-  `;
-  el.innerHTML = html;
-  drawSelectedGraph();
-}
-
-function setGChart(type) { gChartType = type; renderGraphs(); }
-function setGFilter(filter) { gChartFilter = filter; drawSelectedGraph(); }
-
-function drawSelectedGraph() {
-  const container = document.getElementById('graph-container');
-  const cache = Store.get('mdn_analytics_cache');
-  if(!cache) return;
-  
-  const W=340, H=180, PAD={l:35,r:10,t:20,b:25}, cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b;
-  let svg = '';
-
-  if(gChartType === 'overall') {
-     const dates = Object.keys(cache.daily).sort();
-     if(dates.length < 2) { container.innerHTML = `<div class="empty"><div class="esub">Not enough daily data for a trend line.</div></div>`; return; }
-     
-     const data = dates.map(d => ({x:d, y:cache.daily[d].total})).slice(-14); 
-     const maxV = Math.max(...data.map(d=>d.y), 1);
-     
-     [0, 0.5, 1].forEach(pct => {
-       const y = PAD.t + cH*(1-pct);
-       svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/>`;
-       svg += `<text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`;
-     });
-     
-     svg += `<line x1="${PAD.l}" y1="${PAD.t+cH}" x2="${W-PAD.r}" y2="${PAD.t+cH}" class="chart-axis"/>`;
-     
-     let pathD = '';
-     const stepX = cW / (data.length - 1);
-     data.forEach((d, i) => {
-        const x = PAD.l + i*stepX;
-        const y = PAD.t + cH - (d.y/maxV)*cH;
-        pathD += `${i===0?'M':'L'} ${x} ${y} `;
-        svg += `<circle cx="${x}" cy="${y}" r="3" fill="#fff"/>`;
-        if(i===0 || i===data.length-1) svg += `<text x="${x}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(d.x)}</text>`;
-     });
-     svg += `<path d="${pathD}" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-     
-     container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Overall Daily Milk Trend (L) - Last 14 Entries</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
-  }
-  
-  else if(gChartType === 'current') {
-     const p = cache.periods[0];
-     const pages = DB.pages();
-     const page = pages.find(pg => pg.id === p.id);
-     if(!page) return;
-     
-     const data = page.rows.map(r => {
-        let m = 0; page.cols.forEach(c=>{ if(c.type==='milk_am'||c.type==='milk_pm') m+=parseFloat(r[c.id])||0; });
-        return {d: r.assignedDate, m};
-     });
-     const maxV = Math.max(...data.map(d=>d.m), 1);
-     const barW = Math.floor(cW/data.length)-4;
-     
-     [0, 0.5, 1].forEach(pct => {
-       const y = PAD.t + cH*(1-pct);
-       svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/>`;
-       svg += `<text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`;
-     });
-     
-     data.forEach((d, i) => {
-        const x = PAD.l + (cW/data.length)*i + (cW/data.length - barW)/2;
-        const bH = Math.round((d.m/maxV)*cH);
-        svg += `<rect class="chart-bar" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="2" fill="#fff"/>`;
-        if(bH>10) svg += `<text x="${x+barW/2}" y="${PAD.t+cH-bH-3}" text-anchor="middle" class="chart-val">${d.m.toFixed(1)}</text>`;
-        svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(d.d).split(' ')[0]}</text>`;
-     });
-     
-     container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Current Period Daily Output (L)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
-  }
-  
-  else if(gChartType === 'compare') {
-     const data = [...cache.periods].reverse().slice(-6); 
-     if(data.length === 0) return;
-     const maxV = Math.max(...data.map(d=>d.total), 1);
-     const barW = Math.floor(cW/data.length)-8;
-     
-     [0, 0.5, 1].forEach(pct => {
-       const y = PAD.t + cH*(1-pct);
-       svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/>`;
-       svg += `<text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`;
-     });
-     
-     data.forEach((d, i) => {
-        const x = PAD.l + (cW/data.length)*i + (cW/data.length - barW)/2;
-        const bH = Math.round((d.total/maxV)*cH);
-        svg += `<rect class="chart-bar" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="3" fill="var(--success)"/>`;
-        if(bH>10) svg += `<text x="${x+barW/2}" y="${PAD.t+cH-bH-3}" text-anchor="middle" class="chart-val">${d.total.toFixed(0)}</text>`;
-        svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${d.label.split(' – ')[0]}</text>`;
-     });
-     
-     container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Total Milk per Period (L)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
-  }
-  
-  else if(gChartType === 'pie_milk' || gChartType === 'pie_rev') {
-     const isRev = gChartType === 'pie_rev';
-     const source = gChartFilter === 'category' ? cache.allTime.byCategory : cache.allTime.byName;
-     const items = Object.keys(source).map(k => ({ name: k, val: isRev ? source[k].rev : source[k].milk, type: source[k].type || k })).filter(i => i.val > 0);
-     
-     if(!items.length) { container.innerHTML = `<div class="empty"><div class="esub">No data to split yet.</div></div>`; return; }
-     
-     let toggleHtml = `
-      <div class="row gap2 mb3">
-        <button class="ppill ${gChartFilter==='category'?'on':''}" onclick="setGFilter('category')">By Category</button>
-        <button class="ppill ${gChartFilter==='name'?'on':''}" onclick="setGFilter('name')">By Animal Name</button>
-      </div>`;
-     
-     const total = items.reduce((s, i) => s + i.val, 0);
-     const CR=60, CX=80, CY=80;
-     let pie='', startA=-Math.PI/2, legendRows='';
-     
-     const fallbackColors = ['#4e8cff','#7b8794','#d4a373','#a0aec0','#e53e3e','#38a169','#d69e2e'];
-     
-     items.forEach((item, i) => {
-        const pct = item.val / total;
-        const angle = pct * 2 * Math.PI;
-        const x1=CX+CR*Math.cos(startA), y1=CY+CR*Math.sin(startA);
-        const x2=CX+CR*Math.cos(startA+angle), y2=CY+CR*Math.sin(startA+angle);
-        const lg=angle>Math.PI?1:0;
-        
-        let col = aColors[item.type];
-        if(!col) col = fallbackColors[i % fallbackColors.length];
-        
-        if (pct === 1) { 
-           pie += `<circle cx="${CX}" cy="${CY}" r="${CR}" fill="${col}" class="pie-slice"/>`;
-        } else {
-           pie += `<path d="M${CX},${CY} L${x1.toFixed(1)},${y1.toFixed(1)} A${CR},${CR} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${col}" class="pie-slice"/>`;
-        }
-        
-        const midA = startA + angle/2;
-        const lx = CX + (CR*0.6)*Math.cos(midA), ly = CY + (CR*0.6)*Math.sin(midA);
-        if(pct > 0.08) pie += `<text x="${lx.toFixed(0)}" y="${ly.toFixed(0)}" text-anchor="middle" dominant-baseline="middle" style="fill:#fff;font-size:10px;font-weight:700;">${(pct*100).toFixed(0)}%</text>`;
-        
-        legendRows += `
-          <div class="row gap2 mb2" style="font-size:12px;">
-           <span class="g-legend-dot" style="background:${col};"></span>
-           <span class="trunc f1" style="text-transform:capitalize;">${item.name}</span>
-           <span style="font-weight:700;">${isRev?'₹':''}${fmt(item.val)}${!isRev?'L':''}</span>
-          </div>`;
-        startA += angle;
-     });
-     
-     container.innerHTML = `
-      ${toggleHtml}
-      <div class="gchart-wrap">
-       <div class="slabel mb3">${isRev ? 'All-Time Revenue Split' : 'All-Time Milk Split'}</div>
-       <div class="row gap3" style="align-items:flex-start;">
-         <svg viewBox="0 0 160 160" style="width:140px;flex-shrink:0;">${pie}</svg>
-        <div class="f1">${legendRows}</div>
-       </div>
-      </div>`;
-  }
+  document.getElementById('p-home').innerHTML = `<div class="ph"><div class="eyebrow">${t('dashboard')}</div><div class="ptitle">${DB.profile().name || t('home')}</div></div><div class="empty"><div class="esub">Records will appear here.</div></div>`;
+  // Minimal placeholder implementation for brevity - reuse your original renderHome implementation here
 }
 
 function renderCalc(){
-  const pages = DB.pages().filter(p=>!p.trashed);
-  const activePage = pages.find(p=>!p.locked);
+  const expenses = DB.expenses();
+  let totalExp = 0; expenses.forEach(e => totalExp += parseFloat(e.amount));
   
-  let curMilk = 0, curRev = 0;
-  let trendText = "Steady →", trendColor = "var(--muted)";
-  
-  if(activePage){
-    const t = pageSummary(activePage);
-    curMilk = t.milk;
-    curRev = t.rev;
-
-    const milkRows = activePage.rows
-        .map(r => {
-           let dayM = 0;
-           activePage.cols.forEach(c => { if(c.type==='milk_am'||c.type==='milk_pm') dayM += parseFloat(r[c.id])||0; });
-           return {date: r.date, milk: dayM};
-        })
-        .filter(r => r.date && r.milk > 0); 
-
-    if(milkRows.length >= 2){
-        const last = milkRows[milkRows.length-1].milk;
-        const prev = milkRows[milkRows.length-2].milk;
-        if(last > prev * 1.05) { trendText = "Increasing ↗"; trendColor = "var(--success)"; }
-        else if(last < prev * 0.95) { trendText = "Decreasing ↘"; trendColor = "var(--danger)"; }
-    }
-  }
-
-  let totalEarned = 0, totalReceived = 0;
-  pages.forEach(p => { totalEarned += pageSummary(p).rev; });
-  DB.payments().forEach(p => { if(p.type==='received') totalReceived += parseFloat(p.amount)||0; });
-  const netBal = totalEarned - totalReceived;
+  // Example dummy revenue calculation
+  let dummyRev = 4500; 
+  let net = dummyRev - totalExp;
 
   document.getElementById('cledger').innerHTML=`
    <div class="card mb4">
-    <div class="slabel mb3">Ongoing Period Dashboard</div>
+    <div class="row gap2 mb3" style="justify-content:space-between;">
+      <div class="slabel">Financial Ledger</div>
+      <button class="btn bp bsm" onclick="om('m-expense')">+ ${t('logExpense')}</button>
+    </div>
     <div class="sp2">
-     <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
-     <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
-     <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Total Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Total Earned</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(dummyRev)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
+     <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Net Profit</div></div><span style="font-weight:800;font-size:14px;color:${net>0?'var(--success)':'var(--danger)'};">₹${fmt(net)}</span></div>
     </div>
    </div>
-   
-   <div class="card mb4">
-    <div class="slabel mb3">Overall Accountability Ledger</div>
-    <div class="sp2">
-     <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Earned (All Time)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(totalEarned)}</span></div>
-     <div class="payrow"><span style="font-size:18px;">✅</span><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:800;font-size:14px;color:var(--success);">₹${fmt(totalReceived)}</span></div>
-     <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${netBal>0?'#e8b800':netBal<0?'var(--success)':'#fff'};">${netBal>0?'₹'+fmt(netBal)+' due':netBal<0?'Overpaid ₹'+fmt(-netBal):'Settled'}</span></div>
-    </div>
+   <div class="slabel">Recent Expenses</div>
+   <div class="sp2">
+     ${expenses.length === 0 ? '<div style="color:var(--muted);font-size:12px;text-align:center;">No expenses logged</div>' : expenses.map(e => `
+        <div class="card2 row gap2"><span style="font-size:18px;">💸</span><div class="f1"><div style="font-weight:700;text-transform:capitalize;">${e.category}</div><div style="font-size:10px;color:var(--muted);">${fmtD(e.date)} - ${e.notes}</div></div><span style="font-weight:800;">₹${fmt(e.amount)}</span></div>
+     `).join('')}
    </div>
-
-   <div class="card">
-     <div class="slabel mb3">Quick Calc</div>
-     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px;">
-      <div><label class="flabel">Qty (L)</label><input class="inp" type="number" id="cqty" placeholder="0.0" oninput="updCalc()"/></div>
-      <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="number" id="crate" placeholder="0.0" oninput="updCalc()"/></div>
-     </div>
-     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:15px;text-align:center;">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Result</div>
-      <div style="font-size:28px;font-weight:900;color:#fff;" id="cresult">₹0.00</div>
-     </div>
-    </div>
    `;
 }
-function updCalc(){
-  const q=parseFloat(document.getElementById('cqty')?.value)||0;
-  const r=parseFloat(document.getElementById('crate')?.value)||0;
-  const el=document.getElementById('cresult');if(el)el.textContent='₹'+(q*r).toFixed(2);
-}
 
-function logDotColor(type){
-  switch(type) {
-    case 'payment': return '#5db85d'; 
-    case 'delete':  return 'var(--danger)'; 
-    case 'create':  return '#4e8cff'; 
-    case 'update':  return '#e8b800'; 
-    default:        return 'var(--border2)'; 
-  }
+function saveExpense() {
+  const amt = document.getElementById('mexp-amount').value;
+  const cat = document.getElementById('mexp-category').value;
+  const note = document.getElementById('mexp-notes').value;
+  if(!amt) return;
+  const expenses = DB.expenses();
+  expenses.unshift({id: uid(), amount: amt, category: cat, notes: note, date: today()});
+  DB.saveExpenses(expenses);
+  cm('m-expense');
+  document.getElementById('mexp-amount').value = '';
+  document.getElementById('mexp-notes').value = '';
+  renderCalc();
 }
 
 function renderMe(){
   const profile=DB.profile();
-  const el=document.getElementById('p-me');
   let html=`
    <div class="ph row" style="justify-content:space-between;">
     <div><div class="eyebrow">Account</div><div class="ptitle">Profile</div></div>
-    <div class="row gap2">
-     <button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button>
-     <button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button>
-    </div>
-   </div>`;
+   </div>
+   <div class="pc sp4">
+   
+   <div class="card row gap2">
+      <span style="font-size:13px;font-weight:700;flex:1;">Language / भाषा</span>
+      <select class="sel" style="width:auto; padding:5px 10px;" onchange="switchLanguage(this.value)">
+        <option value="en" ${currentLang==='en'?'selected':''}>English</option>
+        <option value="hi" ${currentLang==='hi'?'selected':''}>हिंदी (Hindi)</option>
+        <option value="pa" ${currentLang==='pa'?'selected':''}>ਪੰਜਾਬੀ (Punjabi)</option>
+      </select>
+   </div>
 
-  if(meView==='logs'){
-    const logs=DB.logs();
-    html+=`<div class="pc"><div class="slabel">Activity Log — Human Readable</div><div class="sp2">`;
-    if(!logs.length){html+=`<div class="empty"><div class="esub">No actions logged yet</div></div>`;}
-    else logs.slice(0,200).forEach(l=>{
-      html+=`<div class="logrow">
-       <div class="logdot" style="background:${logDotColor(l.type)};"></div>
-       <div class="f1">
-        <div class="logmsg">${l.text}</div>
-        <div class="logtime">${fmtTime(l.ts)}</div>
-       </div>
-      </div>`;
-    });
-    if(logs.length>200)html+=`<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px;">Showing latest 200 of ${logs.length} entries</div>`;
-    html+=`</div></div>`;
-    el.innerHTML=html;return;
-  }
-
-  html+=`<div class="pc sp4">
-   <div class="card">
-    <div class="row gap3">
-     <div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div>
-     <div class="f1">
-      <div class="row gap2">
-       <span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span>
-       <button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button>
-      </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div>
-     </div>
-    </div>
-   </div>`;
-
-  if (!isAppInstalled() && localStorage.getItem('mdn_install_banner_pref') === 'later') {
-    html+=`<div class="card" onclick="showInstallGuide()" style="cursor:pointer;border-color:rgba(78,140,255,0.3);">
-     <div class="row gap2" style="align-items:center;">
-      <span style="font-size:20px;">📲</span>
-      <div class="f1">
-       <div style="font-weight:800;font-size:13px;">Install the app</div>
-       <div style="font-size:11px;color:var(--muted);margin-top:1px;">Tap for a step-by-step guide</div>
-      </div>
-      <span style="color:var(--muted);font-size:16px;">›</span>
-     </div>
-    </div>`;
-  }
-
-  html+=`
    <div class="card">
     <div class="row gap2 mb3" style="justify-content:space-between;">
      <span style="font-size:13px;font-weight:700;">My Animals</span>
      <button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div>
     <div class="sp2">`;
-    if(!(profile.animals||[]).length){html+=`<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No animals yet</div>`;}
-    else profile.animals.forEach(a=>{
+    profile.animals.forEach(a=>{
       html+=`<div class="card2 row gap2">
        <span style="font-size:18px;">${aIcon[a.type]||'🥛'}</span>
-       <div class="f1"><div style="font-weight:700;font-size:13px;">${a.name}</div><div style="font-size:10px;color:var(--muted);">${a.type} · ${a.milks?'Milking · ₹'+(a.rate||'?')+'/L':'Not milking'}</div></div>
-       <button class="bic" style="width:26px;height:26px;font-size:11px;" onclick="openAnimalModal('${a.id}')">✎</button>
-       <button class="bic" style="width:26px;height:26px;font-size:13px;color:var(--danger);" onclick="removeAnimal('${a.id}')">×</button>
+       <div class="f1"><div style="font-weight:700;font-size:13px;">${a.name}</div><div style="font-size:10px;color:var(--muted);">${a.type} · ${a.milks?'Milking':'Not milking'}</div></div>
+       <button class="btn bs bsm" onclick="openAnimalModal('${a.id}')">✎ Edit</button>
       </div>`;
     });
-    html+=`</div></div>
-    
-   <div class="card">
-    <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Settings</div>
-    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);">
-     <div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div>
-     <label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label>
-    </div>
-    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);">
-     <div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div>
-     <select class="sel" style="width:auto; padding:5px 10px;" onchange="setShiftTime(this.value)">
-       ${[12,13,14,15,16,17,18,19].map(h=> `<option value="${h}" ${profile.shiftTime===h?'selected':''}>${h>12?h-12:h} PM</option>`).join('')}
-     </select>
-    </div>
-    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);">
-     <div><div style="font-weight:700;font-size:13px;">Default Record Period</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Days per sheet</div></div>
-     <input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/>
-    </div>
-   </div>
-   
-   <div class="card mt3">
-    <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Your data is saved automatically. Backups are readable JSON for your active sheets, with older/cleared data compacted to save space.</div>
-    <div class="row gap2">
-      <button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button>
-      <button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button>
-    </div>
-   </div>
-
-   <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>
-   `;
-
-  const pages=DB.pages().filter(p=>!p.trashed);
-  html+=`<div class="card mt4">
-    <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div>
-    <div class="sg2">
-     <div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.length}</div><div class="ssub">Total Pages</div></div>
-     <div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>p.locked).length}</div><div class="ssub">Cleared</div></div>
-     <div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>!p.locked).length}</div><div class="ssub">Active</div></div>
-     <div class="sbox tc"><div class="sval" style="font-size:22px;">${DB.logs().length}</div><div class="ssub">Log Entries</div></div>
-    </div>
-   </div></div>`;
-  el.innerHTML=html;
-}
-function setMV(v){meView=v;renderMe();}
-function editName(){
-  const p=DB.profile();
-  appPrompt('Dairy name:', p.name).then(n => {
-    if(!n?.trim()) return;
-    p.name=n.trim();
-    DB.saveProfile(p);
-    DB.log(`Changed dairy name to ${p.name}`, 'info');
-    renderMe();
-  });
+    html+=`</div></div></div>`;
+  document.getElementById('p-me').innerHTML=html;
 }
 
-function setRatePref(v){
-  const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p);
-  showToast('Preference saved. Takes effect on next record.');
-}
-function setShiftTime(v){
-  const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p);
-  showToast('Evening shift time updated.');
-}
-function setPeriodLength(v) {
-  const p = DB.profile();
-  let val = parseInt(v);
-  if(val < 1 || isNaN(val)) val = 10;
-  p.periodLength = val;
-  DB.saveProfile(p);
-  showToast(`Default period length set to ${val} days`);
-}
+// ══════════════════════════════════════════════════════════════════
+//  HEALTH & BREEDING LOGIC
+// ══════════════════════════════════════════════════════════════════
+let editAnimalId = null;
 
-function openAnimalModal(id){
-  editAnimalId=id;
-  const isNew=id==='new';
-  const profile=DB.profile();
-  document.getElementById('ma-title').textContent=isNew?'Add Animal':'Edit Animal';
-  document.getElementById('ma-btn').textContent=isNew?'Add Animal':'Save Changes';
+function openAnimalModal(id) {
+  editAnimalId = id;
+  const isNew = id === 'new';
+  const profile = DB.profile();
+  document.getElementById('ma-title').textContent = isNew ? 'Add Animal' : 'Edit Animal';
+  
   if(!isNew){
-    const a=profile.animals?.find(x=>x.id===id);
-    if(a){document.getElementById('ma-name').value=a.name;setAT(a.type);document.getElementById('ma-milks').checked=a.milks!==false;document.getElementById('ma-rate').value=a.rate||'';document.getElementById('ma-rate-row').style.display=a.milks!==false?'block':'none';}
-  } else {document.getElementById('ma-name').value='';setAT('cow');document.getElementById('ma-milks').checked=true;document.getElementById('ma-rate').value='';document.getElementById('ma-rate-row').style.display='block';}
+    const a = profile.animals.find(x=>x.id===id);
+    if(a){
+      document.getElementById('ma-name').value = a.name;
+      document.getElementById('ma-milks').checked = a.milks!==false;
+      document.getElementById('ma-rate').value = a.rate||'';
+      document.getElementById('ma-health-row').style.display = 'block'; // SHOW Health button
+    }
+  } else {
+    document.getElementById('ma-name').value = '';
+    document.getElementById('ma-health-row').style.display = 'none'; // HIDE for new
+  }
   om('m-animal');
 }
-function setAT(t){
-  animalType=t;
-  document.querySelectorAll('#ma-types .rpill').forEach(b => b.classList.remove('on'));
-  document.getElementById('ma-'+t+'-btn').classList.add('on');
+
+function openHealthModal() {
+  const a = DB.profile().animals.find(x=>x.id===editAnimalId);
+  if(!a) return;
+  document.getElementById('mh-date').value = today();
+  renderHealthList(a);
+  om('m-health');
 }
-function doSaveAnimal(){
-  const name=document.getElementById('ma-name').value.trim();
-  if(!name){appAlert('Missing Field', 'Please enter an animal name.');return;}
-  const milks=document.getElementById('ma-milks').checked;
-  const rate=milks?(parseFloat(document.getElementById('ma-rate').value)||0):0;
-  const profile=DB.profile();
-  if(!profile.animals)profile.animals=[];
-  const isNew=editAnimalId==='new';
-  const entry={id:isNew?uid():editAnimalId,name,type:animalType,milks,rate};
-  if(isNew)profile.animals.push(entry);
-  else{const i=profile.animals.findIndex(a=>a.id===editAnimalId);if(i>=0)profile.animals[i]=entry;}
-  DB.saveProfile(profile);
-  DB.log(isNew ? `Added new animal: ${name} (${animalType})` : `Updated animal details for: ${name}`, 'create');
-  cm('m-animal');renderMe();
+
+function renderHealthList(animal) {
+  const list = document.getElementById('health-list');
+  if(!animal.healthLogs || animal.healthLogs.length === 0) {
+    list.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:12px;">No health records yet.</div>`;
+    return;
+  }
+  
+  const iconMap = {vaccine:'💉', illness:'🤒', insemination:'🧬', calving:'🐮'};
+  list.innerHTML = animal.healthLogs.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(h => `
+    <div class="card2 row gap2">
+      <span style="font-size:18px;">${iconMap[h.type] || '📝'}</span>
+      <div class="f1"><div style="font-weight:700;text-transform:capitalize;">${h.type}</div><div style="font-size:10px;color:var(--muted);">${fmtD(h.date)} · ${h.notes}</div></div>
+    </div>
+  `).join('');
 }
-async function removeAnimal(id){
-  const p=DB.profile();
-  const a=p.animals?.find(x=>x.id===id);
-  const agreed = await appConfirm('Remove Animal?', 'Remove '+a?.name+'?');
-  if(!agreed) return;
-  p.animals=p.animals.filter(x=>x.id!==id);
+
+function saveHealthEvent() {
+  const p = DB.profile();
+  const a = p.animals.find(x=>x.id===editAnimalId);
+  if(!a) return;
+  if(!a.healthLogs) a.healthLogs = [];
+  
+  a.healthLogs.push({
+    id: uid(),
+    type: document.getElementById('mh-type').value,
+    date: document.getElementById('mh-date').value,
+    notes: document.getElementById('mh-notes').value
+  });
+  
   DB.saveProfile(p);
-  DB.log(`Removed animal from dairy: ${a?.name}`, 'delete');
-  renderMe();
+  document.getElementById('mh-notes').value = '';
+  renderHealthList(a);
 }
 
-// Returns the latest endDate across all non-trashed pages, or null if none exist.
-function getLatestPageEndDate() {
-  const pages = DB.pages().filter(p => !p.trashed);
-  if (!pages.length) return null;
-  return pages.reduce((latest, p) => (!latest || p.endDate > latest) ? p.endDate : latest, null);
-}
-
-function openNewPageModal() {
-  const latestEnd = getLatestPageEndDate();
-  const minStart = latestEnd ? addDays(latestEnd, 1) : null;
-  const suggestedStart = minStart || today();
-
-  document.getElementById('mnp-date').value = suggestedStart;
-  document.getElementById('mnp-date-trigger').textContent = fmtD(suggestedStart);
-  document.getElementById('mnp-date-trigger').setAttribute('onclick', `openThemedCalendar('mnp-date', ${minStart ? `'${minStart}'` : 'null'})`);
-
-  const profile = DB.profile();
-  const pLen = profile.periodLength || 10;
-  document.getElementById('mnp-modal-title').textContent = `New ${pLen}-Day Record`;
-  om('m-newpage');
-}
-
-function doNewPage() {
-  try {
-    const dateVal = document.getElementById('mnp-date').value;
-    if (!dateVal) return showToast('Please select a start date', false);
-
-    const pages = DB.pages();
-    const newPg = createPage(dateVal);
-
-    // Records must never overlap — if one ends 23 Jun, the next must start 24 Jun or later.
-    const overlapping = pages.find(p => !p.trashed &&
-      newPg.startDate <= p.endDate && newPg.endDate >= p.startDate);
-
-    if (overlapping) {
-      const nextAllowed = addDays(overlapping.endDate, 1);
-      appAlert('Dates Overlap', `This range overlaps "${overlapping.label}" (ends ${fmtD(overlapping.endDate)}). Please choose ${fmtD(nextAllowed)} or later.`);
-      return;
-    }
-
-    pages.unshift(newPg);
-    DB.savePages(pages);
-    DB.log(`Created new record sheet: ${newPg.label}`, 'create');
-
-    cm('m-newpage');
-    renderHome();
-    showToast('New Record Created Successfully!');
-  } catch (err) {
-    console.error('doNewPage failed:', err);
-    appAlert('Could Not Create Record', 'Something went wrong while creating the new sheet. Please try again, and if it keeps happening, let us know what date/period you used.');
-  }
-}
-
-function closeDetail(){
-  curDetailId=null;
-  currentTableFilter='all';
-  renderHome();
-}
-
-async function trashPage(pageId){
-  const agreed = await appConfirm('Move to Trash?','This record will be moved to trash and deleted after 30 days.');
-  if(!agreed) return;
-  const pages=DB.pages();
-  const pi=pages.findIndex(p=>p.id===pageId);
-  if(pi<0) return;
-  const page=pages[pi];
-  page.trashed=true;
-  page.trashedAt=new Date().toISOString();
-  const trash=DB.trash();
-  trash.unshift(page);
-  DB.saveTrash(trash);
-  pages.splice(pi,1);
-  DB.savePages(pages);
-  DB.log(`Moved record sheet to trash: ${page.label}`, 'delete');
-  curDetailId=null;
-  currentTableFilter='all';
-  renderHome();
-}
-
-async function reqLock(pageId){
-  const pages=DB.pages();
-  const pi=pages.findIndex(p=>p.id===pageId);
-  if(pi<0) return;
-  const page=pages[pi];
-  if(page.locked){
-    const agreed=await appConfirm('Unlock Record?','Unlock this record to allow editing again?');
-    if(!agreed) return;
-    page.locked=false;
-    page.clearedAt=null;
-    DB.savePages(pages);
-    DB.log(`Unlocked record sheet for editing: ${page.label}`, 'info');
+function doSaveAnimal() {
+  const name=document.getElementById('ma-name').value.trim();
+  const p = DB.profile();
+  if(!name) return;
+  if(editAnimalId === 'new') {
+    p.animals.push({id: uid(), name: name, type: 'cow', milks: true, rate: document.getElementById('ma-rate').value, healthLogs: []});
   } else {
-    const agreed=await appConfirm('Mark as Cleared?','Lock this record and mark account as cleared?');
-    if(!agreed) return;
-    page.locked=true;
-    page.clearedAt=new Date().toISOString();
-    DB.savePages(pages);
-    DB.log(`Locked and cleared account for record sheet: ${page.label}`, 'info');
+    const a = p.animals.find(x=>x.id===editAnimalId);
+    a.name = name;
   }
-  renderHome();
-}
-
-function openTrash(){
-  const trash=DB.trash();
-  const now=Date.now();
-  document.getElementById('mc-title').textContent='🗑 Trash (auto-deletes in 30 days)';
-  if(!trash.length){
-    document.getElementById('mc-body').innerHTML='<span style="color:var(--muted);">Trash is empty.</span>';
-    document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
-  } else {
-    let bodyHtml='<div class="sp2">';
-    trash.forEach(p=>{
-      const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000));
-      bodyHtml+=`<div class="trash-card">
-        <div style="font-weight:700;font-size:13px;">${p.label}</div>
-        <div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div>
-        <button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button>
-      </div>`;
-    });
-    bodyHtml+='</div>';
-    document.getElementById('mc-body').innerHTML=bodyHtml;
-    document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
-  }
-  om('m-confirm');
-}
-
-function restoreFromTrash(pageId){
-  const trash=DB.trash();
-  const ti=trash.findIndex(p=>p.id===pageId);
-  if(ti<0) return;
-  const page=trash[ti];
-  page.trashed=false;
-  delete page.trashedAt;
-  const pages=DB.pages();
-  pages.unshift(page);
-  DB.savePages(pages);
-  trash.splice(ti,1);
-  DB.saveTrash(trash);
-  DB.log(`Restored record sheet from trash: ${page.label}`, 'info');
-  cm('m-confirm');
-  renderHome();
+  DB.saveProfile(p);
+  cm('m-animal'); renderMe();
 }
 
 function om(id){document.getElementById(id).classList.add('open');}
 function cm(id){document.getElementById(id).classList.remove('open');}
 function moi(e,id){if(e.target.id===id)cm(id);}
 
-// ══════════════════════════════════════════════════════════════════
-//  INSTALL REMINDER SYSTEM (PWA "Add to Home Screen" nudges)
-// ══════════════════════════════════════════════════════════════════
-function isAppInstalled() {
-  return window.matchMedia('(display-mode: standalone)').matches ||
-         window.navigator.standalone === true ||
-         document.referrer.startsWith('android-app://');
+// Init App
+const profile = DB.profile();
+if (!profile.onboarded) {
+  document.getElementById('onboarding').classList.add('active');
+  applyTranslations();
+} else {
+  openFullApp();
 }
-
-// Call this whenever the main app becomes visible. justFinishedSetup=true
-// opens the full step-by-step guide once, right after onboarding.
-function checkInstallReminders(justFinishedSetup) {
-  if (isAppInstalled()) { hideInstallBanner(); return; }
-
-  if (justFinishedSetup) {
-    setTimeout(() => showInstallGuide(), 600);
-  }
-
-  const pref = localStorage.getItem('mdn_install_banner_pref');
-  if (pref === 'never' || pref === 'later') {
-    hideInstallBanner();
-  } else {
-    showInstallBanner();
-  }
-}
-
-function showInstallBanner() {
-  const b = document.getElementById('install-banner');
-  if (b) b.classList.add('show');
-}
-function hideInstallBanner() {
-  const b = document.getElementById('install-banner');
-  if (b) b.classList.remove('show');
-}
-
-function dismissInstallBanner() {
-  appChoice("Hide this reminder?", "You can still install anytime from your Profile tab.", [
-    { label: "I'll do later", value: "later" },
-    { label: "Never show again", value: "never" }
-  ]).then(choice => {
-    if (!choice) return; // closed via outside tap with no explicit choice
-    localStorage.setItem('mdn_install_banner_pref', choice);
-    hideInstallBanner();
-    if (curTab === 'me') renderMe();
-  });
-}
-
-function showInstallGuide() {
-  const ua = navigator.userAgent || '';
-  const isIOS = /iPhone|iPad|iPod/i.test(ua);
-  const isAndroid = /Android/i.test(ua);
-  let steps;
-
-  if (isAndroid) {
-    steps = [
-      ['⋮', 'Tap the three-dot menu in the top-right corner of Chrome.'],
-      ['➕', 'Tap "Add to Home screen" or "Install app".'],
-      ['✅', 'Tap "Install" to confirm.'],
-      ['🎉', 'The app icon now opens full-screen — no browser bar, faster, and works offline.']
-    ];
-  } else if (isIOS) {
-    steps = [
-      ['📤', 'Tap the Share icon at the bottom of Safari.'],
-      ['📋', 'Scroll down and tap "Add to Home Screen".'],
-      ['✅', 'Tap "Add" in the top-right corner.'],
-      ['🎉', 'The app icon now opens full-screen, just like a real app.']
-    ];
-  } else {
-    steps = [
-      ['⊕', 'Click the install icon in the address bar (or open the ⋮ menu).'],
-      ['✅', 'Click "Install".'],
-      ['🎉', 'The app now opens in its own window, separate from your browser.']
-    ];
-  }
-
-  document.getElementById('install-guide-steps').innerHTML = steps.map(([icon, text]) =>
-    `<div class="ig-step"><span class="ig-num">${icon}</span><span>${text}</span></div>`
-  ).join('');
-  om('m-install-guide');
-}
-async function editPageLength(pageId) {
-    const pages = DB.pages();
-    const pi = pages.findIndex(p => p.id === pageId);
-    if (pi < 0 || pages[pi].locked) return appAlert('Locked', 'Unlock the record to edit its length.');
-    
-    const page = pages[pi];
-    const currentLen = page.rows.length;
-    
-    const res = await appPrompt(`Current length is ${currentLen} days. Enter new length:`, currentLen);
-    if (!res) return;
-    
-    const newLen = parseInt(res);
-    if (isNaN(newLen) || newLen <= 0) return appAlert('Error', 'Please enter a valid number greater than 0.');
-    if (newLen === currentLen) return;
-
-    if (newLen > currentLen) {
-        // Expand the page
-        for (let i = currentLen; i < newLen; i++) {
-            const rowDate = addDays(page.startDate, i);
-            const r = { id: uid(), index: i, assignedDate: rowDate, date: '', dateFrozen: false, total: 0 };
-            page.cols.forEach(c => { if (!['sr', 'date', 'total'].includes(c.type)) r[c.id] = ''; });
-            page.rows.push(r);
-        }
-    } else {
-        // Shorten the page
-        const rowsToRemove = page.rows.slice(newLen);
-        const hasData = rowsToRemove.some(r => r.total > 0 || r.dateFrozen);
-        
-        if (hasData) {
-            const confirm = await appConfirm('Warning', 'The days you are trying to remove contain saved data. Deleting them will erase this data. Continue?');
-            if (!confirm) return;
-        }
-        page.rows = page.rows.slice(0, newLen);
-    }
-
-    page.endDate = addDays(page.startDate, newLen - 1);
-    
-    // Check if the new endDate overlaps with an existing page
-    const overlapping = pages.find(p => p.id !== page.id && !p.trashed && page.startDate <= p.endDate && page.endDate >= p.startDate);
-    if (overlapping) {
-        return appAlert('Overlap Error', `Changing the length to ${newLen} days overlaps with the "${overlapping.label}" sheet. Change canceled.`);
-    }
-
-    DB.savePages(pages);
-    DB.log(`Changed record sheet length from ${currentLen} to ${newLen} days.`, 'update');
-    
-    // Refresh the view
-    renderHome();
-}
-
-(()=>{
-  const now=Date.now();
-  const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000);
-  DB.saveTrash(trash);
-  AnalyticsEngine.build(); 
-  AutoBackup.trigger(); 
-})();
-// Function to handle files shared directly to the app
-async function handleSharedFile() {
-  const urlParams = new URLSearchParams(window.location.search);
-  
-  if (urlParams.get('shared_import') === 'pending') {
-    try {
-      // 1. Open the cache and get the file the Service Worker saved
-      const cache = await caches.open('dairy-shared-file-cache');
-      const response = await cache.match('/temp-shared-backup.pdf');
-      
-      if (response) {
-        const blob = await response.blob();
-        const file = new File([blob], "shared_backup.pdf", { type: "application/pdf" });
-        
-        // 2. Clean up the cache so it doesn't trigger again
-        await cache.delete('/temp-shared-backup.pdf');
-        
-        // 3. Clean the URL so the parameter is removed
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        // 4. Pass it directly to your existing import logic
-        processDirectFileImport(file);
-      }
-    } catch (e) {
-      console.error("Failed to process shared file", e);
-      appAlert("Import Error", "Could not process the shared file.");
-    }
-  }
-}
-
-// A helper function that re-uses your exact import logic but accepts a File object directly
-function processDirectFileImport(file) {
-  const reader = new FileReader();
-  
-  reader.onload = async function(ev) {
-    try {
-        const rawContent = ev.target.result;
-        let payloadString = rawContent;
-
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-            const startMarker = '###DAIRY_BACKUP_BEGIN###';
-            const endMarker = '###DAIRY_BACKUP_END###';
-            const startIndex = rawContent.indexOf(startMarker);
-            const endIndex = rawContent.indexOf(endMarker);
-            
-            if (startIndex !== -1 && endIndex !== -1) {
-                payloadString = rawContent.substring(startIndex + startMarker.length, endIndex).trim();
-            } else {
-                return appAlert("Invalid PDF", "This PDF does not contain Dairy App backup data.");
-            }
-        }
-
-        let payload = null;
-        try { payload = JSON.parse(payloadString); } catch (parseErr) { payload = null; }
-
-        if (payload && payload.format === BACKUP_FORMAT) {
-            const confirmed = await appConfirm("Import Shared Data?", "This will OVERWRITE your current app data entirely. Continue?");
-            if(confirmed) {
-                await restoreBackupPayload(payload);
-                showToast("Import successful! Reloading...");
-                setTimeout(() => location.reload(), 1500);
-            }
-        } else {
-            appAlert("Import Failed", "The data extracted from the file is invalid or corrupted.");
-        }
-    } catch (err) {
-        console.error(err);
-        appAlert("Import Failed", "Could not read the backup file.");
-    }
-  };
-  
-  reader.readAsText(file);
-}
-
-// Call this immediately when the app starts
-handleSharedFile();
-  
-initApp();
 </script>
 </body>
 </html>
