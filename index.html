@@ -333,6 +333,39 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .eico{width:52px;height:52px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:24px;}
 .etitle{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;}
 .esub{font-size:12px;color:var(--muted);}
+
+/* ═══════════════════════════════════════════════════════════
+   LANDSCAPE OPTIMIZATION
+   Phone rotated sideways: more width, less height available.
+   Widen the app shell instead of leaving black bars, and turn
+   Quick Entry into a side-by-side layout so the numpad stops
+   competing with the input list for vertical space.
+═══════════════════════════════════════════════════════════ */
+@media (orientation: landscape) {
+  #app, .mbox { max-width: min(680px, 94vw); }
+  #onboarding > div, #qe-success-content { max-width: min(680px, 94vw) !important; }
+
+  #qe-active-content {
+    max-width: min(920px, 96vw) !important;
+    flex-direction: row !important;
+    align-items: stretch;
+    gap: 18px;
+  }
+  #qe-active-content > div:first-child { min-width: 0; }
+  #qe-active-content > .anim-stagger.d3 {
+    width: 260px; flex-shrink: 0;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+
+  /* Slimmer bottom nav reclaims vertical space */
+  .nb { padding: 5px 4px; gap: 2px; }
+  .nb svg { width: 18px; height: 18px; }
+  .nb span { font-size: 9px; }
+
+  /* Less top/bottom padding on full-screen flows (onboarding, quick entry) */
+  .full-overlay { padding: 10px 20px; }
+  .pc { padding: 0 15px 70px; }
+}
 </style>
 </head>
 <body>
@@ -570,6 +603,19 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
 
 <script>
+// ══════════════════════════════════════════════════════════════════
+//  SERVICE WORKER — makes the app open & work fully offline,
+//  even on the very first launch after install (not just "worked
+//  once online so the HTTP cache happened to still have it").
+// ══════════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  REPOSITORY PATTERN & AUTOMATIC OPFS BACKUP
 // ══════════════════════════════════════════════════════════════════

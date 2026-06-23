@@ -1,69 +1,79 @@
-const CACHE_NAME = 'dairy-notebook-v2';
-const SHELL_ASSETS = [
+// Milk Dairy Notebook — Service Worker
+// Bump CACHE_VERSION on every deploy that changes index.html / icons /
+// manifest, otherwise users keep getting the old cached version forever.
+const CACHE_VERSION = 'v1';
+const CACHE_NAME = 'mdn-cache-' + CACHE_VERSION;
+
+// Everything needed to open and run the app with zero network.
+// Add any other local files you reference (extra icons, fonts, etc).
+const PRECACHE_URLS = [
+  './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        PRECACHE_URLS.map((url) =>
+          cache.add(url).catch((err) => console.warn('[SW] precache failed:', url, err))
+        )
+      )
+    ).then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Network-first: always try to get the freshest copy when online (so a new
-// deploy shows up immediately), and only fall back to the cached copy when
-// offline. This avoids ever serving a stale index.html after an update —
-// the old cache-first strategy could keep showing an outdated cached page
-// even after a fix was deployed.
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  const req = event.request;
+  if (req.method !== 'GET') return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response && response.status === 200) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+  // Page navigations: serve the cached app shell instantly (works offline
+  // on first try), and quietly refresh the cache in the background when
+  // online so next time you get the latest version.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      caches.match('./index.html').then((cached) => {
+        if (cached) {
+          event.waitUntil(
+            fetch(req).then((res) => {
+              if (res && res.status === 200) {
+                return caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', res.clone()));
+              }
+            }).catch(() => {})
+          );
+          return cached;
         }
-        return response;
+        return fetch(req).catch(() => caches.match('./index.html'));
       })
-      .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Everything else (manifest, icons, the pdf-lib script): cache-first,
+  // fall back to network, and store whatever the network returns for
+  // next time.
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req).then((res) => {
+        if (res && (res.status === 200 || res.type === 'opaque')) {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+        }
+        return res;
+      }).catch(() => cached);
+    })
   );
 });
-self.addEventListener('fetch', (event) => {
-  // Check if this is the incoming shared file
-  if (event.request.method === 'POST' && event.request.url.includes('/import-shared-file')) {
-    event.respondWith((async () => {
-      try {
-        // Extract the file from the incoming POST request
-        const formData = await event.request.formData();
-        const file = formData.get('backup_file');
-        
-        if (file) {
-          // Store the file temporarily in the Cache API
-          const cache = await caches.open('dairy-shared-file-cache');
-          await cache.put('/temp-shared-backup.pdf', new Response(file));
-        }
-        
-        // Redirect the user to the main app with a special URL parameter
-        return Response.redirect('/?shared_import=pending', 303);
-      } catch (error) {
-        console.error("Error receiving shared file:", error);
-        return Response.redirect('/?shared_import=error', 303);
-      }
-    })());
-  }
-});
-
