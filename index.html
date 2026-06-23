@@ -511,10 +511,11 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <button class="btn bp" onclick="doNewPage()">Create Page</button>
  </div>
 </div></div>
-
 <div class="moverlay" id="m-animal" onclick="moi(event,'m-animal')"><div class="mbox">
  <div class="mh"><span class="mt" id="ma-title">Add Animal</span><button class="mx" onclick="cm('m-animal')">✕</button></div>
+ 
  <div style="margin-bottom:9px;"><label class="flabel">Animal Name / ID</label><input class="inp" id="ma-name" placeholder="e.g. Gori, B-02..."/></div>
+ 
  <div style="margin-bottom:9px;"><label class="flabel">Type</label>
   <div class="row gap2 mb3" id="ma-types" style="flex-wrap:wrap;">
    <button class="rpill on" id="ma-cow-btn" onclick="setAT('cow')">🐄 Cow</button>
@@ -523,16 +524,50 @@ svg.chart{display:block;width:100%;overflow:visible;}
    <button class="rpill" id="ma-other-btn" onclick="setAT('other')">🥛 Other</button>
   </div>
  </div>
+ 
  <div class="row gap2 mb3" style="align-items:center;">
   <div class="f1"><div style="font-size:13px;font-weight:700;">This animal gives milk?</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Will auto-add AM/PM columns</div></div>
   <label class="tswitch"><input type="checkbox" id="ma-milks" checked onchange="document.getElementById('ma-rate-row').style.display=this.checked?'block':'none'"/><div class="tslider"></div></label>
  </div>
+ 
  <div id="ma-rate-row" class="mb3"><label class="flabel">Default Rate per Litre (₹)</label><input class="inp" type="number" id="ma-rate" placeholder="e.g. 55"/></div>
+ 
+ <div style="margin-top:15px; border-top: 1px solid var(--border); padding-top: 15px;">
+  <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Health & Breeding Records</div>
+  
+  <div style="margin-bottom:9px;">
+    <label class="flabel">Last Vaccination Date</label>
+    <button type="button" class="btn bd-trigger w-100" id="ma-vax-date-trigger" onclick="openThemedCalendar('ma-vax-date')">Not Set</button>
+    <input type="hidden" id="ma-vax-date"/>
+  </div>
+  
+  <div style="margin-bottom:9px;">
+    <label class="flabel">Last Insemination/Calving</label>
+    <button type="button" class="btn bd-trigger w-100" id="ma-calving-date-trigger" onclick="openThemedCalendar('ma-calving-date')">Not Set</button>
+    <input type="hidden" id="ma-calving-date"/>
+  </div>
+  
+  <div style="margin-bottom:9px;">
+    <label class="flabel">Illness/Medical Notes</label>
+    <input class="inp" type="text" id="ma-illness" placeholder="e.g. Treated for mastitis..."/>
+  </div>
+ </div>
+
  <div class="mact">
   <button class="btn bs" onclick="cm('m-animal')">Cancel</button>
   <button class="btn bp" id="ma-btn" onclick="doSaveAnimal()">Add Animal</button>
  </div>
 </div></div>
+<div class="moverlay" id="m-expense" onclick="moi(event,'m-expense')"><div class="mbox">
+ <div class="mh"><span class="mt">Add Expense</span><button class="mx" onclick="cm('m-expense')">✕</button></div>
+ <div style="margin-bottom:9px;"><label class="flabel">Expense Name</label><input class="inp" id="m-exp-name" placeholder="e.g. Feed, Medical..."/></div>
+ <div style="margin-bottom:15px;"><label class="flabel">Cost (₹)</label><input class="inp" type="number" id="m-exp-cost" placeholder="0.0"/></div>
+ <div class="mact">
+  <button class="btn bs" onclick="cm('m-expense')">Cancel</button>
+  <button class="btn bp" onclick="saveNewExpense()">Save Expense</button>
+ </div>
+</div></div>
+
 
 <script>
 // ══════════════════════════════════════════════════════════════════
@@ -628,6 +663,34 @@ async function restoreBackupPayload(payload) {
   Store.set('mdn_payments', archiveData.payments || []);
   Store.set('mdn_trash', archiveData.trash || []);
   Store.set('mdn_logs', archiveData.logs || []);
+}
+
+//expenses
+function openExpenseModal() {
+    document.getElementById('m-exp-name').value = '';
+    document.getElementById('m-exp-cost').value = '';
+    om('m-expense');
+}
+
+function saveNewExpense() {
+    const name = document.getElementById('m-exp-name').value.trim();
+    const cost = parseFloat(document.getElementById('m-exp-cost').value) || 0;
+    if(!name || cost <= 0) return appAlert('Error', 'Please enter a valid expense name and cost.');
+    
+    const exps = Store.get('mdn_expenses') || [];
+    exps.unshift({id: uid(), name, cost, date: today()});
+    Store.set('mdn_expenses', exps);
+    AutoBackup.trigger();
+    DB.log(`Added expense: ${name} for ₹${cost}`, 'create');
+    cm('m-expense');
+    renderCalc();
+}
+
+function deleteExpense(id) {
+    const exps = Store.get('mdn_expenses') || [];
+    Store.set('mdn_expenses', exps.filter(e => e.id !== id));
+    AutoBackup.trigger();
+    renderCalc();
 }
 
 // Automatic Background Packet Saver.
@@ -1131,7 +1194,6 @@ function selectCalendarDate(isoDateStr) {
   if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
   cm('m-calendar-sheet');
 }
-
 function defaultColumns(profile){
   const cols=[ {id:'date',name:'Date',type:'date',locked:true} ];
   const milkA=(profile.animals||[]).filter(a=>a.milks!==false);
@@ -1718,9 +1780,9 @@ function renderDetailView(el){
    <div style="padding:0 15px;margin-bottom:12px;">
     <div class="twrap" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div>
    </div>
-   <div style="padding:0 15px;margin-bottom:12px;">${buildColTotals(page)}</div>
    
    <div style="padding:0 15px 90px;">
+   
     <div class="lbar${page.locked?' on':''}" onclick="reqLock('${page.id}')">
      <div class="cring${page.locked?' on':''}">${page.locked?'✓':''}</div>
      <div class="f1"><div style="font-weight:700;font-size:13px;">Account Cleared</div>${page.locked&&page.clearedAt?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">Locked ${fmtD(page.clearedAt)}</div>`:''}</div>
@@ -1763,11 +1825,12 @@ function applyThemedFilter(pageId, targetFilterValue) {
    document.getElementById('table-container').innerHTML = buildCompactTable(page, DB.profile(), today(), currentTableFilter);
    renderHome();
 }
-
 function buildCompactTable(page,profile,todayStr, filter){
   let sys1 = [], animals = {}, sys2 = [];
   
   page.cols.forEach(c => {
+    if(c.type === 'expense') return; // <-- This forcefully hides old feed/medical columns!
+
     if(c.type === 'date' || c.type === 'sr') sys1.push(c);
     else if(c.type === 'total') {
         if(filter === 'totals' || filter === 'all') sys2.push(c);
@@ -1791,8 +1854,10 @@ function buildCompactTable(page,profile,todayStr, filter){
   const animalKeys = Object.keys(animals);
 
   let head1 = sys1.map(c => `<th rowspan="2" class="th-sys">${c.name}</th>`).join('');
+  let colCount = 0;
   animalKeys.forEach((k, idx) => { 
      const g = animals[k];
+     colCount += g.cols.length;
      const sepClass = (idx < animalKeys.length - 1 || sys2.length > 0) ? 'v-sep' : '';
      head1 += `<th colspan="${g.cols.length}" class="th-group ${sepClass}">${g.name}</th>`; 
   });
@@ -1810,6 +1875,9 @@ function buildCompactTable(page,profile,todayStr, filter){
   });
   const thead = `<thead><tr>${head1}</tr><tr>${head2}</tr></thead>`;
 
+  let totalMilk = 0;
+  let totalRev = 0;
+
   const rows = page.rows.map((r,ri)=>{
     const isFuture = r.assignedDate > todayStr;
     const isToday = r.assignedDate === todayStr;
@@ -1826,33 +1894,31 @@ function buildCompactTable(page,profile,todayStr, filter){
     animalKeys.forEach((k, idx) => {
       const g = animals[k];
       g.cols.forEach((c, cidx) => {
+         if (c.type === 'milk_am' || c.type === 'milk_pm') {
+             totalMilk += parseFloat(r[c.id]) || 0;
+         }
          const sepClass = (cidx === g.cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
          if(isRowLocked) cells += `<td class="${sepClass}" style="color:${isFuture?'var(--border)':'var(--sub)'}; font-family:monospace; font-size:11px;">${r[c.id]||'—'}</td>`;
          else cells += `<td class="${sepClass}"><input class="finp" type="${c.type==='text'?'text':'number'}" min="0" step="0.01" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
       });
     });
 
-    sys2.forEach(c => { cells += `<td class="${r.total>0?'ttot':'ttote'}" style="text-align:right;">${r.total>0?'₹'+fmt(r.total):'—'}</td>`; });
+    sys2.forEach(c => { 
+        totalRev += parseFloat(r.total) || 0;
+        cells += `<td class="${r.total>0?'ttot':'ttote'}" style="text-align:right;">${r.total>0?'₹'+fmt(r.total):'—'}</td>`; 
+    });
     return `<tr class="${rowClass}">${cells}</tr>`;
   }).join('');
 
-  return `<table>${thead}<tbody>${rows}</tbody></table>`;
-}
+  const tfoot = `<tfoot>
+    <tr style="height: 44px; background: var(--bg2); border-top: 2px solid var(--border2);">
+        <td colspan="${sys1.length}" style="text-align:center; font-weight:900; font-size:14px; color:#fff;">Total:</td>
+        <td colspan="${colCount}" style="text-align:center; font-weight:900; font-size:14px; color:#fff;">${fmt(totalMilk)} L</td>
+        <td colspan="${sys2.length}" style="text-align:right; font-weight:900; font-size:14px; color:#fff; padding-right: 6px;">₹${fmt(totalRev)}</td>
+    </tr>
+  </tfoot>`;
 
-function buildColTotals(page){
-  const milkCols=page.cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
-  if(!milkCols.length)return'';
-  let html=`<div class="card"><div class="slabel mb2">Column Totals</div><div class="sg2">`;
-  milkCols.forEach(c=>{
-    const tot=page.rows.reduce((s,r)=>s+(parseFloat(r[c.id])||0),0);
-    if(currentTableFilter !== 'all') {
-       if(currentTableFilter === 'totals') return;
-       if(currentTableFilter.startsWith('cat_') && c.animalType !== currentTableFilter.replace('cat_','')) return;
-       if(currentTableFilter.startsWith('anim_') && c.animal !== currentTableFilter.replace('anim_','')) return;
-    }
-    html+=`<div class="card2"><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">${c.name.replace(' AM','').replace(' PM','')} ${c.type==='milk_am'?'AM':'PM'}</div><div style="font-size:14px;font-weight:800;">${fmt(tot)} L</div></div>`;
-  });
-  return html+`</div></div>`;
+  return `<table>${thead}<tbody>${rows}</tbody>${tfoot}</table>`;
 }
 
 function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex){
@@ -2058,7 +2124,6 @@ function drawSelectedGraph() {
       </div>`;
   }
 }
-
 function renderCalc(){
   const pages = DB.pages().filter(p=>!p.trashed);
   const activePage = pages.find(p=>!p.locked);
@@ -2090,7 +2155,20 @@ function renderCalc(){
   let totalEarned = 0, totalReceived = 0;
   pages.forEach(p => { totalEarned += pageSummary(p).rev; });
   DB.payments().forEach(p => { if(p.type==='received') totalReceived += parseFloat(p.amount)||0; });
-  const netBal = totalEarned - totalReceived;
+  
+  // Calculate Expenses
+  const exps = Store.get('mdn_expenses') || [];
+  let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
+  const netBal = totalEarned - totalReceived - totalExp;
+
+  let expenseHTML = exps.slice(0, 5).map(e => `
+      <div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
+          <div class="f1"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:10px;color:var(--muted);">${fmtDS(e.date)}</div></div>
+          <div style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(e.cost)}</div>
+          <button class="btn bg bsm" style="color:var(--danger); padding:4px 8px;" onclick="deleteExpense('${e.id}')">✕</button>
+      </div>
+  `).join('');
+  if(exps.length === 0) expenseHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No expenses recorded</div>`;
 
   document.getElementById('cledger').innerHTML=`
    <div class="card mb4">
@@ -2098,15 +2176,23 @@ function renderCalc(){
     <div class="sp2">
      <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
      <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
-     <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Total Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Period Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
     </div>
+   </div>
+   
+   <div class="card mb4">
+    <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;">
+        <div class="slabel" style="margin:0;">General Expenses</div>
+        <button class="btn bp bsm" onclick="openExpenseModal()">+ Add</button>
+    </div>
+    ${expenseHTML}
    </div>
    
    <div class="card mb4">
     <div class="slabel mb3">Overall Accountability Ledger</div>
     <div class="sp2">
      <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Earned (All Time)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(totalEarned)}</span></div>
-     <div class="payrow"><span style="font-size:18px;">✅</span><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:800;font-size:14px;color:var(--success);">₹${fmt(totalReceived)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
      <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${netBal>0?'#e8b800':netBal<0?'var(--success)':'#fff'};">${netBal>0?'₹'+fmt(netBal)+' due':netBal<0?'Overpaid ₹'+fmt(-netBal):'Settled'}</span></div>
     </div>
    </div>
@@ -2124,6 +2210,7 @@ function renderCalc(){
     </div>
    `;
 }
+
 function updCalc(){
   const q=parseFloat(document.getElementById('cqty')?.value)||0;
   const r=parseFloat(document.getElementById('crate')?.value)||0;
@@ -2286,39 +2373,112 @@ function setPeriodLength(v) {
   DB.saveProfile(p);
   showToast(`Default period length set to ${val} days`);
 }
-
 function openAnimalModal(id){
   editAnimalId=id;
   const isNew=id==='new';
   const profile=DB.profile();
-  document.getElementById('ma-title').textContent=isNew?'Add Animal':'Edit Animal';
-  document.getElementById('ma-btn').textContent=isNew?'Add Animal':'Save Changes';
+  
+  const titleEl = document.getElementById('ma-title');
+  if (titleEl) titleEl.textContent=isNew?'Add Animal':'Edit Animal';
+  
+  const btnEl = document.getElementById('ma-btn');
+  if (btnEl) btnEl.textContent=isNew?'Add Animal':'Save Changes';
+  
   if(!isNew){
     const a=profile.animals?.find(x=>x.id===id);
-    if(a){document.getElementById('ma-name').value=a.name;setAT(a.type);document.getElementById('ma-milks').checked=a.milks!==false;document.getElementById('ma-rate').value=a.rate||'';document.getElementById('ma-rate-row').style.display=a.milks!==false?'block':'none';}
-  } else {document.getElementById('ma-name').value='';setAT('cow');document.getElementById('ma-milks').checked=true;document.getElementById('ma-rate').value='';document.getElementById('ma-rate-row').style.display='block';}
+    if(a){
+      const nameEl = document.getElementById('ma-name');
+      if(nameEl) nameEl.value=a.name; 
+      
+      setAT(a.type); 
+      
+      const milksEl = document.getElementById('ma-milks');
+      if(milksEl) milksEl.checked=a.milks!==false;
+      
+      const rateEl = document.getElementById('ma-rate');
+      if(rateEl) rateEl.value=a.rate||''; 
+      
+      const rateRow = document.getElementById('ma-rate-row');
+      if(rateRow) rateRow.style.display=a.milks!==false?'block':'none';
+      
+      const vaxEl = document.getElementById('ma-vax-date');
+      if(vaxEl) vaxEl.value=a.vaxDate||''; 
+      
+      const vaxTrig = document.getElementById('ma-vax-date-trigger');
+      if(vaxTrig) vaxTrig.textContent = a.vaxDate ? fmtD(a.vaxDate) : 'Not Set';
+      
+      const calvEl = document.getElementById('ma-calving-date');
+      if(calvEl) calvEl.value=a.calvingDate||''; 
+      
+      const calvTrig = document.getElementById('ma-calving-date-trigger');
+      if(calvTrig) calvTrig.textContent = a.calvingDate ? fmtD(a.calvingDate) : 'Not Set';
+      
+      const illEl = document.getElementById('ma-illness');
+      if(illEl) illEl.value=a.illness||'';
+    }
+  } else {
+    const nameEl = document.getElementById('ma-name');
+    if(nameEl) nameEl.value=''; 
+    
+    setAT('cow'); 
+    
+    const milksEl = document.getElementById('ma-milks');
+    if(milksEl) milksEl.checked=true;
+    
+    const rateEl = document.getElementById('ma-rate');
+    if(rateEl) rateEl.value=''; 
+    
+    const rateRow = document.getElementById('ma-rate-row');
+    if(rateRow) rateRow.style.display='block';
+    
+    const vaxEl = document.getElementById('ma-vax-date');
+    if(vaxEl) vaxEl.value=''; 
+    
+    const vaxTrig = document.getElementById('ma-vax-date-trigger');
+    if(vaxTrig) vaxTrig.textContent = 'Not Set';
+    
+    const calvEl = document.getElementById('ma-calving-date');
+    if(calvEl) calvEl.value=''; 
+    
+    const calvTrig = document.getElementById('ma-calving-date-trigger');
+    if(calvTrig) calvTrig.textContent = 'Not Set';
+    
+    const illEl = document.getElementById('ma-illness');
+    if(illEl) illEl.value='';
+  }
+  
   om('m-animal');
 }
+
 function setAT(t){
   animalType=t;
   document.querySelectorAll('#ma-types .rpill').forEach(b => b.classList.remove('on'));
   document.getElementById('ma-'+t+'-btn').classList.add('on');
 }
+
 function doSaveAnimal(){
   const name=document.getElementById('ma-name').value.trim();
   if(!name){appAlert('Missing Field', 'Please enter an animal name.');return;}
   const milks=document.getElementById('ma-milks').checked;
   const rate=milks?(parseFloat(document.getElementById('ma-rate').value)||0):0;
+  
+  const vaxDate = document.getElementById('ma-vax-date')?.value || '';
+  const calvingDate = document.getElementById('ma-calving-date')?.value || '';
+  const illness = document.getElementById('ma-illness')?.value.trim() || '';
+  
   const profile=DB.profile();
   if(!profile.animals)profile.animals=[];
   const isNew=editAnimalId==='new';
-  const entry={id:isNew?uid():editAnimalId,name,type:animalType,milks,rate};
+  const entry={id:isNew?uid():editAnimalId,name,type:animalType,milks,rate,vaxDate,calvingDate,illness};
+  
   if(isNew)profile.animals.push(entry);
   else{const i=profile.animals.findIndex(a=>a.id===editAnimalId);if(i>=0)profile.animals[i]=entry;}
+  
   DB.saveProfile(profile);
   DB.log(isNew ? `Added new animal: ${name} (${animalType})` : `Updated animal details for: ${name}`, 'create');
   cm('m-animal');renderMe();
 }
+
 async function removeAnimal(id){
   const p=DB.profile();
   const a=p.animals?.find(x=>x.id===id);
