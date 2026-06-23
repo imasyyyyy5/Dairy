@@ -407,7 +407,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
     <button class="rpill" id="ob-other-btn" onclick="setObType('other')">🥛 Other</button>
    </div>
 
-   <input class="inp mb3" type="number" id="ob-rate" placeholder="Milk Rate (₹ per Litre)"/>
+   <input class="inp mb3" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="ob-rate" placeholder="Milk Rate (₹ per Litre)"/>
    <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObAnimal()">+ Add This Animal</button>
   </div>
   
@@ -1875,7 +1875,7 @@ function buildCompactTable(page,profile,todayStr, filter){
   let sys1 = [], animals = {}, sys2 = [];
   
   page.cols.forEach(c => {
-    if(c.type === 'expense') return; // <-- This forcefully hides old feed/medical columns!
+    if(c.type === 'expense') return; 
 
     if(c.type === 'date' || c.type === 'sr') sys1.push(c);
     else if(c.type === 'total') {
@@ -1945,7 +1945,8 @@ function buildCompactTable(page,profile,todayStr, filter){
          }
          const sepClass = (cidx === g.cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
          if(isRowLocked) cells += `<td class="${sepClass}" style="color:${isFuture?'var(--border)':'var(--sub)'}; font-family:monospace; font-size:11px;">${r[c.id]||'—'}</td>`;
-         else cells += `<td class="${sepClass}"><input class="finp" type="${c.type==='text'?'text':'number'}" min="0" step="0.01" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
+         // FIX: Use type="text" with inputmode="decimal" and autocomplete disabled
+         else cells += `<td class="${sepClass}"><input class="finp" type="text" inputmode="${c.type==='text'?'text':'decimal'}" autocomplete="off" data-lpignore="true" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
       });
     });
 
@@ -2246,8 +2247,8 @@ function renderCalc(){
    <div class="card">
      <div class="slabel mb3">Quick Calc</div>
      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px;">
-      <div><label class="flabel">Qty (L)</label><input class="inp" type="number" id="cqty" placeholder="0.0" oninput="updCalc()"/></div>
-      <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="number" id="crate" placeholder="0.0" oninput="updCalc()"/></div>
+      <div><label class="flabel">Qty (L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="cqty" placeholder="0.0" oninput="updCalc()"/></div>
+      <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="crate" placeholder="0.0" oninput="updCalc()"/></div>
      </div>
      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:15px;text-align:center;">
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Result</div>
@@ -2502,28 +2503,76 @@ function setAT(t){
   document.getElementById('ma-'+t+'-btn').classList.add('on');
 }
 
-function doSaveAnimal(){
-  const name=document.getElementById('ma-name').value.trim();
-  if(!name){appAlert('Missing Field', 'Please enter an animal name.');return;}
-  const milks=document.getElementById('ma-milks').checked;
-  const rate=milks?(parseFloat(document.getElementById('ma-rate').value)||0):0;
+async function doSaveAnimal() {
+  const name = document.getElementById('ma-name').value.trim();
+  if (!name) { appAlert('Missing Field', 'Please enter an animal name.'); return; }
+  const milks = document.getElementById('ma-milks').checked;
+  const rate = milks ? (parseFloat(document.getElementById('ma-rate').value) || 0) : 0;
   
   const vaxDate = document.getElementById('ma-vax-date')?.value || '';
   const calvingDate = document.getElementById('ma-calving-date')?.value || '';
   const illness = document.getElementById('ma-illness')?.value.trim() || '';
   
-  const profile=DB.profile();
-  if(!profile.animals)profile.animals=[];
-  const isNew=editAnimalId==='new';
-  const entry={id:isNew?uid():editAnimalId,name,type:animalType,milks,rate,vaxDate,calvingDate,illness};
+  const profile = DB.profile();
+  if (!profile.animals) profile.animals = [];
+  const isNew = editAnimalId === 'new';
   
-  if(isNew)profile.animals.push(entry);
-  else{const i=profile.animals.findIndex(a=>a.id===editAnimalId);if(i>=0)profile.animals[i]=entry;}
+  let oldRate = 0;
+  if (!isNew) {
+    const existing = profile.animals.find(a => a.id === editAnimalId);
+    if (existing) oldRate = existing.rate || 0;
+  }
+  
+  const entry = { id: isNew ? uid() : editAnimalId, name, type: animalType, milks, rate, vaxDate, calvingDate, illness };
+  
+  if (isNew) profile.animals.push(entry);
+  else {
+    const i = profile.animals.findIndex(a => a.id === editAnimalId);
+    if (i >= 0) profile.animals[i] = entry;
+  }
   
   DB.saveProfile(profile);
   DB.log(isNew ? `Added new animal: ${name} (${animalType})` : `Updated animal details for: ${name}`, 'create');
-  cm('m-animal');renderMe();
+  cm('m-animal');
+  
+  // REAL-TIME UPDATE LOGIC: Ask user if they want to update the ongoing active sheet
+  if (!isNew && rate !== oldRate) {
+    const pages = DB.pages();
+    const activePage = pages.find(p => !p.locked && !p.trashed);
+    
+    if (activePage) {
+       const doUpdate = await appConfirm('Update Current Period?', `You changed the rate from ₹${oldRate} to ₹${rate}. Do you want to apply this new rate to your ongoing active record sheet?`);
+       if (doUpdate) {
+           // 1. Update the internal column definitions
+           activePage.cols.forEach(c => {
+               if ((c.type === 'milk_am' || c.type === 'milk_pm') && c.animal === editAnimalId) {
+                   c.animalRate = rate;
+               }
+           });
+           
+           // 2. Update the rows and recalculate totals
+           const rateCol = activePage.cols.find(c => c.type === 'rate_per_animal' && c.animal === editAnimalId);
+           activePage.rows.forEach(r => {
+               if (rateCol) {
+                   r[rateCol.id] = rate; // Update explicit row rate if present
+               }
+               r.total = computeRowTotal(r, activePage.cols, profile); // Recalculate daily total
+           });
+           
+           DB.savePages(pages);
+           showToast('Active period updated with the new rate.');
+           
+           // 3. Refresh the table UI if the user is currently looking at it
+           if (curDetailId === activePage.id) {
+               renderHome();
+           }
+       }
+    }
+  }
+  
+  renderMe();
 }
+
 
 async function removeAnimal(id){
   const p=DB.profile();
