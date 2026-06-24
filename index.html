@@ -1634,6 +1634,30 @@ function openQuickEntry() {
         </div>
       `;
     });
+
+    // MARK AS PAID TOGGLE & AMOUNT INPUT
+    html += `
+      <div class="qe-card anim-stagger d2" style="margin-top: 12px; padding: 14px;">
+        <div class="row gap2" style="justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:900; font-size:14px;">Log Payment</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:2px;">Record money received now</div>
+          </div>
+          <label class="tswitch">
+            <input type="checkbox" id="qe-payment-toggle" onchange="document.getElementById('qe-payment-amount-wrap').style.display = this.checked ? 'flex' : 'none'"/>
+            <div class="tslider"></div>
+          </label>
+        </div>
+        
+        <div id="qe-payment-amount-wrap" class="row gap2 w-100" style="display:none; justify-content:space-between; align-items:center; padding-top:12px; margin-top:12px; border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:11px; color:var(--success); font-weight:700; letter-spacing:0.5px; text-transform:uppercase;">Amount (₹)</div>
+          <div class="row gap1">
+            <span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span>
+            <input type="text" id="qe-payment-amount" class="qe-input qe-input-sm" readonly placeholder="0.0" onclick="setNumpadTarget('qe-payment-amount')"/>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   document.getElementById('qe-inputs').innerHTML = html;
@@ -1684,9 +1708,9 @@ function saveQuickEntry() {
   let shiftMilkAdded = false;
 
   qeContext.cols.forEach(c => {
-    const val = document.getElementById(`qe-input-${c.id}`)?.value || '';
-    if (val) shiftMilkAdded = true;
-    row[c.id] = val;
+    const valStr = document.getElementById(`qe-input-${c.id}`)?.value || '';
+    if (valStr) shiftMilkAdded = true;
+    row[c.id] = valStr;
     
     if (DB.profile().ratePerEntry !== false) {
        const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
@@ -1707,6 +1731,25 @@ function saveQuickEntry() {
   
   if(shiftMilkAdded) {
       DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)} via Quick Screen.`, 'update');
+  }
+
+  // HANDLE PAYMENT TOGGLE & CUSTOM AMOUNT
+  const paymentToggle = document.getElementById('qe-payment-toggle');
+  if (paymentToggle && paymentToggle.checked) {
+      const paidAmount = parseFloat(document.getElementById('qe-payment-amount')?.value) || 0;
+      
+      if (paidAmount > 0) {
+          const payments = DB.payments();
+          payments.unshift({
+              id: uid(),
+              type: 'received',
+              amount: paidAmount,
+              date: today(),
+              note: `Logged via Quick Entry (${qeContext.isPM ? 'PM' : 'AM'} shift)`
+          });
+          DB.savePayments(payments);
+          DB.log(`Logged payment received: ₹${paidAmount.toFixed(2)}`, 'payment');
+      }
   }
 
   document.getElementById('qe-active-content').style.display = 'none';
