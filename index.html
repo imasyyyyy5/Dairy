@@ -71,7 +71,7 @@ select{-webkit-appearance:none;}
 #onboarding, #quick-entry { z-index: 1000 !important; }
 
 /* LEVEL 2: Standard Modals (Spawned from the main app) */
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide { z-index: 2000 !important; }
+#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception { z-index: 2000 !important; }
 
 /* LEVEL 3: Secondary Pickers (Spawned FROM Level 2 Modals) */
 /* The Calendar MUST have a higher index than the New Page modal */
@@ -319,6 +319,17 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .pie-slice{transition:opacity .15s;}
 .pie-slice:hover{opacity:.8;}
 .g-legend-dot {display:inline-block;width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+
+/* DETAIL VIEW SWIPE PAGES (Instagram-style carousel) */
+.detail-dots{display:flex;justify-content:center;align-items:center;gap:5px;padding:8px 0 12px;}
+.ddot{width:6px;height:6px;border-radius:50%;background:var(--border2);transition:all .2s;}
+.ddot.on{background:#fff;width:16px;border-radius:3px;}
+
+/* HOUSEHOLD POURING */
+.hh-row{display:flex;align-items:center;gap:6px;font-size:11px;padding:6px 0;border-bottom:1px solid var(--bg2);}
+.hh-row:last-child{border-bottom:none;}
+.hh-row.exc{color:#e8b800;}
+.hh-mini-btn{width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:var(--bg2);border:1px solid var(--border);color:var(--sub);font-size:10px;}
 
 /* UTILS */
 .row{display:flex;align-items:center;}
@@ -600,6 +611,47 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <button class="btn bp" onclick="saveNewExpense()">Save Expense</button>
  </div>
 </div></div>
+<div class="moverlay" id="m-household" onclick="moi(event,'m-household')"><div class="mbox">
+ <div class="mh"><span class="mt" id="hh-title">Add Household</span><button class="mx" onclick="cm('m-household')">✕</button></div>
+
+ <div style="margin-bottom:9px;"><label class="flabel">Household / Person Name</label><input class="inp" id="hh-name" placeholder="e.g. Sharma House, Neighbour Ravi..."/></div>
+
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px;">
+  <div><label class="flabel">Daily Qty (L)</label><input class="inp" type="number" id="hh-qty" placeholder="e.g. 2"/></div>
+  <div><label class="flabel">Rate per Litre (₹)</label><input class="inp" type="number" id="hh-rate" placeholder="Default rate"/></div>
+ </div>
+
+ <div style="margin-bottom:9px;">
+  <label class="flabel">Start Date</label>
+  <button type="button" class="btn bd-trigger w-100" id="hh-start-date-trigger" onclick="openThemedCalendar('hh-start-date')">Choose Start Date</button>
+  <input type="hidden" id="hh-start-date"/>
+ </div>
+
+ <div class="mbody mb3" style="font-size:11px;">This amount &amp; rate repeats daily until you stop it, and will continue automatically into future record periods.</div>
+
+ <div class="row gap2 mb3" id="hh-stop-row" style="display:none;">
+  <button class="btn bs w-100" id="hh-stop-btn" onclick="toggleStopHousehold()">⏸ Stop Household</button>
+  <button class="btn bg w-100" style="color:var(--danger);" onclick="deleteHousehold()">🗑 Delete</button>
+ </div>
+
+ <div class="mact">
+  <button class="btn bs" onclick="cm('m-household')">Cancel</button>
+  <button class="btn bp" id="hh-btn" onclick="doSaveHousehold()">Add Household</button>
+ </div>
+</div></div>
+<div class="moverlay" id="m-hh-exception" onclick="moi(event,'m-hh-exception')"><div class="mbox">
+ <div class="mh"><span class="mt" id="hhe-title">Correction</span><button class="mx" onclick="cm('m-hh-exception')">✕</button></div>
+ <div class="mbody mb3">Editing entry for <b id="hhe-date-label" style="color:#fff;"></b>. You'll be asked whether this applies only to this day, or repeats going forward.</div>
+ <input type="hidden" id="hhe-date"/>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:15px;">
+  <div><label class="flabel">Qty (L)</label><input class="inp" type="number" id="hhe-qty" placeholder="0.0"/></div>
+  <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="number" id="hhe-rate" placeholder="0.0"/></div>
+ </div>
+ <div class="mact">
+  <button class="btn bs" onclick="cm('m-hh-exception')">Cancel</button>
+  <button class="btn bp" onclick="saveHHException()">Save</button>
+ </div>
+</div></div>
 
 
 <script>
@@ -681,11 +733,12 @@ async function buildBackupPayload(pretty) {
   const payments = Store.get('mdn_payments') || [];
   const trash = Store.get('mdn_trash') || [];
   const logs = Store.get('mdn_logs') || [];
+  const households = Store.get('mdn_households') || [];
 
   const activePages = allPages.filter(p => !p.locked);
   const clearedPages = allPages.filter(p => p.locked);
 
-  const archive = await compressArchive({ clearedPages, payments, trash, logs });
+  const archive = await compressArchive({ clearedPages, payments, trash, logs, households });
 
   const payload = {
     app: 'Milk Dairy Notebook',
@@ -709,6 +762,7 @@ async function restoreBackupPayload(payload) {
   Store.set('mdn_payments', archiveData.payments || []);
   Store.set('mdn_trash', archiveData.trash || []);
   Store.set('mdn_logs', archiveData.logs || []);
+  Store.set('mdn_households', archiveData.households || []);
 }
 
 //expenses
@@ -846,6 +900,8 @@ const DB={
   savePayments:(p)=>{ Store.set('mdn_payments',p); AutoBackup.trigger(); },
   trash:()=>Store.get('mdn_trash')||[],
   saveTrash:(t)=>{ Store.set('mdn_trash',t); AutoBackup.trigger(); },
+  households:()=>Store.get('mdn_households')||[],
+  saveHouseholds:(h)=>{ Store.set('mdn_households',h); AutoBackup.trigger(); },
   logs:()=>{
     const rawLogs = Store.get('mdn_logs')||[];
     const cleanLogs = rawLogs.filter(l => l && l.text && l.text !== 'undefined' && l.text.trim() !== '');
@@ -1313,6 +1369,77 @@ function pageSummary(p){
   return{milk,rev,cow,buf,goat,other};
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  HOUSEHOLD POURING (milk given daily to other households/people)
+//  Each household is a recurring daily entry (qty @ rate) that is
+//  computed live for any date range — meaning it automatically
+//  "continues" into every future record period until stopped.
+//  `changes` hold permanent qty/rate updates effective from a date
+//  onward ("repeat"); `exceptions` hold one-off single-day overrides.
+// ══════════════════════════════════════════════════════════════════
+function getHouseholdEffective(h, dateStr){
+  let qty = h.qty||0, rate = h.rate||0;
+  if(h.changes && h.changes.length){
+    for(const c of h.changes){
+      if(c.date <= dateStr){ qty = c.qty; rate = c.rate; } else break;
+    }
+  }
+  return {qty, rate};
+}
+function getHouseholdDayEntry(h, dateStr){
+  if(h.exceptions && h.exceptions[dateStr]){
+    const e = h.exceptions[dateStr];
+    return {qty: e.qty, rate: e.rate, isException: true};
+  }
+  const eff = getHouseholdEffective(h, dateStr);
+  return {qty: eff.qty, rate: eff.rate, isException: false};
+}
+function householdDaysInRange(h, startDate, endDate){
+  const out = [];
+  let d = startDate < h.startDate ? h.startDate : startDate;
+  let end = endDate;
+  if(h.stopped && h.stopDate && h.stopDate < end) end = h.stopDate;
+  if(d > end) return out;
+  let cur = d, guard = 0;
+  while(cur <= end && guard < 3660){ out.push(cur); cur = addDays(cur,1); guard++; }
+  return out;
+}
+function householdPageLedger(h, page){
+  return householdDaysInRange(h, page.startDate, page.endDate).map(dateStr=>{
+    const e = getHouseholdDayEntry(h, dateStr);
+    return {date: dateStr, qty: e.qty, rate: e.rate, amount: parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2)), isException: e.isException};
+  });
+}
+function pageHouseholdRevenue(page){
+  const households = DB.households();
+  let qty=0, amount=0;
+  households.forEach(h=>{
+    householdPageLedger(h, page).forEach(r=>{ qty+=r.qty; amount+=r.amount; });
+  });
+  return {qty: parseFloat(qty.toFixed(2)), amount: parseFloat(amount.toFixed(2))};
+}
+// All-time summary across every household's own active date range (independent of record pages)
+function householdAllTimeSummary(){
+  const households = DB.households();
+  const todayStr = today();
+  let rev=0, qty=0;
+  const perHousehold = households.map(h=>{
+    const endCalc = (h.stopped && h.stopDate) ? h.stopDate : todayStr;
+    let amt=0, q=0;
+    if(h.startDate <= endCalc){
+      let d = h.startDate, guard = 0;
+      while(d <= endCalc && guard < 3660){
+        const e = getHouseholdDayEntry(h, d);
+        amt += (e.qty||0)*(e.rate||0); q += (e.qty||0);
+        d = addDays(d,1); guard++;
+      }
+    }
+    rev += amt; qty += q;
+    return {id:h.id, name:h.name, amt: parseFloat(amt.toFixed(2)), qty: parseFloat(q.toFixed(2)), stopped: !!h.stopped};
+  });
+  return {rev: parseFloat(rev.toFixed(2)), qty: parseFloat(qty.toFixed(2)), perHousehold};
+}
+
 function createPage(startDate){
   const profile=DB.profile();
   const pLen = profile.periodLength || 10;
@@ -1336,6 +1463,8 @@ function createPage(startDate){
 let curTab='home',curDetailId=null;
 let meView='profile', gChartType='overall', gChartFilter='category';
 let editAnimalId=null,animalType='cow';
+let detailPageIdx=0; // 0 = record table, 1 = household pouring (Instagram-style swipe)
+let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null;
 
 let touchStartX = 0; let touchEndX = 0; let ignoreSwipe = false;
 const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
@@ -1366,7 +1495,13 @@ function handleSwipe() {
       return;
   }
 
-  if (curDetailId && diff > SWIPE_THRESHOLD) { closeDetail(); return; }
+  if (curDetailId) {
+      // Instagram-style carousel: page 0 = record table, page 1 = household pouring
+      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); return; }
+      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { detailPageIdx = 0; renderHome(); return; }
+      if (diff > SWIPE_THRESHOLD && detailPageIdx === 0) { closeDetail(); return; }
+      return;
+  }
 
   if (!curDetailId) {
       let currentIdx = TAB_ORDER.indexOf(curTab);
@@ -1529,17 +1664,13 @@ function finishOnboarding() {
 let justOnboarded = false;
 let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null };
 
-function getOrCreateActivePage() {
+// Returns today's active (unlocked, in-range) record page, or null.
+// NOTE: this intentionally does NOT auto-create a new page when none is
+// found — the person must create a new record sheet manually via "+ Record".
+function getActivePage() {
   const pages = DB.pages();
   const td = today();
-  let active = pages.find(p => !p.locked && td >= p.startDate && td <= p.endDate);
-  if (!active) {
-    active = createPage(td);
-    pages.unshift(active);
-    DB.savePages(pages);
-    DB.log(`Automatically created new ${DB.profile().periodLength}-day record sheet for ${fmtD(td)}.`, 'create');
-  }
-  return active;
+  return pages.find(p => !p.locked && td >= p.startDate && td <= p.endDate) || null;
 }
 
 function openQuickEntry() {
@@ -1560,11 +1691,16 @@ function openQuickEntry() {
 
   let page, row;
   try {
-    page = getOrCreateActivePage();
+    page = getActivePage();
+    if (!page) {
+      showToast("No active record sheet for today. Please create one first.", false);
+      setTimeout(() => { openFullApp(); openNewPageModal(); }, 400);
+      return;
+    }
     const td = today();
     row = page.rows.find(r => r.assignedDate === td);
   } catch (err) {
-    console.error('Failed to load/create today\'s record sheet:', err);
+    console.error('Failed to load today\'s record sheet:', err);
     showToast("Couldn't open today's record sheet. Please try again.", false);
     setTimeout(openFullApp, 1500);
     return;
@@ -1785,7 +1921,11 @@ function renderHomeContent(el){
   const profile=DB.profile();
   const trash=DB.trash();
   let rev=0,pend=0;
-  pages.forEach(p=>{const t=pageSummary(p);rev+=t.rev;if(!p.locked)pend+=t.rev;});
+  pages.forEach(p=>{
+    const t=pageSummary(p);rev+=t.rev;
+    if(!p.locked){ pend+=t.rev; pend+=pageHouseholdRevenue(p).amount; }
+  });
+  rev += householdAllTimeSummary().rev;
   const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   let html=`
    <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
@@ -1827,7 +1967,7 @@ function pageCardHTML(p){
   </button>`;
 }
 
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; renderHome();}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; renderHome();}
 
 function renderDetailView(el){
   const pages=DB.pages();
@@ -1845,20 +1985,9 @@ function renderDetailView(el){
      if(targetAnim) printLabel = targetAnim.name;
   }
 
-  let html=`
-   <div class="ph">
-    <div class="row gap2 mb3">
-     <button class="btn bg bsm" onclick="closeDetail()">×</button>
-     <div class="f1"></div>
-     <button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button>
-     <button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Edit Length</button>
-     <button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button>
-    </div>
-    <div class="eyebrow">${page.rows.length}-Day Period</div>
-    <div class="ptitle" style="font-size:17px;">${page.label}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;">Each row unlocks on its assigned date.</div>
-   </div>
-   
+  let bodyHtml;
+  if (detailPageIdx === 0) {
+    bodyHtml = `
    <div class="row gap2 mb3" style="padding:0 15px;">
       <button class="btn bs w-100" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:#fff;">
         <span style="font-size:13px; font-weight:700;">🔍 Filter: ${printLabel}</span>
@@ -1878,7 +2007,100 @@ function renderDetailView(el){
      <span style="font-size:14px;color:var(--muted);">${page.locked?'🔒':'🔓'}</span>
     </div>
    </div>`;
+  } else {
+    bodyHtml = `<div style="padding:0 15px 90px;">${renderHouseholdsPageHTML(page)}</div>`;
+  }
+
+  let html=`
+   <div class="ph">
+    <div class="row gap2 mb3">
+     <button class="btn bg bsm" onclick="closeDetail()">×</button>
+     <div class="f1"></div>
+     <button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button>
+     <button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Edit Length</button>
+     <button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button>
+    </div>
+    <div class="eyebrow">${page.rows.length}-Day Period</div>
+    <div class="ptitle" style="font-size:17px;">${page.label}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;">${detailPageIdx===0?'Each row unlocks on its assigned date.':'Milk given daily to other households — swipe right to go back.'}</div>
+   </div>
+
+   <div class="detail-dots">
+    <span class="ddot${detailPageIdx===0?' on':''}"></span>
+    <span class="ddot${detailPageIdx===1?' on':''}"></span>
+   </div>
+
+   ${bodyHtml}`;
   el.innerHTML=html;
+}
+
+function renderHouseholdsPageHTML(page){
+  const households = DB.households();
+  const periodTotal = pageHouseholdRevenue(page);
+
+  let listHtml = '';
+  if (!households.length) {
+    listHtml = `<div class="empty"><div class="eico">🏠</div><div class="etitle">No households yet</div><div class="esub">Track milk given daily to neighbours or other households, with automatic daily totals.</div></div>`;
+  } else {
+    households.forEach(h=>{
+      const ledger = householdPageLedger(h, page);
+      const sum = ledger.reduce((s,r)=>{s.qty+=r.qty;s.amount+=r.amount;return s;},{qty:0,amount:0});
+      const eff = getHouseholdEffective(h, page.endDate < today() ? page.endDate : today());
+      const excCount = ledger.filter(r=>r.isException).length;
+      const expanded = hhExpandedId === h.id;
+
+      listHtml += `
+       <div class="card2 mb2">
+        <div class="row gap2" style="cursor:pointer;" onclick="toggleHHExpand('${h.id}')">
+         <div class="f1 mw0">
+          <div class="row gap2" style="font-weight:700;font-size:13px;">
+           <span class="trunc">${h.name}</span>
+           ${h.stopped?'<span class="badge bc">Stopped</span>':''}
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">${fmt(eff.qty)}L/day @ ₹${fmt(eff.rate)}${excCount?` • ${excCount} correction${excCount>1?'s':''}`:''}</div>
+         </div>
+         <div class="tr">
+          <div style="font-weight:800;font-size:13px;">₹${fmt(sum.amount)}</div>
+          <div style="font-size:10px;color:var(--muted);">${fmt(sum.qty)}L this period</div>
+         </div>
+         <span style="font-size:10px;color:var(--sub);">${expanded?'▲':'▼'}</span>
+        </div>
+        ${expanded ? `
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+         ${ledger.length===0
+            ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">Not active during this period.</div>`
+            : ledger.map(r=>`
+              <div class="hh-row${r.isException?' exc':''}">
+               <span class="f1">${fmtDS(r.date)}${r.isException?' ✦':''}</span>
+               <span>${fmt(r.qty)}L</span>
+               <span>@₹${fmt(r.rate)}</span>
+               <span style="font-weight:700;min-width:52px;text-align:right;">₹${fmt(r.amount)}</span>
+               <button class="hh-mini-btn" onclick="event.stopPropagation();openHHExceptionModal('${h.id}','${r.date}')">✎</button>
+               ${r.isException?`<button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();removeHHException('${h.id}','${r.date}')">↺</button>`:''}
+              </div>`).join('')
+         }
+         <div class="row gap2 mt2" style="justify-content:flex-end;">
+          <button class="btn bs bsm" onclick="event.stopPropagation();openHouseholdModal('${h.id}')">Edit / Stop</button>
+         </div>
+        </div>` : ''}
+       </div>`;
+    });
+  }
+
+  return `
+   <div class="row gap2 mb3" style="justify-content:space-between;align-items:center;">
+    <div><div class="slabel" style="margin:0;">Household Pouring</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Recurring daily milk given to households</div></div>
+    <button class="btn bp bsm" onclick="openHouseholdModal('new')">+ Add</button>
+   </div>
+
+   <div class="card mb3">
+    <div class="row gap2" style="justify-content:space-between;">
+     <div><div class="eyebrow">This Period</div><div style="font-size:20px;font-weight:800;">₹${fmt(periodTotal.amount)}</div></div>
+     <div class="tr"><div class="eyebrow">Milk Given</div><div style="font-size:20px;font-weight:800;">${fmt(periodTotal.qty)}L</div></div>
+    </div>
+   </div>
+
+   <div class="sp2">${listHtml}</div>`;
 }
 
 function openFilterSheetModal(pageId) {
@@ -2055,6 +2277,7 @@ function renderGraphs(){
       <button class="ppill ${gChartType==='compare'?'on':''}" onclick="setGChart('compare')">Compare Periods</button>
       <button class="ppill ${gChartType==='pie_milk'?'on':''}" onclick="setGChart('pie_milk')">Milk Split</button>
       <button class="ppill ${gChartType==='pie_rev'?'on':''}" onclick="setGChart('pie_rev')">Rev Split</button>
+      <button class="ppill ${gChartType==='households'?'on':''}" onclick="setGChart('households')">🏠 Milkmen</button>
     </div>
     <div id="graph-container" style="padding:0 15px 90px;"></div>
   `;
@@ -2155,6 +2378,42 @@ function drawSelectedGraph() {
      container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Total Milk per Period (L)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
   }
   
+  else if(gChartType === 'households') {
+     const hhSummary = householdAllTimeSummary();
+     const data = hhSummary.perHousehold.filter(d=>d.amt>0);
+     if(!data.length) { container.innerHTML = `<div class="empty"><div class="esub">No household pouring revenue recorded yet.</div></div>`; return; }
+
+     const maxV = Math.max(...data.map(d=>d.amt), 1);
+     const barW = Math.floor(cW/data.length)-8;
+
+     [0, 0.5, 1].forEach(pct => {
+       const y = PAD.t + cH*(1-pct);
+       svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/>`;
+       svg += `<text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`;
+     });
+
+     data.forEach((d, i) => {
+        const x = PAD.l + (cW/data.length)*i + (cW/data.length - barW)/2;
+        const bH = Math.round((d.amt/maxV)*cH);
+        svg += `<rect class="chart-bar" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="3" fill="#e8b800"/>`;
+        if(bH>10) svg += `<text x="${x+barW/2}" y="${PAD.t+cH-bH-3}" text-anchor="middle" class="chart-val">${d.amt.toFixed(0)}</text>`;
+        const shortName = d.name.length>8 ? d.name.slice(0,7)+'…' : d.name;
+        svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${shortName}</text>`;
+     });
+
+     container.innerHTML = `
+      <div class="gchart-wrap mb3">
+       <div class="slabel mb2">Revenue from Milkmen — All Time (₹)</div>
+       <svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg>
+      </div>
+      <div class="gchart-wrap">
+       <div class="slabel mb2">All-Time Totals</div>
+       <div class="row gap2" style="justify-content:space-between;">
+        <div><div class="eyebrow">Revenue</div><div style="font-size:18px;font-weight:800;color:#e8b800;">₹${fmt(hhSummary.rev)}</div></div>
+        <div class="tr"><div class="eyebrow">Milk Given</div><div style="font-size:18px;font-weight:800;">${fmt(hhSummary.qty)}L</div></div>
+       </div>
+      </div>`;
+  }
   else if(gChartType === 'pie_milk' || gChartType === 'pie_rev') {
      const isRev = gChartType === 'pie_rev';
      const source = gChartFilter === 'category' ? cache.allTime.byCategory : cache.allTime.byName;
@@ -2245,11 +2504,25 @@ function renderCalc(){
   let totalEarned = 0, totalReceived = 0;
   pages.forEach(p => { totalEarned += pageSummary(p).rev; });
   DB.payments().forEach(p => { if(p.type==='received') totalReceived += parseFloat(p.amount)||0; });
-  
+
+  // Household (milkmen) pouring revenue — separate recurring stream
+  const hhSummary = householdAllTimeSummary();
+  totalEarned += hhSummary.rev;
+  let curHHRev = 0;
+  if (activePage) curHHRev = pageHouseholdRevenue(activePage).amount;
+
   // Calculate Expenses
   const exps = Store.get('mdn_expenses') || [];
   let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
   const netBal = totalEarned - totalReceived - totalExp;
+
+  let hhBreakdownHTML = hhSummary.perHousehold.slice(0,6).map(h => `
+      <div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
+          <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">${fmt(h.qty)}L given all-time</div></div>
+          <div style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(h.amt)}</div>
+      </div>
+  `).join('');
+  if (hhSummary.perHousehold.length === 0) hhBreakdownHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No households added yet</div>`;
 
   let expenseHTML = exps.slice(0, 5).map(e => `
       <div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
@@ -2267,7 +2540,20 @@ function renderCalc(){
      <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
      <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
      <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Period Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">🏠</span><div class="f1"><div style="font-weight:700;">Household Pouring (Period)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curHHRev)}</span></div>
     </div>
+   </div>
+
+   <div class="card mb4">
+    <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;">
+        <div class="slabel" style="margin:0;">Revenue from Milkmen (Households)</div>
+        <button class="btn bs bsm" onclick="openHouseholdsOverview()">Manage →</button>
+    </div>
+    <div class="row gap2 mb3" style="justify-content:space-between;">
+      <div><div class="eyebrow">All-Time Revenue</div><div style="font-size:18px;font-weight:800;color:#e8b800;">₹${fmt(hhSummary.rev)}</div></div>
+      <div class="tr"><div class="eyebrow">All-Time Milk Given</div><div style="font-size:18px;font-weight:800;">${fmt(hhSummary.qty)}L</div></div>
+    </div>
+    ${hhBreakdownHTML}
    </div>
    
    <div class="card mb4">
@@ -2282,6 +2568,7 @@ function renderCalc(){
     <div class="slabel mb3">Overall Accountability Ledger</div>
     <div class="sp2">
      <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Earned (All Time)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(totalEarned)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">🏠</span><div class="f1"><div style="font-weight:700;">— incl. Household Pouring</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(hhSummary.rev)}</span></div>
      <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
      <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${netBal>0?'#e8b800':netBal<0?'var(--success)':'#fff'};">${netBal>0?'₹'+fmt(netBal)+' due':netBal<0?'Overpaid ₹'+fmt(-netBal):'Settled'}</span></div>
     </div>
@@ -2628,6 +2915,184 @@ async function removeAnimal(id){
   renderMe();
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  HOUSEHOLD POURING — UI / modal logic
+// ══════════════════════════════════════════════════════════════════
+function toggleHHExpand(id){
+  hhExpandedId = (hhExpandedId===id) ? null : id;
+  renderHome();
+}
+
+function openHouseholdModal(id){
+  editHouseholdId = id;
+  const isNew = id === 'new';
+  document.getElementById('hh-title').textContent = isNew ? 'Add Household' : 'Edit Household';
+  document.getElementById('hh-btn').textContent = isNew ? 'Add Household' : 'Save Changes';
+  const stopRow = document.getElementById('hh-stop-row');
+
+  if (isNew) {
+    document.getElementById('hh-name').value = '';
+    document.getElementById('hh-qty').value = '';
+    document.getElementById('hh-rate').value = '';
+    document.getElementById('hh-start-date').value = today();
+    document.getElementById('hh-start-date-trigger').textContent = fmtD(today());
+    document.getElementById('hh-start-date-trigger').setAttribute('onclick', `openThemedCalendar('hh-start-date')`);
+    if (stopRow) stopRow.style.display = 'none';
+  } else {
+    const h = DB.households().find(x=>x.id===id);
+    if (!h) return;
+    document.getElementById('hh-name').value = h.name;
+    document.getElementById('hh-qty').value = h.qty || '';
+    document.getElementById('hh-rate').value = h.rate || '';
+    document.getElementById('hh-start-date').value = h.startDate;
+    document.getElementById('hh-start-date-trigger').textContent = fmtD(h.startDate);
+    document.getElementById('hh-start-date-trigger').setAttribute('onclick', `openThemedCalendar('hh-start-date')`);
+    if (stopRow) {
+      stopRow.style.display = 'flex';
+      document.getElementById('hh-stop-btn').textContent = h.stopped ? '▶ Resume Household' : '⏸ Stop Household';
+    }
+  }
+  om('m-household');
+}
+
+function doSaveHousehold(){
+  const name = document.getElementById('hh-name').value.trim();
+  const qty = parseFloat(document.getElementById('hh-qty').value) || 0;
+  const rate = parseFloat(document.getElementById('hh-rate').value) || 0;
+  const startDate = document.getElementById('hh-start-date').value || today();
+
+  if (!name) return appAlert('Missing Field', 'Please enter a household or person name.');
+  if (qty <= 0) return appAlert('Missing Field', 'Please enter a valid daily quantity.');
+
+  const households = DB.households();
+  const isNew = editHouseholdId === 'new';
+
+  if (isNew) {
+    households.unshift({
+      id: uid(), name, qty, rate, startDate,
+      stopped: false, stopDate: null,
+      changes: [], exceptions: {},
+      createdAt: new Date().toISOString()
+    });
+    DB.log(`Added new household pouring: ${name} (${qty}L/day @ ₹${rate})`, 'create');
+  } else {
+    const h = households.find(x=>x.id===editHouseholdId);
+    if (h) { h.name = name; h.qty = qty; h.rate = rate; h.startDate = startDate; }
+    DB.log(`Updated household pouring details: ${name}`, 'update');
+  }
+  DB.saveHouseholds(households);
+  cm('m-household');
+  renderHome(); renderCalc(); renderGraphs();
+}
+
+async function toggleStopHousehold(){
+  const households = DB.households();
+  const h = households.find(x=>x.id===editHouseholdId);
+  if (!h) return;
+
+  if (h.stopped) {
+    const agreed = await appConfirm('Resume Household?', `Resume daily pouring for ${h.name} from today?`);
+    if (!agreed) return;
+    h.stopped = false; h.stopDate = null;
+    if (h.startDate > today()) h.startDate = today();
+    DB.log(`Resumed household pouring: ${h.name}`, 'update');
+  } else {
+    const agreed = await appConfirm('Stop Household?', `Stop daily pouring for ${h.name}? Past records will be kept; no new daily entries will be added from today onward.`);
+    if (!agreed) return;
+    h.stopped = true;
+    h.stopDate = addDays(today(), -1);
+    DB.log(`Stopped household pouring: ${h.name}`, 'delete');
+  }
+  DB.saveHouseholds(households);
+  cm('m-household');
+  renderHome(); renderCalc(); renderGraphs();
+}
+
+async function deleteHousehold(){
+  const households = DB.households();
+  const h = households.find(x=>x.id===editHouseholdId);
+  if (!h) return;
+  const agreed = await appConfirm('Delete Household?', `Permanently delete all records for ${h.name}? This cannot be undone.`);
+  if (!agreed) return;
+  DB.saveHouseholds(households.filter(x=>x.id!==editHouseholdId));
+  DB.log(`Deleted household pouring: ${h.name}`, 'delete');
+  cm('m-household');
+  renderHome(); renderCalc(); renderGraphs();
+}
+
+function openHHExceptionModal(householdId, dateStr){
+  hhExceptionTargetId = householdId;
+  const h = DB.households().find(x=>x.id===householdId);
+  if (!h) return;
+  const eff = getHouseholdDayEntry(h, dateStr);
+  document.getElementById('hhe-title').textContent = `Correction — ${h.name}`;
+  document.getElementById('hhe-date-label').textContent = fmtD(dateStr);
+  document.getElementById('hhe-date').value = dateStr;
+  document.getElementById('hhe-qty').value = eff.qty || '';
+  document.getElementById('hhe-rate').value = eff.rate || '';
+  om('m-hh-exception');
+}
+
+async function saveHHException(){
+  const dateStr = document.getElementById('hhe-date').value;
+  const qty = parseFloat(document.getElementById('hhe-qty').value) || 0;
+  const rate = parseFloat(document.getElementById('hhe-rate').value) || 0;
+  if (qty <= 0) return appAlert('Missing Field', 'Please enter a valid quantity.');
+
+  const scope = await appChoice(
+    'Apply This Change',
+    'Is this different amount just for this one day, or should it repeat going forward from this date?',
+    [ {label:'Only Today', value:'once'}, {label:'Repeat From This Date', value:'repeat'} ]
+  );
+  if (!scope) return; // dismissed
+
+  const households = DB.households();
+  const h = households.find(x=>x.id===hhExceptionTargetId);
+  if (!h) return;
+
+  if (scope === 'once') {
+    if (!h.exceptions) h.exceptions = {};
+    h.exceptions[dateStr] = {qty, rate};
+    DB.log(`Added one-time correction for ${h.name} on ${fmtD(dateStr)}`, 'update');
+  } else {
+    if (!h.changes) h.changes = [];
+    h.changes = h.changes.filter(c=>c.date!==dateStr);
+    h.changes.push({date: dateStr, qty, rate});
+    h.changes.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    // A repeating change supersedes any later one-off exceptions
+    if (h.exceptions) Object.keys(h.exceptions).forEach(d=>{ if (d >= dateStr) delete h.exceptions[d]; });
+    DB.log(`Updated recurring qty/rate for ${h.name} from ${fmtD(dateStr)}`, 'update');
+  }
+  DB.saveHouseholds(households);
+  cm('m-hh-exception');
+  renderHome(); renderCalc(); renderGraphs();
+}
+
+function removeHHException(householdId, dateStr){
+  const households = DB.households();
+  const h = households.find(x=>x.id===householdId);
+  if (!h || !h.exceptions || !h.exceptions[dateStr]) return;
+  delete h.exceptions[dateStr];
+  DB.saveHouseholds(households);
+  DB.log(`Removed correction for ${h.name} on ${fmtD(dateStr)}`, 'delete');
+  renderHome(); renderCalc(); renderGraphs();
+}
+
+// Jump straight to the household pouring page of the most relevant record sheet
+function openHouseholdsOverview(){
+  const pages = DB.pages().filter(p=>!p.trashed);
+  if (!pages.length) { appAlert('No Record Sheet', 'Create a record sheet from the Home tab first — you can manage household pouring from within it.'); return; }
+  const active = pages.find(p=>!p.locked) || pages[0];
+  curDetailId = active.id; detailPageIdx = 1; currentTableFilter = 'all'; hhExpandedId = null;
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('p-home').classList.add('active');
+  const homeBtn = document.querySelector('.nb[onclick*="home"]');
+  if (homeBtn) homeBtn.classList.add('on');
+  curTab = 'home';
+  renderHome();
+}
+
 // Returns the latest endDate across all non-trashed pages, or null if none exist.
 function getLatestPageEndDate() {
   const pages = DB.pages().filter(p => !p.trashed);
@@ -2684,6 +3149,8 @@ function doNewPage() {
 function closeDetail(){
   curDetailId=null;
   currentTableFilter='all';
+  detailPageIdx=0;
+  hhExpandedId=null;
   renderHome();
 }
 
