@@ -644,7 +644,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div class="mbody mb3">Editing entry for <b id="hhe-date-label" style="color:#fff;"></b>. You'll be asked whether this applies only to this day, or repeats going forward.</div>
  <input type="hidden" id="hhe-date"/>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:15px;">
-  <div><label class="flabel">Qty (L)</label><input class="inp" type="number" id="hhe-qty" placeholder="0.0"/></div>
+  <div><label class="flabel">Qty (L) — 0 for no pour</label><input class="inp" type="number" id="hhe-qty" placeholder="0.0"/></div>
   <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="number" id="hhe-rate" placeholder="0.0"/></div>
  </div>
  <div class="mact">
@@ -652,6 +652,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <button class="btn bp" onclick="saveHHException()">Save</button>
  </div>
 </div></div>
+<input type="hidden" id="hh-correction-date-holder"/>
 
 
 <script>
@@ -1245,10 +1246,12 @@ let activeCalendarTargetInputId = '';
 let activeCalendarMinDate = null;
 let calendarCurrentYear = new Date().getFullYear();
 let calendarCurrentMonth = new Date().getMonth();
+let calendarOnSelectCallback = null;
 
-function openThemedCalendar(targetHiddenInputId, minDate = null) {
+function openThemedCalendar(targetHiddenInputId, minDate = null, onSelect = null) {
   activeCalendarTargetInputId = targetHiddenInputId;
   activeCalendarMinDate = minDate;
+  calendarOnSelectCallback = onSelect;
   const currentVal = document.getElementById(targetHiddenInputId).value || minDate || today();
   const [y, m, d] = currentVal.split('-').map(Number);
   calendarCurrentYear = y; calendarCurrentMonth = m - 1;
@@ -1295,6 +1298,11 @@ function selectCalendarDate(isoDateStr) {
   const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
   if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
   cm('m-calendar-sheet');
+  if (calendarOnSelectCallback) {
+    const cb = calendarOnSelectCallback;
+    calendarOnSelectCallback = null;
+    cb(isoDateStr);
+  }
 }
 function defaultColumns(profile){
   const cols=[ {id:'date',name:'Date',type:'date',locked:true} ];
@@ -1438,6 +1446,33 @@ function householdAllTimeSummary(){
     return {id:h.id, name:h.name, amt: parseFloat(amt.toFixed(2)), qty: parseFloat(q.toFixed(2)), stopped: !!h.stopped};
   });
   return {rev: parseFloat(rev.toFixed(2)), qty: parseFloat(qty.toFixed(2)), perHousehold};
+}
+
+// Amount currently owed by a household, counted from the day after it was
+// last marked "Paid" (or from its own startDate if never paid) up to today
+// (or its stopDate, if stopped). This is independent of which record page
+// happens to be open, so a backdated household is always calculated
+// correctly from the day it actually began, not from any page's range.
+function householdDue(h){
+  const start = h.paidThrough ? addDays(h.paidThrough, 1) : h.startDate;
+  const end = (h.stopped && h.stopDate) ? h.stopDate : today();
+  if (start > end) return {qty:0, amount:0, days:0};
+  let qty=0, amount=0, days=0, d=start, guard=0;
+  while(d <= end && guard < 3660){
+    const e = getHouseholdDayEntry(h, d);
+    qty += (e.qty||0); amount += (e.qty||0)*(e.rate||0); days++;
+    d = addDays(d,1); guard++;
+  }
+  return {qty: parseFloat(qty.toFixed(2)), amount: parseFloat(amount.toFixed(2)), days};
+}
+function householdsTotalDue(){
+  return DB.households().reduce((s,h)=>s+householdDue(h).amount,0);
+}
+function householdStatusLabel(h){
+  const t = today();
+  if (h.startDate > t) return `Starts ${fmtD(h.startDate)}`;
+  if (h.stopped) return `Stopped ${h.stopDate?fmtD(h.stopDate):''}`;
+  return `Active since ${fmtD(h.startDate)}`;
 }
 
 function createPage(startDate){
@@ -2043,11 +2078,15 @@ function renderHouseholdsPageHTML(page){
     listHtml = `<div class="empty"><div class="eico">🏠</div><div class="etitle">No households yet</div><div class="esub">Track milk given daily to neighbours or other households, with automatic daily totals.</div></div>`;
   } else {
     households.forEach(h=>{
-      const ledger = householdPageLedger(h, page);
-      const sum = ledger.reduce((s,r)=>{s.qty+=r.qty;s.amount+=r.amount;return s;},{qty:0,amount:0});
-      const eff = getHouseholdEffective(h, page.endDate < today() ? page.endDate : today());
-      const excCount = ledger.filter(r=>r.isException).length;
+      // Status & dues are calculated from the household's own start date
+      // (and last "Paid" mark) — never from whichever record page happens
+      // to be open, so a backdated household always shows correctly.
+      const eff = getHouseholdEffective(h, today());
+      const due = householdDue(h);
+      const status = householdStatusLabel(h);
+      const exceptions = Object.keys(h.exceptions||{}).sort().reverse();
       const expanded = hhExpandedId === h.id;
+      const isPaidUp = due.amount <= 0;
 
       listHtml += `
        <div class="card2 mb2">
@@ -2056,30 +2095,39 @@ function renderHouseholdsPageHTML(page){
           <div class="row gap2" style="font-weight:700;font-size:13px;">
            <span class="trunc">${h.name}</span>
            ${h.stopped?'<span class="badge bc">Stopped</span>':''}
+           ${isPaidUp?'<span class="badge" style="color:var(--success);border-color:var(--success);">✓ Paid</span>':''}
           </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px;">${fmt(eff.qty)}L/day @ ₹${fmt(eff.rate)}${excCount?` • ${excCount} correction${excCount>1?'s':''}`:''}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">${fmt(eff.qty)}L/day @ ₹${fmt(eff.rate)} • ${status}${exceptions.length?` • ${exceptions.length} correction${exceptions.length>1?'s':''}`:''}</div>
          </div>
          <div class="tr">
-          <div style="font-weight:800;font-size:13px;">₹${fmt(sum.amount)}</div>
-          <div style="font-size:10px;color:var(--muted);">${fmt(sum.qty)}L this period</div>
+          <div style="font-weight:800;font-size:13px;color:${isPaidUp?'#fff':'#e8b800'};">₹${fmt(due.amount)}</div>
+          <div style="font-size:10px;color:var(--muted);">${isPaidUp?'settled':'due'}</div>
          </div>
          <span style="font-size:10px;color:var(--sub);">${expanded?'▲':'▼'}</span>
         </div>
         ${expanded ? `
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
-         ${ledger.length===0
-            ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">Not active during this period.</div>`
-            : ledger.map(r=>`
-              <div class="hh-row${r.isException?' exc':''}">
-               <span class="f1">${fmtDS(r.date)}${r.isException?' ✦':''}</span>
-               <span>${fmt(r.qty)}L</span>
-               <span>@₹${fmt(r.rate)}</span>
-               <span style="font-weight:700;min-width:52px;text-align:right;">₹${fmt(r.amount)}</span>
-               <button class="hh-mini-btn" onclick="event.stopPropagation();openHHExceptionModal('${h.id}','${r.date}')">✎</button>
-               ${r.isException?`<button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();removeHHException('${h.id}','${r.date}')">↺</button>`:''}
-              </div>`).join('')
+         <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;">
+          <div style="font-size:11px;color:var(--muted);">${status}${due.days?` • ${due.days} day${due.days>1?'s':''} unpaid, ${fmt(due.qty)}L`:''}</div>
+          <button class="btn ${isPaidUp?'bs':'bp'} bsm" onclick="event.stopPropagation();markHouseholdPaid('${h.id}')">${isPaidUp?'↺ Reopen':'✓ Mark Paid'}</button>
+         </div>
+         ${exceptions.length===0
+            ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No corrections yet — everyday amount is ${fmt(eff.qty)}L @ ₹${fmt(eff.rate)}.</div>`
+            : exceptions.map(dateStr=>{
+                const e = h.exceptions[dateStr];
+                return `
+              <div class="hh-row exc">
+               <span class="f1">${fmtDS(dateStr)} ✦</span>
+               <span>${fmt(e.qty)}L</span>
+               <span>@₹${fmt(e.rate)}</span>
+               <span style="font-weight:700;min-width:52px;text-align:right;">₹${fmt((e.qty||0)*(e.rate||0))}</span>
+               <button class="hh-mini-btn" onclick="event.stopPropagation();openHHExceptionModal('${h.id}','${dateStr}')">✎</button>
+               <button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();removeHHException('${h.id}','${dateStr}')">↺</button>
+              </div>`;
+              }).join('')
          }
          <div class="row gap2 mt2" style="justify-content:flex-end;">
+          <button class="btn bs bsm" onclick="event.stopPropagation();openHHAddCorrection('${h.id}')">＋ Add Correction</button>
           <button class="btn bs bsm" onclick="event.stopPropagation();openHouseholdModal('${h.id}')">Edit / Stop</button>
          </div>
         </div>` : ''}
@@ -2094,9 +2142,13 @@ function renderHouseholdsPageHTML(page){
    </div>
 
    <div class="card mb3">
-    <div class="row gap2" style="justify-content:space-between;">
+    <div class="row gap2 mb2" style="justify-content:space-between;">
      <div><div class="eyebrow">This Period</div><div style="font-size:20px;font-weight:800;">₹${fmt(periodTotal.amount)}</div></div>
      <div class="tr"><div class="eyebrow">Milk Given</div><div style="font-size:20px;font-weight:800;">${fmt(periodTotal.qty)}L</div></div>
+    </div>
+    <div class="row gap2" style="justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);">
+     <div style="font-size:11px;color:var(--muted);">Total Due — All Households</div>
+     <div style="font-weight:800;font-size:14px;color:${householdsTotalDue()>0?'#e8b800':'#fff'};">₹${fmt(householdsTotalDue())}</div>
     </div>
    </div>
 
@@ -2277,7 +2329,7 @@ function renderGraphs(){
       <button class="ppill ${gChartType==='compare'?'on':''}" onclick="setGChart('compare')">Compare Periods</button>
       <button class="ppill ${gChartType==='pie_milk'?'on':''}" onclick="setGChart('pie_milk')">Milk Split</button>
       <button class="ppill ${gChartType==='pie_rev'?'on':''}" onclick="setGChart('pie_rev')">Rev Split</button>
-      <button class="ppill ${gChartType==='households'?'on':''}" onclick="setGChart('households')">🏠 Milkmen</button>
+      <button class="ppill ${gChartType==='households'?'on':''}" onclick="setGChart('households')">🏠 Households</button>
     </div>
     <div id="graph-container" style="padding:0 15px 90px;"></div>
   `;
@@ -2501,28 +2553,38 @@ function renderCalc(){
     }
   }
 
-  let totalEarned = 0, totalReceived = 0;
-  pages.forEach(p => { totalEarned += pageSummary(p).rev; });
-  DB.payments().forEach(p => { if(p.type==='received') totalReceived += parseFloat(p.amount)||0; });
+  // ── MILKMEN LEDGER ───────────────────────────────────────────────
+  // This is the account for the main record-sheet production only.
+  // Money logged via Quick Entry's "Log Payment" always lands here.
+  let milkmenEarned = 0, milkmenReceived = 0;
+  pages.forEach(p => { milkmenEarned += pageSummary(p).rev; });
+  DB.payments().forEach(p => { if(p.type==='received') milkmenReceived += parseFloat(p.amount)||0; });
 
-  // Household (milkmen) pouring revenue — separate recurring stream
+  // Calculate Expenses (tied to the milkmen/production account)
+  const exps = Store.get('mdn_expenses') || [];
+  let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
+  const milkmenNetBal = milkmenEarned - milkmenReceived - totalExp;
+
+  // ── HOUSEHOLDS LEDGER ────────────────────────────────────────────
+  // A fully separate account: each household owes for milk poured since
+  // its own start date (or last "Paid" mark) — no shared pot with milkmen.
   const hhSummary = householdAllTimeSummary();
-  totalEarned += hhSummary.rev;
+  const households = DB.households();
+  const hhTotalDue = householdsTotalDue();
   let curHHRev = 0;
   if (activePage) curHHRev = pageHouseholdRevenue(activePage).amount;
 
-  // Calculate Expenses
-  const exps = Store.get('mdn_expenses') || [];
-  let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
-  const netBal = totalEarned - totalReceived - totalExp;
-
-  let hhBreakdownHTML = hhSummary.perHousehold.slice(0,6).map(h => `
-      <div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
-          <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">${fmt(h.qty)}L given all-time</div></div>
-          <div style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(h.amt)}</div>
+  let hhBreakdownHTML = households.slice(0,8).map(h => {
+      const due = householdDue(h);
+      const isPaidUp = due.amount <= 0;
+      return `
+      <div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;align-items:center;">
+          <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">${householdStatusLabel(h)}</div></div>
+          <div class="tr"><div style="font-weight:800;font-size:14px;color:${isPaidUp?'#fff':'#e8b800'};">₹${fmt(due.amount)}</div><div style="font-size:10px;color:var(--muted);">${isPaidUp?'settled':'due'}</div></div>
+          <button class="btn ${isPaidUp?'bs':'bp'} bsm" style="margin-left:8px;" onclick="markHouseholdPaid('${h.id}')">${isPaidUp?'✓':'Mark Paid'}</button>
       </div>
-  `).join('');
-  if (hhSummary.perHousehold.length === 0) hhBreakdownHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No households added yet</div>`;
+  `; }).join('');
+  if (households.length === 0) hhBreakdownHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No households added yet</div>`;
 
   let expenseHTML = exps.slice(0, 5).map(e => `
       <div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
@@ -2539,19 +2601,31 @@ function renderCalc(){
     <div class="sp2">
      <div class="payrow"><span style="font-size:18px;">📈</span><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
      <div class="payrow"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:#fff;">${fmt(curMilk)} L</span></div>
-     <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Period Revenue</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">💰</span><div class="f1"><div style="font-weight:700;">Period Revenue (Milkmen)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
      <div class="payrow"><span style="font-size:18px;">🏠</span><div class="f1"><div style="font-weight:700;">Household Pouring (Period)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curHHRev)}</span></div>
     </div>
    </div>
 
    <div class="card mb4">
+    <div class="slabel mb3">Milkmen Ledger</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">From your main record sheets. Payments logged via Quick Entry apply here only.</div>
+    <div class="sp2">
+     <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Earned (All Time)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(milkmenEarned)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">💵</span><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenReceived)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
+     <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'#fff'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
+    </div>
+   </div>
+
+   <div class="card mb4">
     <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;">
-        <div class="slabel" style="margin:0;">Revenue from Milkmen (Households)</div>
+        <div class="slabel" style="margin:0;">Households Ledger</div>
         <button class="btn bs bsm" onclick="openHouseholdsOverview()">Manage →</button>
     </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">Separate account per household. No amounts — just a paid checkmark once you've collected from them.</div>
     <div class="row gap2 mb3" style="justify-content:space-between;">
       <div><div class="eyebrow">All-Time Revenue</div><div style="font-size:18px;font-weight:800;color:#e8b800;">₹${fmt(hhSummary.rev)}</div></div>
-      <div class="tr"><div class="eyebrow">All-Time Milk Given</div><div style="font-size:18px;font-weight:800;">${fmt(hhSummary.qty)}L</div></div>
+      <div class="tr"><div class="eyebrow">Total Due Now</div><div style="font-size:18px;font-weight:800;color:${hhTotalDue>0?'#e8b800':'#fff'};">₹${fmt(hhTotalDue)}</div></div>
     </div>
     ${hhBreakdownHTML}
    </div>
@@ -2562,16 +2636,6 @@ function renderCalc(){
         <button class="btn bp bsm" onclick="openExpenseModal()">+ Add</button>
     </div>
     ${expenseHTML}
-   </div>
-   
-   <div class="card mb4">
-    <div class="slabel mb3">Overall Accountability Ledger</div>
-    <div class="sp2">
-     <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Earned (All Time)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(totalEarned)}</span></div>
-     <div class="payrow"><span style="font-size:18px;">🏠</span><div class="f1"><div style="font-weight:700;">— incl. Household Pouring</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(hhSummary.rev)}</span></div>
-     <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
-     <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${netBal>0?'#e8b800':netBal<0?'var(--success)':'#fff'};">${netBal>0?'₹'+fmt(netBal)+' due':netBal<0?'Overpaid ₹'+fmt(-netBal):'Settled'}</span></div>
-    </div>
    </div>
 
    <div class="card">
@@ -2970,7 +3034,7 @@ function doSaveHousehold(){
   if (isNew) {
     households.unshift({
       id: uid(), name, qty, rate, startDate,
-      stopped: false, stopDate: null,
+      stopped: false, stopDate: null, paidThrough: null,
       changes: [], exceptions: {},
       createdAt: new Date().toISOString()
     });
@@ -3008,6 +3072,29 @@ async function toggleStopHousehold(){
   renderHome(); renderCalc(); renderGraphs();
 }
 
+// Marks a household "Paid" up to today (or its stop date), clearing its
+// due amount. This is a plain paid/unpaid checkmark — no money amount is
+// entered here, unlike milkmen payments logged via Quick Entry.
+async function markHouseholdPaid(id){
+  const households = DB.households();
+  const h = households.find(x=>x.id===id);
+  if (!h) return;
+  const due = householdDue(h);
+  if (due.amount > 0) {
+    const agreed = await appConfirm('Mark as Paid?', `Mark ${h.name} as paid for the outstanding ₹${fmt(due.amount)} (${fmt(due.qty)}L)? This only records a paid checkmark — no amount is added to your Milkmen ledger.`);
+    if (!agreed) return;
+    h.paidThrough = (h.stopped && h.stopDate) ? h.stopDate : today();
+    DB.log(`Marked ${h.name} as paid (₹${fmt(due.amount)})`, 'payment');
+  } else {
+    const agreed = await appConfirm('Reopen Dues?', `Reopen ${h.name}'s dues from ${fmtD(h.startDate)}? This undoes the last "Paid" mark.`);
+    if (!agreed) return;
+    h.paidThrough = null;
+    DB.log(`Reopened dues for ${h.name}`, 'update');
+  }
+  DB.saveHouseholds(households);
+  renderHome(); renderCalc();
+}
+
 async function deleteHousehold(){
   const households = DB.households();
   const h = households.find(x=>x.id===editHouseholdId);
@@ -3033,11 +3120,21 @@ function openHHExceptionModal(householdId, dateStr){
   om('m-hh-exception');
 }
 
+// Lets the user pick ANY date (not just ones already listed) and add a
+// one-off or repeating correction for it — including a 0L "no pour" day.
+function openHHAddCorrection(householdId){
+  const holder = document.getElementById('hh-correction-date-holder');
+  holder.value = '';
+  openThemedCalendar('hh-correction-date-holder', null, (dateStr) => {
+    openHHExceptionModal(householdId, dateStr);
+  });
+}
+
 async function saveHHException(){
   const dateStr = document.getElementById('hhe-date').value;
   const qty = parseFloat(document.getElementById('hhe-qty').value) || 0;
   const rate = parseFloat(document.getElementById('hhe-rate').value) || 0;
-  if (qty <= 0) return appAlert('Missing Field', 'Please enter a valid quantity.');
+  if (qty < 0 || rate < 0) return appAlert('Invalid Value', 'Quantity and rate can\'t be negative — but 0 is fine for a day with no pouring.');
 
   const scope = await appChoice(
     'Apply This Change',
