@@ -53,7 +53,7 @@ select{-webkit-appearance:none;}
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
 #m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment { z-index: 2000 !important; }
-#m-calendar-sheet { z-index: 3000 !important; }
+#m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
 #splash, #error-screen { z-index: 9999 !important; }
@@ -442,6 +442,11 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
 </div></div>
 
+<div class="moverlay" id="m-select-sheet" onclick="moi(event,'m-select-sheet')"><div class="mbox">
+ <div class="mh"><span class="mt" id="select-sheet-title">Choose Option</span><button class="mx" onclick="cm('m-select-sheet')">✕</button></div>
+ <div id="select-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:4px;"></div>
+</div></div>
+
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
  <div class="mh"><span class="mt" id="mnp-modal-title">New Record</span><button class="mx" onclick="cm('m-newpage')">✕</button></div>
  <div class="mbody mb3">Choose the start date. Each row unlocks only on its corresponding date.</div>
@@ -489,7 +494,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
      <div><label class="flabel">Daily Qty (L)</label><input class="inp" type="number" id="hh-qty" placeholder="e.g. 2"/></div>
      <div>
       <label class="flabel">Rate (₹/L)</label>
-      <select class="inp" id="hh-rate-select" onchange="handleHHRateSelectChange()"></select>
+      <button type="button" class="btn bd-trigger w-100" id="hh-rate-select-trigger" onclick="openHHRatePicker()">Select Rate...</button>
+      <input type="hidden" id="hh-rate-select"/>
       <input class="inp mt2" style="margin-top:6px;display:none;" type="number" id="hh-rate-custom" placeholder="Enter custom rate"/>
      </div>
     </div>
@@ -1012,6 +1018,24 @@ function confirmCalMultiSelection(){
 }
 function cancelCalMultiSelection(){ calSelectedDates = new Set(); cm('m-calendar-sheet'); }
 
+// ---- Generic app-themed replacement for native <select> dropdowns (avoids the OS-styled picker) ----
+let themedSelectOnPick = null;
+function openThemedSelect(title, options, currentValue, onPick){
+  // options: [{value, label}]
+  document.getElementById('select-sheet-title').textContent = title || 'Choose Option';
+  themedSelectOnPick = onPick;
+  const html = options.map(o => {
+    const active = String(o.value) === String(currentValue);
+    return `<button class="filter-opt-btn${active?' active':''}" onclick="pickThemedSelect('${String(o.value).replace(/'/g,"\\'")}')">${o.label}${active?' ✓':''}</button>`;
+  }).join('');
+  document.getElementById('select-sheet-options').innerHTML = html;
+  om('m-select-sheet');
+}
+function pickThemedSelect(value){
+  cm('m-select-sheet');
+  if (themedSelectOnPick) { const cb = themedSelectOnPick; themedSelectOnPick = null; cb(value); }
+}
+
 (function setupCalendarDrag(){
   const container = document.getElementById('calendar-days-container');
   if (!container) return;
@@ -1028,17 +1052,25 @@ function cancelCalMultiSelection(){ calSelectedDates = new Set(); cm('m-calendar
     calSelectedDates = new Set([...calSelectedDates, ...range]);
     if (!calDrawScheduled) { calDrawScheduled = true; requestAnimationFrame(() => { calDrawScheduled = false; drawCalendarGrid(); updateCalMultiCount(); }); }
   }
+  let calTouchStartX = 0, calTouchStartY = 0, calMovedEnough = false;
+  const DRAG_MOVE_THRESHOLD = 10; // px of finger travel before a touch counts as a drag, not a tap
   container.addEventListener('touchstart', e => {
     if (!calMultiMode) return;
     const t = e.touches[0]; const dateStr = dayFromPoint(t.clientX, t.clientY);
     if (!dateStr) return;
-    calDragging = true; calDragAnchor = dateStr;
-    calSelectedDates.add(dateStr);
-    drawCalendarGrid(); updateCalMultiCount();
+    calTouchStartX = t.clientX; calTouchStartY = t.clientY; calMovedEnough = false;
+    calDragging = false; calDragAnchor = dateStr; // anchor recorded, but nothing selected yet — plain tap will toggle via onclick
   }, {passive: true});
   container.addEventListener('touchmove', e => {
-    if (!calMultiMode || !calDragging) return;
+    if (!calMultiMode || !calDragAnchor) return;
     const t = e.touches[0];
+    if (!calMovedEnough) {
+      const dx = Math.abs(t.clientX - calTouchStartX), dy = Math.abs(t.clientY - calTouchStartY);
+      if (dx < DRAG_MOVE_THRESHOLD && dy < DRAG_MOVE_THRESHOLD) return; // still just a tap so far
+      calMovedEnough = true; calDragging = true;
+      calSelectedDates.add(calDragAnchor); // real drag started — seed selection with the anchor day
+      drawCalendarGrid(); updateCalMultiCount();
+    }
     const rect = container.getBoundingClientRect();
     // Edge detection: finger dragged outward past the grid's left/right bounds -> flip month
     if (t.clientX <= rect.left) {
@@ -1052,7 +1084,9 @@ function cancelCalMultiSelection(){ calSelectedDates = new Set(); cm('m-calendar
   }, {passive: false});
   function endDrag(){
     if (calEdgeNavTimer) { clearTimeout(calEdgeNavTimer); calEdgeNavTimer = null; }
+    // Only suppress the upcoming click (onCalDayTap) if this touch was an actual drag, not a plain tap.
     if (calDragging) { setTimeout(() => { calDragging = false; calDragAnchor = null; }, 50); }
+    else { calDragAnchor = null; }
   }
   container.addEventListener('touchend', endDrag, {passive: true});
   container.addEventListener('touchcancel', endDrag, {passive: true});
@@ -1759,7 +1793,7 @@ function renderMe(){
   html+=`</div></div>
    <div class="card"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Settings</div>
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div><label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label></div>
-    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><select class="sel" style="width:auto; padding:5px 10px;" onchange="setShiftTime(this.value)">${[12,13,14,15,16,17,18,19].map(h=> `<option value="${h}" ${profile.shiftTime===h?'selected':''}>${h>12?h-12:h} PM</option>`).join('')}</select></div>
+    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
    </div>
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button></div></div>
@@ -1771,7 +1805,11 @@ function renderMe(){
 function setMV(v){meView=v;renderMe();}
 function editName(){ const p=DB.profile(); appPrompt('Dairy name:', p.name).then(n => { if(!n?.trim()) return; p.name=n.trim(); DB.saveProfile(p); DB.log(`Changed dairy name to ${p.name}`, 'info'); renderMe(); }); }
 function setRatePref(v){ const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p); showToast('Preference saved.'); }
-function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.'); }
+function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.'); renderMe(); }
+function openShiftTimePicker(current){
+  const opts = [12,13,14,15,16,17,18,19].map(h => ({value: String(h), label: `${h>12?h-12:h} PM`}));
+  openThemedSelect('Evening Shift Starts At', opts, String(current), (value) => setShiftTime(value));
+}
 function setPeriodLength(v) { const p = DB.profile(); let val = parseInt(v); if(val < 1 || isNaN(val)) val = 10; p.periodLength = val; DB.saveProfile(p); showToast(`Default period length set to ${val}`); }
 
 function openAnimalModal(id){
@@ -1876,29 +1914,42 @@ function openHouseholdModal(id){
   om('m-household');
 }
 
+let hhRateOptionsCache = [];
 function populateHHRateOptions(){
-  const sel = document.getElementById('hh-rate-select'); const customInp = document.getElementById('hh-rate-custom');
-  if (!sel) return;
+  const hidden = document.getElementById('hh-rate-select'); const trigger = document.getElementById('hh-rate-select-trigger'); const customInp = document.getElementById('hh-rate-custom');
+  if (!hidden) return;
   const profile = DB.profile();
   const animalRates = (profile.animals||[]).filter(a => a.milks !== false && (a.rate||0) > 0);
-  const seen = new Set(); let opts = '<option value="">Select Rate...</option>';
-  animalRates.forEach(a => { const key = a.rate + '|' + a.name; if (seen.has(key)) return; seen.add(key); opts += `<option value="${a.rate}">${a.name} — ₹${a.rate}/L</option>`; });
-  opts += '<option value="custom">✎ Custom Rate</option>';
-  sel.innerHTML = opts;
+  const seen = new Set(); const opts = [];
+  animalRates.forEach(a => { const key = a.rate + '|' + a.name; if (seen.has(key)) return; seen.add(key); opts.push({value: String(a.rate), label: `${a.name} — ₹${a.rate}/L`}); });
+  opts.push({value: 'custom', label: '✎ Custom Rate'});
+  hhRateOptionsCache = opts;
+  hidden.value = ''; if (trigger) trigger.textContent = 'Select Rate...';
   if (customInp) { customInp.value = ''; customInp.style.display = 'none'; }
-  if (!animalRates.length) { sel.value = 'custom'; if (customInp) customInp.style.display = 'block'; }
+  if (!animalRates.length) { hidden.value = 'custom'; if (trigger) trigger.textContent = '✎ Custom Rate'; if (customInp) customInp.style.display = 'block'; }
+}
+
+function openHHRatePicker(){
+  const hidden = document.getElementById('hh-rate-select');
+  openThemedSelect('Select Rate', hhRateOptionsCache, hidden.value, (value) => {
+    hidden.value = value;
+    const trigger = document.getElementById('hh-rate-select-trigger');
+    const chosen = hhRateOptionsCache.find(o => o.value === value);
+    if (trigger) trigger.textContent = chosen ? chosen.label : 'Select Rate...';
+    handleHHRateSelectChange();
+  });
 }
 
 function handleHHRateSelectChange(){
-  const sel = document.getElementById('hh-rate-select'); const customInp = document.getElementById('hh-rate-custom'); if (!sel || !customInp) return;
-  if (sel.value === 'custom') { customInp.style.display = 'block'; customInp.value = ''; customInp.focus(); }
+  const hidden = document.getElementById('hh-rate-select'); const customInp = document.getElementById('hh-rate-custom'); if (!hidden || !customInp) return;
+  if (hidden.value === 'custom') { customInp.style.display = 'block'; customInp.value = ''; customInp.focus(); }
   else { customInp.style.display = 'none'; customInp.value = ''; }
 }
 
 function getHHRateValue(){
-  const sel = document.getElementById('hh-rate-select'); if (!sel) return 0;
-  if (sel.value === 'custom') return parseFloat(document.getElementById('hh-rate-custom').value) || 0;
-  return parseFloat(sel.value) || 0;
+  const hidden = document.getElementById('hh-rate-select'); if (!hidden) return 0;
+  if (hidden.value === 'custom') return parseFloat(document.getElementById('hh-rate-custom').value) || 0;
+  return parseFloat(hidden.value) || 0;
 }
 
 function doSaveHousehold(){
