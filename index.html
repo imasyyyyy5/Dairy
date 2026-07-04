@@ -474,7 +474,11 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div id="hh-new-fields">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px;">
      <div><label class="flabel">Daily Qty (L)</label><input class="inp" type="number" id="hh-qty" placeholder="e.g. 2"/></div>
-     <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="number" id="hh-rate" placeholder="Default rate"/></div>
+     <div>
+      <label class="flabel">Rate (₹/L)</label>
+      <select class="inp" id="hh-rate-select" onchange="handleHHRateSelectChange()"></select>
+      <input class="inp mt2" style="margin-top:6px;display:none;" type="number" id="hh-rate-custom" placeholder="Enter custom rate"/>
+     </div>
     </div>
  </div>
  <div style="margin-bottom:9px;">
@@ -1043,7 +1047,7 @@ let curTab='home',curDetailId=null;
 let meView='profile', gChartType='overall', gChartFilter='category';
 let editAnimalId=null,animalType='cow';
 let detailPageIdx=0; 
-let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null;
+let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null;
 let touchStartX = 0; let touchEndX = 0; let ignoreSwipe = false; const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
 
 document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; ignoreSwipe = !!e.target.closest('.twrap, input, button, select'); }, {passive: true});
@@ -1220,7 +1224,7 @@ function renderHomeContent(el){
   el.innerHTML=html+`</div>`;
 }
 
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; renderHome();}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome();}
 
 function renderDetailView(el){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===curDetailId);
@@ -1264,6 +1268,7 @@ function renderHouseholdsPageHTML(page){
       const isPaidUp = stats.currentDue <= 0;
       const status = householdStatusLabel(h);
       const expanded = hhExpandedId === h.id;
+      const historyOpen = hhHistoryExpandedId === h.id;
 
       listHtml += `
        <div class="card2 mb2">
@@ -1277,13 +1282,11 @@ function renderHouseholdsPageHTML(page){
         </div>
         ${expanded ? `
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
-         <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;">
-          <div style="font-size:11px;color:var(--muted);">Total Billed: ₹${fmt(stats.totalMilkValue)} • Paid: ₹${fmt(stats.totalPaid)}</div>
-          <button class="btn bp bsm" onclick="event.stopPropagation();openCustomerPaymentModal('${h.id}')">💸 Log Payment</button>
-         </div>
-         ${!(h.payments&&h.payments.length) ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : h.payments.slice().reverse().slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('')}
+         <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Total Billed: ₹${fmt(stats.totalMilkValue)} • Paid: ₹${fmt(stats.totalPaid)} <span style="color:var(--sub);">(Log payments from the Calc tab)</span></div>
+         <button class="btn bs bsm w-100" style="justify-content:center;" onclick="event.stopPropagation();toggleHHHistory('${h.id}')">📜 ${historyOpen?'Hide':'View'} Qty/Rate Change History ${historyOpen?'▲':'▼'}</button>
+         ${historyOpen ? renderHHHistoryList(h) : ''}
          <div class="row gap2 mt3" style="justify-content:flex-end;">
-          <button class="btn bs bsm" onclick="event.stopPropagation();openHHAddCorrection('${h.id}')">✎ Change Qty/Rate</button>
+          <button class="btn bs bsm" onclick="event.stopPropagation();openHHAddCorrection('${h.id}')">✎ Add Changes</button>
           <button class="btn bs bsm" onclick="event.stopPropagation();openHouseholdModal('${h.id}')">⚙️ Edit Info</button>
          </div>
         </div>` : ''}
@@ -1482,7 +1485,19 @@ function renderCalc(){
   let hhBreakdownHTML = households.slice(0,8).map(h => {
       const stats = getCustomerStats(h); totalHHOutstanding += stats.currentDue;
       const isPaidUp = stats.currentDue <= 0;
-      return `<div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;align-items:center;"><div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">Paid: ₹${fmt(stats.totalPaid)}</div></div><div class="tr"><div style="font-weight:800;font-size:14px;color:${isPaidUp?'#fff':'#e8b800'};">₹${fmt(stats.currentDue)}</div><div style="font-size:10px;color:var(--muted);">${isPaidUp?'settled':'due'}</div></div><button class="btn bp bsm" style="margin-left:8px;" onclick="openCustomerPaymentModal('${h.id}')">Log ₹</button></div>`; 
+      const payExpanded = calcHHExpandedId === h.id;
+      const paymentListHtml = !(h.payments&&h.payments.length) ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : h.payments.slice().reverse().slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('');
+      return `<div class="mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
+       <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcHHExpand('${h.id}')">
+        <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">Paid: ₹${fmt(stats.totalPaid)}</div></div>
+        <div class="tr"><div style="font-weight:800;font-size:14px;color:${isPaidUp?'#fff':'#e8b800'};">₹${fmt(stats.currentDue)}</div><div style="font-size:10px;color:var(--muted);">${isPaidUp?'settled':'due'}</div></div>
+        <span style="font-size:10px;color:var(--sub);margin-left:8px;">${payExpanded?'▲':'▼'}</span>
+       </div>
+       ${payExpanded ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        ${paymentListHtml}
+        <button class="btn bp bsm w-100" style="margin-top:8px;justify-content:center;" onclick="event.stopPropagation();openCustomerPaymentModal('${h.id}')">💸 Log Payment</button>
+       </div>` : ''}
+      </div>`;
   }).join('');
   if (households.length === 0) hhBreakdownHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No local customers added yet</div>`;
 
@@ -1542,6 +1557,7 @@ function renderCalc(){
    `;
 }
 
+function toggleCalcHHExpand(id){ calcHHExpandedId = (calcHHExpandedId===id) ? null : id; renderCalc(); }
 function updCalc(){ const q=parseFloat(document.getElementById('cqty')?.value)||0; const r=parseFloat(document.getElementById('crate')?.value)||0; const el=document.getElementById('cresult'); if(el) el.textContent='₹'+(q*r).toFixed(2); }
 function logDotColor(t){ return {payment:'#5db85d', delete:'var(--danger)', create:'#4e8cff', update:'#e8b800'}[t] || 'var(--border2)'; }
 
@@ -1630,7 +1646,33 @@ async function removeAnimal(id){
 // ══════════════════════════════════════════════════════════════════
 //  CUSTOMER POURING LOGIC
 // ══════════════════════════════════════════════════════════════════
-function toggleHHExpand(id){ hhExpandedId = (hhExpandedId===id) ? null : id; renderHome(); }
+function toggleHHExpand(id){ hhExpandedId = (hhExpandedId===id) ? null : id; hhHistoryExpandedId = null; renderHome(); }
+function toggleHHHistory(id){ hhHistoryExpandedId = (hhHistoryExpandedId===id) ? null : id; renderHome(); }
+
+function getHouseholdChangeHistory(h){
+  const entries = [{date: h.startDate, qty: h.baseQty||0, rate: h.baseRate||0, type:'initial'}];
+  (h.changes||[]).forEach(c => entries.push({date: c.date, qty: c.qty, rate: c.rate, type:'permanent'}));
+  Object.keys(h.exceptions||{}).forEach(d => entries.push({date: d, qty: h.exceptions[d].qty, rate: h.exceptions[d].rate, type:'exception'}));
+  return entries.sort((a,b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+}
+
+function renderHHHistoryList(h){
+  const history = getHouseholdChangeHistory(h);
+  if (!history.length) return `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No changes recorded yet.</div>`;
+  return `<div style="margin:8px 0;">` + history.map(e => {
+    const label = e.type === 'initial' ? 'Started at' : e.type === 'permanent' ? 'Changed (ongoing) from' : 'One-day only';
+    const delBtn = e.type === 'permanent' ? `<button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();removeHHChange('${h.id}','${e.date}')">✕</button>`
+                 : e.type === 'exception' ? `<button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();removeHHException('${h.id}','${e.date}')">✕</button>`
+                 : '';
+    return `<div class="hh-row ${e.type==='exception'?'exc':''}"><span class="f1">${fmtDS(e.date)} <span style="color:var(--muted);">— ${label}</span></span><span style="font-weight:700;">${fmt(e.qty)}L @ ₹${fmt(e.rate)}</span>${delBtn}</div>`;
+  }).join('') + `</div>`;
+}
+
+function removeHHChange(householdId, dateStr){
+  const households = DB.households(); const h = households.find(x=>x.id===householdId); if (!h || !h.changes) return;
+  h.changes = h.changes.filter(c=>c.date!==dateStr);
+  DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); renderHome(); renderCalc(); renderGraphs();
+}
 
 function openHouseholdModal(id){
   editHouseholdId = id; const isNew = id === 'new';
@@ -1640,7 +1682,8 @@ function openHouseholdModal(id){
   const stopRow = document.getElementById('hh-stop-row');
   
   if (isNew) {
-    document.getElementById('hh-name').value = ''; document.getElementById('hh-qty').value = ''; document.getElementById('hh-rate').value = '';
+    document.getElementById('hh-name').value = ''; document.getElementById('hh-qty').value = '';
+    populateHHRateOptions();
     document.getElementById('hh-start-date').value = today(); document.getElementById('hh-start-date-trigger').textContent = fmtD(today());
     document.getElementById('hh-start-date-trigger').setAttribute('onclick', `openThemedCalendar('hh-start-date')`);
     if (stopRow) stopRow.style.display = 'none';
@@ -1654,14 +1697,40 @@ function openHouseholdModal(id){
   om('m-household');
 }
 
+function populateHHRateOptions(){
+  const sel = document.getElementById('hh-rate-select'); const customInp = document.getElementById('hh-rate-custom');
+  if (!sel) return;
+  const profile = DB.profile();
+  const animalRates = (profile.animals||[]).filter(a => a.milks !== false && (a.rate||0) > 0);
+  const seen = new Set(); let opts = '<option value="">Select Rate...</option>';
+  animalRates.forEach(a => { const key = a.rate + '|' + a.name; if (seen.has(key)) return; seen.add(key); opts += `<option value="${a.rate}">${a.name} — ₹${a.rate}/L</option>`; });
+  opts += '<option value="custom">✎ Custom Rate</option>';
+  sel.innerHTML = opts;
+  if (customInp) { customInp.value = ''; customInp.style.display = 'none'; }
+  if (!animalRates.length) { sel.value = 'custom'; if (customInp) customInp.style.display = 'block'; }
+}
+
+function handleHHRateSelectChange(){
+  const sel = document.getElementById('hh-rate-select'); const customInp = document.getElementById('hh-rate-custom'); if (!sel || !customInp) return;
+  if (sel.value === 'custom') { customInp.style.display = 'block'; customInp.value = ''; customInp.focus(); }
+  else { customInp.style.display = 'none'; customInp.value = ''; }
+}
+
+function getHHRateValue(){
+  const sel = document.getElementById('hh-rate-select'); if (!sel) return 0;
+  if (sel.value === 'custom') return parseFloat(document.getElementById('hh-rate-custom').value) || 0;
+  return parseFloat(sel.value) || 0;
+}
+
 function doSaveHousehold(){
   const name = document.getElementById('hh-name').value.trim(); const startDate = document.getElementById('hh-start-date').value || today();
   if (!name) return appAlert('Missing Field', 'Please enter a customer name.');
   
   const households = DB.households(); const isNew = editHouseholdId === 'new';
   if (isNew) {
-    const qty = parseFloat(document.getElementById('hh-qty').value) || 0; const rate = parseFloat(document.getElementById('hh-rate').value) || 0;
+    const qty = parseFloat(document.getElementById('hh-qty').value) || 0; const rate = getHHRateValue();
     if (qty <= 0) return appAlert('Missing Field', 'Please enter a valid daily quantity.');
+    if (rate <= 0) return appAlert('Missing Field', 'Please select an animal rate or enter a custom rate.');
     households.unshift({ id: uid(), name, baseQty: qty, baseRate: rate, startDate, stopped: false, stopDate: null, changes: [], exceptions: {}, payments: [], createdAt: new Date().toISOString() });
     DB.log(`Added local customer: ${name} (${qty}L/day @ ₹${rate})`, 'create');
   } else {
@@ -1770,7 +1839,7 @@ function removeHHException(householdId, dateStr){
 function openHouseholdsOverview(){
   const pages = DB.pages().filter(p=>!p.trashed); if (!pages.length) { appAlert('No Record Sheet', 'Create a record sheet from the Home tab first.'); return; }
   const active = pages.find(p=>!p.locked) || pages[0];
-  curDetailId = active.id; detailPageIdx = 1; currentTableFilter = 'all'; hhExpandedId = null;
+  curDetailId = active.id; detailPageIdx = 1; currentTableFilter = 'all'; hhExpandedId = null; hhHistoryExpandedId = null;
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('p-home').classList.add('active'); const homeBtn = document.querySelector('.nb[onclick*="home"]'); if (homeBtn) homeBtn.classList.add('on');
   curTab = 'home'; renderHome();
@@ -1795,7 +1864,7 @@ function doNewPage() {
   } catch (err) { appAlert('Error', 'Could not create record.'); }
 }
 
-function closeDetail(){ curDetailId=null; currentTableFilter='all'; detailPageIdx=0; hhExpandedId=null; renderHome(); }
+function closeDetail(){ curDetailId=null; currentTableFilter='all'; detailPageIdx=0; hhExpandedId=null; hhHistoryExpandedId=null; renderHome(); }
 
 async function trashPage(pageId){
   const agreed = await appConfirm('Move to Trash?','Move to trash and delete after 30 days?'); if(!agreed) return;
