@@ -80,6 +80,14 @@ select{-webkit-appearance:none;}
 @keyframes toastIn { from { opacity: 0; transform: translateY(-20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-20px) scale(0.95); } }
 
+/* COACHMARK TUTORIAL BUBBLES */
+.coachmark{position:fixed;z-index:5500;max-width:200px;background:rgba(22,22,22,0.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.16);border-radius:14px;padding:11px 13px;font-size:11.5px;line-height:1.45;color:#f2f2f2;box-shadow:0 12px 28px rgba(0,0,0,0.55);opacity:0;transform:translateY(6px);transition:opacity .25s ease,transform .25s ease;pointer-events:auto;}
+.coachmark.show{opacity:1;transform:translateY(0);}
+.coachmark-got{margin-top:7px;font-size:10px;font-weight:800;color:#8ab4ff;text-align:right;letter-spacing:.02em;text-transform:uppercase;}
+.coachmark-arrow{position:absolute;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;}
+.coachmark-arrow.top{bottom:-7px;border-top:7px solid rgba(22,22,22,0.95);}
+.coachmark-arrow.bottom{top:-7px;border-bottom:7px solid rgba(22,22,22,0.95);}
+
 /* QUICK ENTRY PREMIUM UI */
 .qe-card {
   background: linear-gradient(145deg, var(--bg2), var(--bg1));
@@ -426,7 +434,12 @@ svg.chart{display:block;width:100%;overflow:visible;}
    <div class="row gap2"><button class="btn bs bsm" onclick="navCalendarMonth(-1)">◀</button><button class="btn bs bsm" onclick="navCalendarMonth(1)">▶</button><button class="mx" onclick="cm('m-calendar-sheet')">✕</button></div>
  </div>
  <div class="cal-grid cal-head mb2"><div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div></div>
- <div id="calendar-days-container" class="cal-grid mb3"></div>
+ <div id="calendar-days-container" class="cal-grid mb3" style="touch-action:none;"></div>
+ <div id="cal-multi-hint" style="display:none;font-size:11px;color:var(--muted);text-align:center;margin-bottom:8px;"><span id="cal-multi-count">Tap or drag to select dates</span></div>
+ <div id="cal-multi-actions" class="mact" style="display:none;">
+   <button class="btn bs" onclick="cancelCalMultiSelection()">Cancel</button>
+   <button class="btn bp" onclick="confirmCalMultiSelection()">Confirm Selection</button>
+ </div>
 </div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
@@ -761,6 +774,59 @@ function showToast(message, isSuccess = true) {
   setTimeout(() => { if(container.contains(toast)) container.removeChild(toast); }, 3000);
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  COACHMARK TUTORIALS — one-time, non-blocking hints pointing at
+//  features that are easy to miss (like swipe gestures). Shown once
+//  ever per id (tracked in localStorage), dismissed by tapping
+//  anywhere, and never shown over a modal/overlay.
+// ══════════════════════════════════════════════════════════════════
+function coachSeen(id){ try { return localStorage.getItem('mdn_coach_'+id) === '1'; } catch(e){ return true; } }
+function coachMarkSeen(id){ try { localStorage.setItem('mdn_coach_'+id, '1'); } catch(e){} }
+function coachBlocked(){ return !!document.querySelector('.moverlay.open, .full-overlay.active') || document.getElementById('quick-entry')?.classList.contains('active') || document.getElementById('onboarding')?.classList.contains('active'); }
+
+function showCoach(id, targetEl, text, side){
+  if (coachSeen(id) || !targetEl || document.querySelector('.coachmark')) return;
+  const rect = targetEl.getBoundingClientRect();
+  if (!rect.width && !rect.height) return;
+  side = side || (rect.top > window.innerHeight / 2 ? 'top' : 'bottom');
+
+  const bubble = document.createElement('div'); bubble.className = 'coachmark';
+  bubble.innerHTML = `<div class="coachmark-arrow ${side}"></div><div>${text}</div><div class="coachmark-got">Got it ✕</div>`;
+  document.body.appendChild(bubble);
+
+  const bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+  let left = Math.min(Math.max(10, rect.left + rect.width/2 - bw/2), window.innerWidth - bw - 10);
+  let top = side === 'top' ? rect.top - bh - 14 : rect.bottom + 14;
+  top = Math.min(Math.max(10, top), window.innerHeight - bh - 10);
+  bubble.style.left = left + 'px'; bubble.style.top = top + 'px';
+  const arrow = bubble.querySelector('.coachmark-arrow');
+  arrow.style.left = Math.min(Math.max(14, rect.left + rect.width/2 - left - 7), bw - 22) + 'px';
+
+  requestAnimationFrame(() => bubble.classList.add('show'));
+  let dismissed = false;
+  const dismiss = () => {
+    if (dismissed) return; dismissed = true; coachMarkSeen(id);
+    bubble.classList.remove('show'); setTimeout(() => bubble.remove(), 250);
+    document.removeEventListener('touchstart', onOutside, true); document.removeEventListener('mousedown', onOutside, true);
+    clearTimeout(autoTimer);
+  };
+  const onOutside = () => dismiss();
+  const autoTimer = setTimeout(dismiss, 7000);
+  setTimeout(() => { document.addEventListener('touchstart', onOutside, true); document.addEventListener('mousedown', onOutside, true); }, 150);
+}
+
+// Waits for the app to settle (no modal open, target present) before showing a coachmark, retrying a few times.
+function scheduleCoach(id, findTargetFn, text, side, delay, triesLeft){
+  if (coachSeen(id)) return;
+  delay = delay === undefined ? 900 : delay; triesLeft = triesLeft === undefined ? 5 : triesLeft;
+  setTimeout(() => {
+    if (coachSeen(id)) return;
+    const target = findTargetFn();
+    if (coachBlocked() || !target) { if (triesLeft > 0) scheduleCoach(id, findTargetFn, text, side, 900, triesLeft - 1); return; }
+    showCoach(id, target, text, side);
+  }, delay);
+}
+
 let confirmResolution = null, alertResolution = null, promptResolution = null;
 
 function appConfirm(title, body) {
@@ -866,13 +932,19 @@ let currentTableFilter = 'all';
 let activeCalendarTargetInputId = ''; let activeCalendarMinDate = null;
 let calendarCurrentYear = new Date().getFullYear(); let calendarCurrentMonth = new Date().getMonth();
 let calendarOnSelectCallback = null;
+let calMultiMode = false; let calSelectedDates = new Set(); let calDragging = false; let calDragAnchor = null; let calEdgeNavTimer = null; let calDrawScheduled = false;
 
-function openThemedCalendar(targetHiddenInputId, minDate = null, onSelect = null) {
+function openThemedCalendar(targetHiddenInputId, minDate = null, onSelect = null, multi = false) {
   activeCalendarTargetInputId = targetHiddenInputId; activeCalendarMinDate = minDate; calendarOnSelectCallback = onSelect;
+  calMultiMode = !!multi; calSelectedDates = new Set();
   const currentVal = document.getElementById(targetHiddenInputId).value || minDate || today();
   const [y, m, d] = currentVal.split('-').map(Number);
   calendarCurrentYear = y; calendarCurrentMonth = m - 1;
+  if (calMultiMode && currentVal && document.getElementById(targetHiddenInputId).value) calSelectedDates.add(currentVal);
   drawCalendarGrid(); om('m-calendar-sheet');
+  document.getElementById('cal-multi-actions').style.display = calMultiMode ? 'flex' : 'none';
+  document.getElementById('cal-multi-hint').style.display = calMultiMode ? 'block' : 'none';
+  updateCalMultiCount();
 }
 
 function drawCalendarGrid() {
@@ -887,10 +959,11 @@ function drawCalendarGrid() {
     const computedISODate = `${calendarCurrentYear}-${String(calendarCurrentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const isDisabled = !!(activeCalendarMinDate && computedISODate < activeCalendarMinDate);
     let stateClasses = '';
-    if (computedISODate === currentVal) stateClasses += ' selected';
+    if (calMultiMode) { if (calSelectedDates.has(computedISODate)) stateClasses += ' selected'; }
+    else if (computedISODate === currentVal) stateClasses += ' selected';
     if (computedISODate === todayStr) stateClasses += ' today-marker';
     if (isDisabled) stateClasses += ' disabled';
-    daysHtml += isDisabled ? `<button class="cal-day${stateClasses}">${day}</button>` : `<button class="cal-day${stateClasses}" onclick="selectCalendarDate('${computedISODate}')">${day}</button>`;
+    daysHtml += isDisabled ? `<button class="cal-day${stateClasses}" data-date="${computedISODate}">${day}</button>` : `<button class="cal-day${stateClasses}" data-date="${computedISODate}" onclick="onCalDayTap('${computedISODate}')">${day}</button>`;
   }
   document.getElementById('calendar-days-container').innerHTML = daysHtml;
 }
@@ -902,6 +975,12 @@ function navCalendarMonth(direction) {
   drawCalendarGrid();
 }
 
+function onCalDayTap(isoDateStr) {
+  if (calDragging) return; // tap already handled as part of a drag gesture
+  if (calMultiMode) { toggleCalMultiDate(isoDateStr); return; }
+  selectCalendarDate(isoDateStr);
+}
+
 function selectCalendarDate(isoDateStr) {
   document.getElementById(activeCalendarTargetInputId).value = isoDateStr;
   const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
@@ -909,6 +988,75 @@ function selectCalendarDate(isoDateStr) {
   cm('m-calendar-sheet');
   if (calendarOnSelectCallback) { const cb = calendarOnSelectCallback; calendarOnSelectCallback = null; cb(isoDateStr); }
 }
+
+// ---- Multi-date selection (tap-to-toggle, drag-to-range-select, edge-drag to flip months) ----
+function toggleCalMultiDate(isoDateStr){
+  if (calSelectedDates.has(isoDateStr)) calSelectedDates.delete(isoDateStr); else calSelectedDates.add(isoDateStr);
+  drawCalendarGrid(); updateCalMultiCount();
+}
+function calDateInRangeInclusive(a, b){
+  let lo = a < b ? a : b, hi = a < b ? b : a; const out = [];
+  let cur = lo; let guard = 0;
+  while (cur <= hi && guard < 3660) { out.push(cur); cur = addDays(cur, 1); guard++; }
+  return out;
+}
+function updateCalMultiCount(){
+  const el = document.getElementById('cal-multi-count'); if (!el) return;
+  const n = calSelectedDates.size; el.textContent = n ? `${n} date${n>1?'s':''} selected` : 'Tap or drag to select dates';
+}
+function confirmCalMultiSelection(){
+  const dates = Array.from(calSelectedDates).filter(d => !(activeCalendarMinDate && d < activeCalendarMinDate)).sort();
+  if (!dates.length) { cm('m-calendar-sheet'); return; }
+  cm('m-calendar-sheet');
+  if (calendarOnSelectCallback) { const cb = calendarOnSelectCallback; calendarOnSelectCallback = null; cb(dates); }
+}
+function cancelCalMultiSelection(){ calSelectedDates = new Set(); cm('m-calendar-sheet'); }
+
+(function setupCalendarDrag(){
+  const container = document.getElementById('calendar-days-container');
+  if (!container) return;
+  function dayFromPoint(x, y){
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const btn = el.closest && el.closest('.cal-day');
+    if (!btn || btn.classList.contains('empty-cell') || btn.classList.contains('disabled')) return null;
+    return btn.dataset.date || null;
+  }
+  function applyDragRange(dateStr){
+    if (!calDragAnchor) return;
+    const range = calDateInRangeInclusive(calDragAnchor, dateStr).filter(d => !(activeCalendarMinDate && d < activeCalendarMinDate));
+    calSelectedDates = new Set([...calSelectedDates, ...range]);
+    if (!calDrawScheduled) { calDrawScheduled = true; requestAnimationFrame(() => { calDrawScheduled = false; drawCalendarGrid(); updateCalMultiCount(); }); }
+  }
+  container.addEventListener('touchstart', e => {
+    if (!calMultiMode) return;
+    const t = e.touches[0]; const dateStr = dayFromPoint(t.clientX, t.clientY);
+    if (!dateStr) return;
+    calDragging = true; calDragAnchor = dateStr;
+    calSelectedDates.add(dateStr);
+    drawCalendarGrid(); updateCalMultiCount();
+  }, {passive: true});
+  container.addEventListener('touchmove', e => {
+    if (!calMultiMode || !calDragging) return;
+    const t = e.touches[0];
+    const rect = container.getBoundingClientRect();
+    // Edge detection: finger dragged outward past the grid's left/right bounds -> flip month
+    if (t.clientX <= rect.left) {
+      if (!calEdgeNavTimer) { calEdgeNavTimer = setTimeout(() => { navCalendarMonth(-1); calEdgeNavTimer = null; }, 550); }
+    } else if (t.clientX >= rect.right) {
+      if (!calEdgeNavTimer) { calEdgeNavTimer = setTimeout(() => { navCalendarMonth(1); calEdgeNavTimer = null; }, 550); }
+    } else if (calEdgeNavTimer) { clearTimeout(calEdgeNavTimer); calEdgeNavTimer = null; }
+    const dateStr = dayFromPoint(t.clientX, t.clientY);
+    if (dateStr) applyDragRange(dateStr);
+    e.preventDefault();
+  }, {passive: false});
+  function endDrag(){
+    if (calEdgeNavTimer) { clearTimeout(calEdgeNavTimer); calEdgeNavTimer = null; }
+    if (calDragging) { setTimeout(() => { calDragging = false; calDragAnchor = null; }, 50); }
+  }
+  container.addEventListener('touchend', endDrag, {passive: true});
+  container.addEventListener('touchcancel', endDrag, {passive: true});
+})();
 
 function defaultColumns(profile){
   const cols=[ {id:'date',name:'Date',type:'date',locked:true} ];
@@ -1048,14 +1196,37 @@ let meView='profile', gChartType='overall', gChartFilter='category';
 let editAnimalId=null,animalType='cow';
 let detailPageIdx=0; 
 let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null;
-let touchStartX = 0; let touchEndX = 0; let ignoreSwipe = false; const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
+let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0, swipeBlocked = false; const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
 
-document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; ignoreSwipe = !!e.target.closest('.twrap, input, button, select'); }, {passive: true});
-document.addEventListener('touchend', e => { if(ignoreSwipe) return; touchEndX = e.changedTouches[0].screenX; handleSwipe(); }, {passive: true});
-const SWIPE_THRESHOLD = 100; 
+// Only elements with their OWN horizontal drag/scroll behavior need to opt out of swipe detection.
+// Everything else (buttons, cards, labels) stays swipeable — accuracy comes from the angle check below,
+// not from blanket-blocking content.
+function isActuallyScrollable(el){
+  // Walk up from the touched element to find a horizontally-scrollable ancestor.
+  // A `.twrap`/`.hscroll` container that fits its content (no overflow) should NOT block swipe.
+  let node = el;
+  while (node && node !== document.body) {
+    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll'))) {
+      if (node.scrollWidth > node.clientWidth + 1) return true; // genuinely scrollable
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+document.addEventListener('touchstart', e => {
+  const t = e.changedTouches[0]; touchStartX = t.screenX; touchStartY = t.screenY;
+  swipeBlocked = !!e.target.closest('input, textarea, select') || isActuallyScrollable(e.target);
+}, {passive: true});
+document.addEventListener('touchend', e => { if(swipeBlocked) return; const t = e.changedTouches[0]; touchEndX = t.screenX; touchEndY = t.screenY; handleSwipe(); }, {passive: true});
+const SWIPE_THRESHOLD = 60;      // minimum horizontal travel (px) to count as an intentional swipe
+const SWIPE_MAX_SKEW = 0.45;     // vertical travel must stay under 45% of horizontal travel — keeps only "nearly horizontal" gestures
 
 function handleSwipe() {
-  const diff = touchEndX - touchStartX; if (Math.abs(diff) < SWIPE_THRESHOLD) return; 
+  const dx = touchEndX - touchStartX; const dy = touchEndY - touchStartY;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+  if (absDx < SWIPE_THRESHOLD) return;        // too short
+  if (absDy > absDx * SWIPE_MAX_SKEW) return; // too diagonal/vertical — this was probably a scroll, not a swipe
+  const diff = dx;
   if(document.getElementById('quick-entry').style.display !== 'none' && document.getElementById('quick-entry').classList.contains('active')) return;
   if(document.getElementById('onboarding').classList.contains('active')) return;
   if (curTab === 'me' && meView === 'logs' && diff > SWIPE_THRESHOLD) { setMV('profile'); return; }
@@ -1254,6 +1425,12 @@ function renderDetailView(el){
    </div>
    <div class="detail-dots"><span class="ddot${detailPageIdx===0?' on':''}"></span><span class="ddot${detailPageIdx===1?' on':''}"></span></div>
    ${bodyHtml}`;
+
+  if (detailPageIdx === 0) {
+    scheduleCoach('detailswipe', () => document.querySelector('.detail-dots'), 'Swipe left anywhere here to view Local Customer accounts for this period.');
+  } else if (DB.households().length) {
+    scheduleCoach('hhcardtap', () => document.querySelector('#p-home .card2'), 'Tap a customer to expand it — manage payments, changes & info from there.');
+  }
 }
 
 function renderHouseholdsPageHTML(page){
@@ -1283,7 +1460,7 @@ function renderHouseholdsPageHTML(page){
         ${expanded ? `
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Total Billed: ₹${fmt(stats.totalMilkValue)} • Paid: ₹${fmt(stats.totalPaid)} <span style="color:var(--sub);">(Log payments from the Calc tab)</span></div>
-         <button class="btn bs bsm w-100" style="justify-content:center;" onclick="event.stopPropagation();toggleHHHistory('${h.id}')">📜 ${historyOpen?'Hide':'View'} Qty/Rate Change History ${historyOpen?'▲':'▼'}</button>
+         <button class="btn bs bsm w-100 hh-history-btn" style="justify-content:center;" onclick="event.stopPropagation();toggleHHHistory('${h.id}')">📜 ${historyOpen?'Hide':'View'} Qty/Rate Change History ${historyOpen?'▲':'▼'}</button>
          ${historyOpen ? renderHHHistoryList(h) : ''}
          <div class="row gap2 mt3" style="justify-content:flex-end;">
           <button class="btn bs bsm" onclick="event.stopPropagation();openHHAddCorrection('${h.id}')">✎ Add Changes</button>
@@ -1377,7 +1554,7 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
 function renderGraphs(){
   const el = document.getElementById('p-graphs'); const cache = Store.get('mdn_analytics_cache');
   if(!cache || cache.periods.length === 0) { el.innerHTML = `<div class="ph"><div class="ptitle">Graphs</div></div><div class="empty"><div class="esub">No data to display yet.</div></div>`; return; }
-  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div><div class="row gap2 mb3" style="padding:0 15px; overflow-x:auto; scrollbar-width:none;"><button class="ppill ${gChartType==='overall'?'on':''}" onclick="setGChart('overall')">Overall Trend</button><button class="ppill ${gChartType==='current'?'on':''}" onclick="setGChart('current')">Current Period</button><button class="ppill ${gChartType==='compare'?'on':''}" onclick="setGChart('compare')">Compare Periods</button><button class="ppill ${gChartType==='pie_milk'?'on':''}" onclick="setGChart('pie_milk')">Milk Split</button><button class="ppill ${gChartType==='pie_rev'?'on':''}" onclick="setGChart('pie_rev')">Rev Split</button><button class="ppill ${gChartType==='households'?'on':''}" onclick="setGChart('households')">🏠 Customers</button></div><div id="graph-container" style="padding:0 15px 90px;"></div>`;
+  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div><div class="row gap2 mb3 hscroll" style="padding:0 15px; overflow-x:auto; scrollbar-width:none;"><button class="ppill ${gChartType==='overall'?'on':''}" onclick="setGChart('overall')">Overall Trend</button><button class="ppill ${gChartType==='current'?'on':''}" onclick="setGChart('current')">Current Period</button><button class="ppill ${gChartType==='compare'?'on':''}" onclick="setGChart('compare')">Compare Periods</button><button class="ppill ${gChartType==='pie_milk'?'on':''}" onclick="setGChart('pie_milk')">Milk Split</button><button class="ppill ${gChartType==='pie_rev'?'on':''}" onclick="setGChart('pie_rev')">Rev Split</button><button class="ppill ${gChartType==='households'?'on':''}" onclick="setGChart('households')">🏠 Customers</button></div><div id="graph-container" style="padding:0 15px 90px;"></div>`;
   drawSelectedGraph();
 }
 
@@ -1487,7 +1664,7 @@ function renderCalc(){
       const isPaidUp = stats.currentDue <= 0;
       const payExpanded = calcHHExpandedId === h.id;
       const paymentListHtml = !(h.payments&&h.payments.length) ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : h.payments.slice().reverse().slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('');
-      return `<div class="mb2" style="background:var(--bg2); padding:10px; border-radius:8px;">
+      return `<div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px;">
        <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcHHExpand('${h.id}')">
         <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">Paid: ₹${fmt(stats.totalPaid)}</div></div>
         <div class="tr"><div style="font-weight:800;font-size:14px;color:${isPaidUp?'#fff':'#e8b800'};">₹${fmt(stats.currentDue)}</div><div style="font-size:10px;color:var(--muted);">${isPaidUp?'settled':'due'}</div></div>
@@ -1555,6 +1732,8 @@ function renderCalc(){
      </div>
     </div>
    `;
+
+  if (households.length) scheduleCoach('calchhtap', () => document.querySelector('.calc-hh-row'), 'Tap a customer here to log a payment or view their due amount.');
 }
 
 function toggleCalcHHExpand(id){ calcHHExpandedId = (calcHHExpandedId===id) ? null : id; renderCalc(); }
@@ -1646,7 +1825,7 @@ async function removeAnimal(id){
 // ══════════════════════════════════════════════════════════════════
 //  CUSTOMER POURING LOGIC
 // ══════════════════════════════════════════════════════════════════
-function toggleHHExpand(id){ hhExpandedId = (hhExpandedId===id) ? null : id; hhHistoryExpandedId = null; renderHome(); }
+function toggleHHExpand(id){ const opening = hhExpandedId !== id; hhExpandedId = opening ? id : null; hhHistoryExpandedId = null; renderHome(); if (opening) scheduleCoach('hhhistorybtn', () => document.querySelector('.hh-history-btn'), 'Tap here to see every past quantity/rate change for this customer.', 'bottom', 400, 3); }
 function toggleHHHistory(id){ hhHistoryExpandedId = (hhHistoryExpandedId===id) ? null : id; renderHome(); }
 
 function getHouseholdChangeHistory(h){
@@ -1795,28 +1974,56 @@ async function deleteCustomerPayment(hId, pId) {
   DB.saveHouseholds(households); DB.log(`Removed payment for customer: ${h.name}`, 'delete'); renderHome(); renderCalc();
 }
 
+let hhExceptionTargetDates = null; // array of dates when applying a multi-date exception; null for single-date flow
+
 function openHHExceptionModal(householdId, dateStr){
-  hhExceptionTargetId = householdId; const h = DB.households().find(x=>x.id===householdId); if (!h) return;
+  hhExceptionTargetId = householdId; hhExceptionTargetDates = null; const h = DB.households().find(x=>x.id===householdId); if (!h) return;
   const eff = getHouseholdDayEntry(h, dateStr);
   document.getElementById('hhe-date-label').textContent = fmtD(dateStr); document.getElementById('hhe-date').value = dateStr;
   document.getElementById('hhe-qty').value = eff.qty || ''; document.getElementById('hhe-rate').value = eff.rate || '';
   om('m-hh-exception');
 }
 
+function openHHExceptionModalMulti(householdId, dates){
+  hhExceptionTargetId = householdId; hhExceptionTargetDates = dates; const h = DB.households().find(x=>x.id===householdId); if (!h) return;
+  const eff = getHouseholdDayEntry(h, dates[0]);
+  const label = dates.length <= 3 ? dates.map(fmtDS).join(', ') : `${dates.length} selected dates`;
+  document.getElementById('hhe-date-label').textContent = label; document.getElementById('hhe-date').value = dates[0];
+  document.getElementById('hhe-qty').value = eff.qty || ''; document.getElementById('hhe-rate').value = eff.rate || '';
+  om('m-hh-exception');
+}
+
 function openHHAddCorrection(householdId){
   const holder = document.getElementById('hh-correction-date-holder'); holder.value = '';
-  openThemedCalendar('hh-correction-date-holder', null, (dateStr) => { openHHExceptionModal(householdId, dateStr); });
+  openThemedCalendar('hh-correction-date-holder', null, (dates) => {
+    if (Array.isArray(dates)) {
+      if (dates.length === 1) openHHExceptionModal(householdId, dates[0]);
+      else openHHExceptionModalMulti(householdId, dates);
+    } else {
+      openHHExceptionModal(householdId, dates);
+    }
+  }, true);
 }
 
 async function saveHHException(){
-  const dateStr = document.getElementById('hhe-date').value;
   const qty = parseFloat(document.getElementById('hhe-qty').value) || 0; const rate = parseFloat(document.getElementById('hhe-rate').value) || 0;
   if (qty < 0 || rate < 0) return appAlert('Invalid', 'Values cannot be negative.');
+  const households = DB.households(); const h = households.find(x=>x.id===hhExceptionTargetId); if (!h) return;
 
+  // Multiple discrete dates selected at once: always apply as one-day exceptions (a "from this date onward"
+  // change doesn't make sense for a scattered set of dates).
+  if (hhExceptionTargetDates && hhExceptionTargetDates.length > 1) {
+    if (!h.exceptions) h.exceptions = {};
+    hhExceptionTargetDates.forEach(d => { h.exceptions[d] = {qty, rate}; });
+    DB.log(`Added milk corrections for ${h.name} on ${hhExceptionTargetDates.length} dates`, 'update');
+    hhExceptionTargetDates = null;
+    DB.saveHouseholds(households); cm('m-hh-exception'); renderHome(); renderCalc(); renderGraphs();
+    return;
+  }
+
+  const dateStr = document.getElementById('hhe-date').value;
   const scope = await appChoice('Apply This Change', 'Is this amount change just for this one day, or a permanent change from this date onward?', [ {label:'Just this Date (Exception)', value:'once'}, {label:'From this Date Onward', value:'repeat'} ]);
   if (!scope) return; 
-
-  const households = DB.households(); const h = households.find(x=>x.id===hhExceptionTargetId); if (!h) return;
 
   if (scope === 'once') {
     if (!h.exceptions) h.exceptions = {}; h.exceptions[dateStr] = {qty, rate};
@@ -1827,6 +2034,7 @@ async function saveHHException(){
     if (h.exceptions) Object.keys(h.exceptions).forEach(d=>{ if (d >= dateStr) delete h.exceptions[d]; });
     DB.log(`Updated regular daily milk amount for ${h.name} from ${fmtD(dateStr)}`, 'update');
   }
+  hhExceptionTargetDates = null;
   DB.saveHouseholds(households); cm('m-hh-exception'); renderHome(); renderCalc(); renderGraphs();
 }
 
@@ -1914,6 +2122,7 @@ function moi(e,id){if(e.target.id===id)cm(id);}
 
 function isAppInstalled() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || document.referrer.startsWith('android-app://'); }
 function checkInstallReminders(justFinishedSetup) {
+  scheduleCoach('tabswipe', () => document.getElementById('bnav'), 'Tip: swipe left or right anywhere on screen to quickly switch tabs.', 'top', justFinishedSetup ? 2200 : 1200);
   if (isAppInstalled()) { hideInstallBanner(); return; }
   if (justFinishedSetup) setTimeout(() => showInstallGuide(), 600);
   const pref = localStorage.getItem('mdn_install_banner_pref'); if (pref === 'never' || pref === 'later') hideInstallBanner(); else showInstallBanner();
