@@ -276,6 +276,35 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .pie-slice:hover{opacity:.8;}
 .g-legend-dot {display:inline-block;width:10px;height:10px;border-radius:3px;flex-shrink:0;}
 
+/* ═══════ ANALYTICS 2.0 — ADVANCED GRAPH SYSTEM ═══════ */
+.gtab-scroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:0 15px 2px;}
+.gtab-scroll::-webkit-scrollbar{display:none;}
+.gh-scroll{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:0 15px 2px;}
+.gh-scroll::-webkit-scrollbar{display:none;}
+.ppill.sm{padding:4px 10px;font-size:10px;opacity:.85;}
+.ppill.sm.on{opacity:1;}
+.gchart-wrap{position:relative;}
+.g-legend{display:flex;flex-wrap:wrap;gap:6px 10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+.g-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text);padding:4px 8px;border-radius:100px;background:var(--bg2);border:1px solid transparent;cursor:pointer;transition:.15s;user-select:none;}
+.g-legend-item.dim{opacity:.32;}
+.g-legend-item.active-pick{border-color:rgba(255,255,255,0.35);background:var(--bg3);}
+.g-legend-dot2{width:9px;height:9px;border-radius:3px;flex-shrink:0;}
+.area-path{transition:opacity .2s;}
+.area-path.dim{opacity:.15;}
+.line-path{transition:opacity .2s;}
+.line-path.dim{opacity:.15;}
+.chart-pt{cursor:pointer;}
+.g-tooltip{position:absolute;pointer-events:none;background:rgba(15,15,15,.96);border:1px solid var(--border2);border-radius:10px;padding:7px 10px;font-size:11px;font-weight:700;color:#fff;box-shadow:0 8px 20px rgba(0,0,0,.5);transform:translate(-50%,-115%);white-space:nowrap;opacity:0;transition:opacity .12s;z-index:20;}
+.g-tooltip.show{opacity:1;}
+.g-tooltip .gtt-sub{font-weight:500;color:var(--sub);font-size:10px;margin-top:1px;}
+.gseg{flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:10.5px;font-weight:700;border:1px solid var(--border);background:var(--bg2);color:var(--sub);cursor:pointer;}
+.gseg.on{background:var(--bg3);color:#fff;border-color:var(--border2);}
+.g-kpi-row{display:flex;gap:8px;margin-bottom:12px;}
+.g-kpi{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:9px 10px;}
+.g-kpi .l{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;}
+.g-kpi .v{font-size:15px;font-weight:900;margin-top:2px;}
+.pie-slice{cursor:pointer;}
+
 .detail-dots{display:flex;justify-content:center;align-items:center;gap:5px;padding:8px 0 12px;}
 .ddot{width:6px;height:6px;border-radius:50%;background:var(--border2);transition:all .2s;}
 .ddot.on{background:#fff;width:16px;border-radius:3px;}
@@ -709,18 +738,40 @@ const DB={
 const aIcon = {cow:'🐄', buffalo:'🐃', goat:'🐐', other:'🥛'};
 const aColors = {cow:'#4e8cff', buffalo:'#7b8794', goat:'#d4a373', other:'#a0aec0'};
 
+// ══════════════════════════════════════════════════════════════════
+//  DYNAMIC LIVESTOCK COLOR ENGINE
+//  Maps every unique animal name to a persistent, high-contrast hue
+//  using a deterministic hash + golden-ratio-style HSL distribution,
+//  so "Gori", "Kalu", "Buffalo #1" etc each get their own stable
+//  color across every chart in the app — no manual assignment needed.
+// ══════════════════════════════════════════════════════════════════
+const _livestockColorCache = {};
+function generateLivestockColor(key) {
+  const k = String(key || 'unknown');
+  if (_livestockColorCache[k]) return _livestockColorCache[k];
+  let hash = 0;
+  for (let i = 0; i < k.length; i++) { hash = k.charCodeAt(i) + ((hash << 5) - hash); }
+  const golden = 0.61803398875; // golden-ratio conjugate spreads adjacent hashes across hue-space
+  let h = Math.abs(hash) * golden % 1;
+  const hue = Math.round(h * 360);
+  const col = `hsl(${hue}, 72%, 58%)`;
+  _livestockColorCache[k] = col;
+  return col;
+}
+
 const AnalyticsEngine = {
   build: function() {
      const pages = Store.get('mdn_pages') || [];
      const pAnimals = (Store.get('mdn_profile') || {}).animals || [];
-     let cache = { daily: {}, periods: [], allTime: { milk:0, rev:0, byCategory: {}, byName: {} } };
+     let cache = { daily: {}, periods: [], allTime: { milk:0, rev:0, byCategory: {}, byName: {} }, animalNames: [] };
      ['cow', 'buffalo', 'goat', 'other'].forEach(c => cache.allTime.byCategory[c] = {milk:0, rev:0});
+     const seenNames = {};
 
      pages.forEach(p => {
-        let periodData = { id: p.id, label: p.label, total: 0, byCategory: {}, byName: {} };
+        let periodData = { id: p.id, label: p.label, total: 0, rev: 0, byCategory: {}, byName: {} };
         p.rows.forEach(r => {
            if(!r.date) return;
-           if(!cache.daily[r.date]) cache.daily[r.date] = { total: 0 };
+           if(!cache.daily[r.date]) cache.daily[r.date] = { total: 0, rev: 0, am: 0, pm: 0, byName: {} };
            p.cols.forEach(c => {
               if(c.type==='milk_am' || c.type==='milk_pm'){
                  const v = parseFloat(r[c.id])||0;
@@ -733,15 +784,21 @@ const AnalyticsEngine = {
                    if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
                    const rev = v * rate;
                    cache.daily[r.date].total += v;
+                   cache.daily[r.date].rev += rev;
+                   cache.daily[r.date][c.type==='milk_am'?'am':'pm'] += v;
                    cache.daily[r.date][at] = (cache.daily[r.date][at] || 0) + v;
-                   periodData.total += v;
+                   cache.daily[r.date].byName[name] = (cache.daily[r.date].byName[name] || 0) + v;
+                   periodData.total += v; periodData.rev += rev;
                    if(!periodData.byCategory[at]) periodData.byCategory[at] = [];
                    periodData.byCategory[at].push(v);
+                   if(!periodData.byName[name]) periodData.byName[name] = 0;
+                   periodData.byName[name] += v;
                    if(!cache.allTime.byCategory[at]) cache.allTime.byCategory[at] = {milk:0, rev:0};
                    cache.allTime.byCategory[at].milk += v; cache.allTime.byCategory[at].rev += rev;
                    if(!cache.allTime.byName[name]) cache.allTime.byName[name] = {milk:0, rev:0, type: at};
                    cache.allTime.byName[name].milk += v; cache.allTime.byName[name].rev += rev;
                    cache.allTime.milk += v; cache.allTime.rev += rev;
+                   if(!seenNames[name]) { seenNames[name] = true; cache.animalNames.push({name, type: at}); }
                  }
               }
            });
@@ -1176,6 +1233,24 @@ function getCustomerStats(h) {
   };
 }
 
+// Running outstanding-balance series for the last `days` days — used by the
+// Customer Dues Timeline chart. Walks the household's full history to keep
+// the cumulative billed/paid totals accurate, then returns just the tail.
+function householdDueTimeline(h, days){
+  const end = (h.stopped && h.stopDate) ? h.stopDate : today();
+  const winStart = addDays(end, -(days-1));
+  const payments = (h.payments||[]).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+  let billed = 0, paid = 0, pIdx = 0; const out = [];
+  let d = h.startDate; if(!d || d > end) return out; let guard = 0;
+  for(; d <= end && guard < 3660; d = addDays(d,1), guard++){
+     const e = getHouseholdDayEntry(h, d);
+     billed += (e.qty||0)*(e.rate||0);
+     while(pIdx < payments.length && payments[pIdx].date <= d){ paid += parseFloat(payments[pIdx].amount)||0; pIdx++; }
+     if(d >= winStart) out.push({date: d, due: parseFloat((billed-paid).toFixed(2))});
+  }
+  return out;
+}
+
 function householdAllTimeSummary(){
   const households = DB.households();
   let totalBilled=0, totalCollected=0, totalQty=0;
@@ -1226,7 +1301,7 @@ function createPage(startDate){
 }
 
 let curTab='home',curDetailId=null;
-let meView='profile', gChartType='overall', gChartFilter='category';
+let meView='profile', gChartType='overall', gChartFilter='category', gHorizon='30';
 let editAnimalId=null,animalType='cow';
 let detailPageIdx=0; 
 let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null;
@@ -1240,7 +1315,7 @@ function isActuallyScrollable(el){
   // A `.twrap`/`.hscroll` container that fits its content (no overflow) should NOT block swipe.
   let node = el;
   while (node && node !== document.body) {
-    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll'))) {
+    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll') || node.classList.contains('gtab-scroll') || node.classList.contains('gh-scroll'))) {
       if (node.scrollWidth > node.clientWidth + 1) return true; // genuinely scrollable
     }
     node = node.parentElement;
@@ -1588,89 +1663,292 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
 function renderGraphs(){
   const el = document.getElementById('p-graphs'); const cache = Store.get('mdn_analytics_cache');
   if(!cache || cache.periods.length === 0) { el.innerHTML = `<div class="ph"><div class="ptitle">Graphs</div></div><div class="empty"><div class="esub">No data to display yet.</div></div>`; return; }
-  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div><div class="row gap2 mb3 hscroll" style="padding:0 15px; overflow-x:auto; scrollbar-width:none;"><button class="ppill ${gChartType==='overall'?'on':''}" onclick="setGChart('overall')">Overall Trend</button><button class="ppill ${gChartType==='current'?'on':''}" onclick="setGChart('current')">Current Period</button><button class="ppill ${gChartType==='compare'?'on':''}" onclick="setGChart('compare')">Compare Periods</button><button class="ppill ${gChartType==='pie_milk'?'on':''}" onclick="setGChart('pie_milk')">Milk Split</button><button class="ppill ${gChartType==='pie_rev'?'on':''}" onclick="setGChart('pie_rev')">Rev Split</button><button class="ppill ${gChartType==='households'?'on':''}" onclick="setGChart('households')">🏠 Customers</button></div><div id="graph-container" style="padding:0 15px 90px;"></div>`;
+  const tabs = [
+    {k:'overall', l:'🐄 Production'},
+    {k:'shifts', l:'☀️ AM vs PM'},
+    {k:'compare', l:'📅 Periods'},
+    {k:'profit', l:'💰 Net Profit'},
+    {k:'pie_milk', l:'Milk Split'},
+    {k:'pie_rev', l:'Rev Split'},
+    {k:'households', l:'🏠 Customer Dues'},
+  ];
+  const allHorizons = [{k:'7',l:'7D'},{k:'30',l:'30D'},{k:'180',l:'6M'},{k:'all',l:'ALL'}];
+  const horizons = gChartType === 'shifts' ? allHorizons.slice(0,2) : allHorizons; // grouped daily bars get unreadable past 30D
+  const showHorizon = (gChartType === 'overall' || gChartType === 'shifts');
+  if (showHorizon && gChartType === 'shifts' && (gHorizon === '180' || gHorizon === 'all')) gHorizon = '30';
+  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div><div class="gtab-scroll mb3">${tabs.map(t=>`<button class="ppill ${gChartType===t.k?'on':''}" onclick="setGChart('${t.k}')">${t.l}</button>`).join('')}</div>${showHorizon?`<div class="gh-scroll mb3">${horizons.map(h=>`<button class="ppill sm ${gHorizon===h.k?'on':''}" onclick="setGHorizon('${h.k}')">${h.l}</button>`).join('')}</div>`:''}<div id="graph-container" style="padding:0 15px 90px; position:relative;"></div>`;
   drawSelectedGraph();
 }
 
-function setGChart(type) { gChartType = type; renderGraphs(); }
-function setGFilter(filter) { gChartFilter = filter; drawSelectedGraph(); }
+function setGChart(type) { gChartType = type; gIsolated = null; renderGraphs(); }
+function setGHorizon(h) { gHorizon = h; drawSelectedGraph(); }
+function horizonSlice(dates, horizon) {
+  if (horizon === 'all') return dates;
+  const n = parseInt(horizon, 10);
+  return dates.slice(-n);
+}
+function setGFilter(filter) { gChartFilter = filter; gIsolated = null; drawSelectedGraph(); }
+let gIsolated = null; // currently isolated/highlighted legend key (animal name or customer id), null = show all
+
+function toggleIsolate(key){ gIsolated = (gIsolated === key) ? null : key; drawSelectedGraph(); }
+
+function gTip(evt, title, sub){
+  const wrap = evt.currentTarget.closest('.gchart-wrap'); if(!wrap) return;
+  let tip = wrap.querySelector('.g-tooltip');
+  if(!tip){ tip = document.createElement('div'); tip.className='g-tooltip'; wrap.appendChild(tip); }
+  const wr = wrap.getBoundingClientRect(); const er = evt.currentTarget.getBoundingClientRect();
+  const x = er.left + er.width/2 - wr.left, y = er.top - wr.top;
+  tip.style.left = x+'px'; tip.style.top = y+'px';
+  tip.innerHTML = `<div>${title}</div>${sub?`<div class="gtt-sub">${sub}</div>`:''}`;
+  tip.classList.add('show');
+  clearTimeout(tip._t); tip._t = setTimeout(()=>tip.classList.remove('show'), 2200);
+}
+
+// Catmull-Rom to Bezier smoothing for pleasant, non-jagged trend lines
+function smoothPath(pts){
+  if(pts.length < 3) return pts.reduce((a,p,i)=> a + `${i===0?'M':'L'} ${p.x} ${p.y} `, '');
+  let d = `M ${pts[0].x} ${pts[0].y} `;
+  for(let i=0;i<pts.length-1;i++){
+     const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+     const cp1x = p1.x + (p2.x - p0.x)/6, cp1y = p1.y + (p2.y - p0.y)/6;
+     const cp2x = p2.x - (p3.x - p1.x)/6, cp2y = p2.y - (p3.y - p1.y)/6;
+     d += `C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y} `;
+  }
+  return d;
+}
+
+function gKpiRow(items){
+  return `<div class="g-kpi-row">${items.map(it=>`<div class="g-kpi"><div class="l">${it.l}</div><div class="v" style="${it.color?`color:${it.color};`:''}">${it.v}</div></div>`).join('')}</div>`;
+}
+function svgIdSafe(s){ return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
+function gridLines(maxV, PAD, W, cW, cH, labelFmt, minV){
+  minV = minV || 0; let s = '';
+  [0, 0.5, 1].forEach(pct => { const y = PAD.t + cH*(1-pct); s += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/><text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${labelFmt(minV + (maxV-minV)*pct)}</text>`; });
+  return s;
+}
 
 function drawSelectedGraph() {
   const container = document.getElementById('graph-container'); const cache = Store.get('mdn_analytics_cache'); if(!cache) return;
-  const W=340, H=180, PAD={l:35,r:10,t:20,b:25}, cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b; let svg = '';
+  const W=340, H=190, PAD={l:34,r:10,t:16,b:26}, cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b; let svg = '';
 
+  // ─────────────────────────────────────────────────────────────
+  // PRODUCTION TRENDS — Multi-Stream Stacked Area (per-animal colors)
+  // ─────────────────────────────────────────────────────────────
   if(gChartType === 'overall') {
      const dates = Object.keys(cache.daily).sort();
      if(dates.length < 2) { container.innerHTML = `<div class="empty"><div class="esub">Not enough daily data for a trend line.</div></div>`; return; }
-     const data = dates.map(d => ({x:d, y:cache.daily[d].total})).slice(-14); const maxV = Math.max(...data.map(d=>d.y), 1);
-     [0, 0.5, 1].forEach(pct => { const y = PAD.t + cH*(1-pct); svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/><text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`; });
+     const days = horizonSlice(dates, gHorizon);
+     // rank animals by all-time volume, keep top 5 named streams + "Other" bucket for the rest
+     const ranked = (cache.animalNames||[]).map(a=>a.name).sort((a,b)=> (cache.allTime.byName[b]?.milk||0)-(cache.allTime.byName[a]?.milk||0));
+     const topNames = ranked.slice(0,5); const hasOther = ranked.length > 5;
+     const streamKeys = hasOther ? [...topNames, '__other__'] : topNames;
+
+     const dayRows = days.map(d => {
+        const bn = cache.daily[d].byName || {};
+        let acc = 0; const segs = streamKeys.map(k => {
+           let v; if(k==='__other__') v = ranked.slice(5).reduce((s,n)=>s+(bn[n]||0),0); else v = bn[k]||0;
+           return v;
+        });
+        return { date: d, segs, total: cache.daily[d].total };
+     });
+     const maxV = Math.max(...dayRows.map(d=>d.total), 1);
+     const minV = 0, vRange = maxV; // stacked bands are drawn cumulatively from a true zero baseline — a raised floor would clip/distort them
+     svg += gridLines(maxV, PAD, W, cW, cH, v=>Math.round(v));
      svg += `<line x1="${PAD.l}" y1="${PAD.t+cH}" x2="${W-PAD.r}" y2="${PAD.t+cH}" class="chart-axis"/>`;
-     let pathD = ''; const stepX = cW / (data.length - 1);
-     data.forEach((d, i) => {
-        const x = PAD.l + i*stepX, y = PAD.t + cH - (d.y/maxV)*cH; pathD += `${i===0?'M':'L'} ${x} ${y} `;
-        svg += `<circle cx="${x}" cy="${y}" r="3" fill="#fff"/>`; if(i===0 || i===data.length-1) svg += `<text x="${x}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(d.x)}</text>`;
+
+     const stepX = cW / (dayRows.length - 1);
+     // build stacked baselines per stream across all days
+     const bandTops = streamKeys.map(()=>[]); // bandTops[streamIdx][dayIdx] = cumulative top value
+     dayRows.forEach((row, di) => { let base = 0; row.segs.forEach((v, si) => { base += v; bandTops[si][di] = base; }); });
+
+     let defs = '<defs>';
+     streamKeys.forEach(k => {
+        const name = k==='__other__' ? 'Other' : k;
+        const col = k==='__other__' ? 'hsl(0,0%,45%)' : generateLivestockColor(name);
+        const gid = 'garea_'+svgIdSafe(name);
+        defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity="0.55"/><stop offset="100%" stop-color="${col}" stop-opacity="0.05"/></linearGradient>`;
      });
-     svg += `<path d="${pathD}" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-     container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Overall Daily Milk Trend (L) - Last 14 Entries</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
-  }
-  else if(gChartType === 'current') {
-     const p = cache.periods[0]; const page = DB.pages().find(pg => pg.id === p.id); if(!page) return;
-     const data = page.rows.map(r => { let m = 0; page.cols.forEach(c=>{ if(c.type==='milk_am'||c.type==='milk_pm') m+=parseFloat(r[c.id])||0; }); return {d: r.assignedDate, m}; });
-     const maxV = Math.max(...data.map(d=>d.m), 1); const barW = Math.floor(cW/data.length)-4;
-     [0, 0.5, 1].forEach(pct => { const y = PAD.t + cH*(1-pct); svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/><text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`; });
-     data.forEach((d, i) => {
-        const x = PAD.l + (cW/data.length)*i + (cW/data.length - barW)/2, bH = Math.round((d.m/maxV)*cH);
-        svg += `<rect class="chart-bar" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="2" fill="#fff"/>`;
-        if(bH>10) svg += `<text x="${x+barW/2}" y="${PAD.t+cH-bH-3}" text-anchor="middle" class="chart-val">${d.m.toFixed(1)}</text>`;
-        svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(d.d).split(' ')[0]}</text>`;
+     defs += '</defs>'; svg += defs;
+
+     streamKeys.forEach((k, si) => {
+        const name = k==='__other__' ? 'Other' : k;
+        const col = k==='__other__' ? 'hsl(0,0%,45%)' : generateLivestockColor(name);
+        const gid = 'garea_'+svgIdSafe(name);
+        const topPts = bandTops[si].map((v,di)=>({x: PAD.l+di*stepX, y: PAD.t+cH-((v-minV)/vRange)*cH}));
+        const basePts = (si===0 ? bandTops[si].map(()=>0) : bandTops[si-1]).map((v,di)=>({x: PAD.l+di*stepX, y: PAD.t+cH-((v-minV)/vRange)*cH}));
+        const topD = smoothPath(topPts);
+        const bottomRev = basePts.slice().reverse().map((p,idx)=> `${idx===0?'L':'L'} ${p.x} ${p.y} `).join('');
+        const areaD = `${topD} ${bottomRev} Z`;
+        const dim = gIsolated && gIsolated !== name ? ' dim' : '';
+        svg += `<path d="${areaD}" fill="url(#${gid})" stroke="${col}" stroke-width="1.5" class="area-path${dim}"/>`;
      });
-     container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Current Period Daily Output (L)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
+     // day tap zones for tooltip (date + total + top contributor)
+     dayRows.forEach((row, di) => {
+        const x = PAD.l + di*stepX;
+        const topName = streamKeys.map((k,si)=>({k: k==='__other__'?'Other':k, v:row.segs[si]})).sort((a,b)=>b.v-a.v)[0];
+        svg += `<rect x="${x-stepX/2}" y="${PAD.t}" width="${stepX}" height="${cH}" fill="transparent" class="chart-pt" onclick="gTip(event,'${fmtDS(row.date)} — ${row.total.toFixed(1)} L','Top: ${topName?topName.k:'—'} (${topName?topName.v.toFixed(1):0} L)')"/>`;
+        if(di===0 || di===dayRows.length-1 || di===Math.floor(dayRows.length/2)) svg += `<text x="${x}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(row.date)}</text>`;
+     });
+     // health event markers (vaccination / calving) within the visible date range
+     const profileAnimals = DB.profile().animals || [];
+     const rangeStart = days[0], rangeEnd = days[days.length-1];
+     let markers = '';
+     profileAnimals.forEach(a => {
+        [['vaxDate','💉'],['calvingDate','🐄']].forEach(([field, icon]) => {
+           const dt = a[field]; if(!dt || dt < rangeStart || dt > rangeEnd) return;
+           const idx = days.indexOf(dt); if(idx<0) return;
+           const x = PAD.l + idx*stepX;
+           markers += `<text x="${x}" y="${PAD.t+cH+26}" text-anchor="middle" style="font-size:11px;cursor:pointer;" onclick="gTip(event,'${icon==='💉'?'Vaccination':'Calving/Insemination'}','${a.name} — ${fmtDS(dt)}')">${icon}</text>`;
+        });
+     });
+     svg += markers;
+
+     const legend = streamKeys.map(k => {
+        const name = k==='__other__' ? 'Other' : k;
+        const col = k==='__other__' ? 'hsl(0,0%,45%)' : generateLivestockColor(name);
+        const dim = gIsolated && gIsolated !== name ? ' dim' : ''; const active = gIsolated===name ? ' active-pick' : '';
+        return `<div class="g-legend-item${dim}${active}" onclick="toggleIsolate('${name.replace(/'/g,"\\'")}')"><span class="g-legend-dot2" style="background:${col};"></span>${name}</div>`;
+     }).join('');
+     container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Multi-Animal Production Trend (L) — Last ${days.length} Days</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg><div class="g-legend">${legend}</div>${markers?'<div style="font-size:10px;color:var(--muted);margin-top:6px;">💉 Vaccination &nbsp; 🐄 Calving/Insemination — tap an icon for details</div>':''}</div>`;
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // SHIFT OPTIMIZATION — Dual Grouped Bar (AM vs PM)
+  // ─────────────────────────────────────────────────────────────
+  else if(gChartType === 'shifts') {
+     const dates = Object.keys(cache.daily).sort();
+     if(dates.length < 1) { container.innerHTML = `<div class="empty"><div class="esub">Not enough daily data yet.</div></div>`; return; }
+     const days = horizonSlice(dates, gHorizon).map(d => ({date:d, am:cache.daily[d].am||0, pm:cache.daily[d].pm||0}));
+     const maxV = Math.max(...days.map(d=>Math.max(d.am,d.pm)), 1);
+     const groupW = cW/days.length, barW = Math.max(6, groupW*0.32);
+     svg += gridLines(maxV, PAD, W, cW, cH, v=>Math.round(v));
+     days.forEach((d,i) => {
+        const gx = PAD.l + groupW*i;
+        const amH = Math.round((d.am/maxV)*cH), pmH = Math.round((d.pm/maxV)*cH);
+        const amX = gx + groupW/2 - barW - 1, pmX = gx + groupW/2 + 1;
+        svg += `<rect class="chart-bar chart-pt" x="${amX}" y="${PAD.t+cH-amH}" width="${barW}" height="${amH}" rx="2" fill="#e8b800" onclick="gTip(event,'AM: ${d.am.toFixed(1)} L','${fmtDS(d.date)}')"/>`;
+        svg += `<rect class="chart-bar chart-pt" x="${pmX}" y="${PAD.t+cH-pmH}" width="${barW}" height="${pmH}" rx="2" fill="#4e8cff" onclick="gTip(event,'PM: ${d.pm.toFixed(1)} L','${fmtDS(d.date)}')"/>`;
+        svg += `<text x="${gx+groupW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(d.date).split(' ')[0]}</text>`;
+     });
+     const totalAm = days.reduce((s,d)=>s+d.am,0), totalPm = days.reduce((s,d)=>s+d.pm,0);
+     container.innerHTML = `<div class="gchart-wrap">${gKpiRow([{l:'AM Total',v:totalAm.toFixed(1)+' L',color:'#e8b800'},{l:'PM Total',v:totalPm.toFixed(1)+' L',color:'#4e8cff'},{l:'AM Share',v:Math.round(totalAm/(totalAm+totalPm||1)*100)+'%'}])}<div class="slabel mb2">Morning vs Evening Yield — Last ${days.length} Days</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg><div class="g-legend"><div class="g-legend-item"><span class="g-legend-dot2" style="background:#e8b800;"></span>Morning (AM)</div><div class="g-legend-item"><span class="g-legend-dot2" style="background:#4e8cff;"></span>Evening (PM)</div></div></div>`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // PERIOD COMPARISON — Enhanced gradient bar chart
+  // ─────────────────────────────────────────────────────────────
   else if(gChartType === 'compare') {
      const data = [...cache.periods].reverse().slice(-6); if(data.length === 0) return;
      const maxV = Math.max(...data.map(d=>d.total), 1); const barW = Math.floor(cW/data.length)-8;
-     [0, 0.5, 1].forEach(pct => { const y = PAD.t + cH*(1-pct); svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/><text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`; });
+     svg += `<defs><linearGradient id="gbarPeriod" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--success)" stop-opacity="1"/><stop offset="100%" stop-color="var(--success)" stop-opacity="0.45"/></linearGradient></defs>`;
+     svg += gridLines(maxV, PAD, W, cW, cH, v=>Math.round(v));
      data.forEach((d, i) => {
         const x = PAD.l + (cW/data.length)*i + (cW/data.length - barW)/2, bH = Math.round((d.total/maxV)*cH);
-        svg += `<rect class="chart-bar" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="3" fill="var(--success)"/>`;
+        svg += `<rect class="chart-bar chart-pt" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="3" fill="url(#gbarPeriod)" onclick="gTip(event,'${d.total.toFixed(1)} L','₹${fmt(d.rev||0)} revenue')"/>`;
         if(bH>10) svg += `<text x="${x+barW/2}" y="${PAD.t+cH-bH-3}" text-anchor="middle" class="chart-val">${d.total.toFixed(0)}</text>`;
         svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${d.label.split(' – ')[0]}</text>`;
      });
      container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Total Milk per Period (L)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
   }
-  else if(gChartType === 'households') {
-     const hhSummary = householdAllTimeSummary(); const data = hhSummary.perHousehold.filter(d=>d.stats.totalMilkValue>0);
-     if(!data.length) { container.innerHTML = `<div class="empty"><div class="esub">No local customer revenue recorded yet.</div></div>`; return; }
-     const maxV = Math.max(...data.map(d=>d.stats.totalMilkValue), 1); const barW = Math.floor(cW/data.length)-8;
-     [0, 0.5, 1].forEach(pct => { const y = PAD.t + cH*(1-pct); svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" class="chart-axis" stroke-dasharray="2,2"/><text x="${PAD.l-5}" y="${y+3}" text-anchor="end" class="chart-label">${Math.round(maxV*pct)}</text>`; });
-     data.forEach((d, i) => {
-        const x = PAD.l + (cW/data.length)*i + (cW/data.length - barW)/2, bH = Math.round((d.stats.totalMilkValue/maxV)*cH);
-        svg += `<rect class="chart-bar" x="${x}" y="${PAD.t+cH-bH}" width="${barW}" height="${bH}" rx="3" fill="#e8b800"/>`;
-        if(bH>10) svg += `<text x="${x+barW/2}" y="${PAD.t+cH-bH-3}" text-anchor="middle" class="chart-val">${d.stats.totalMilkValue.toFixed(0)}</text>`;
-        svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${d.name.length>8 ? d.name.slice(0,7)+'…' : d.name}</text>`;
+
+  // ─────────────────────────────────────────────────────────────
+  // NET PROFIT CURVE — cumulative revenue minus expenses across periods
+  // ─────────────────────────────────────────────────────────────
+  else if(gChartType === 'profit') {
+     const chron = [...cache.periods].reverse().slice(-8);
+     if(!chron.length) { container.innerHTML = `<div class="empty"><div class="esub">No period data yet.</div></div>`; return; }
+     const allExpenses = Store.get('mdn_expenses') || [];
+     let cumulative = 0; let totalRevAll = 0, totalExpAll = 0;
+     const rows = chron.map(p => {
+        const page = DB.pages().find(pg => pg.id === p.id);
+        const hhRev = page ? pageHouseholdRevenue(page).amount : 0;
+        const exps = page ? allExpenses.filter(e => e.date >= page.startDate && e.date <= page.endDate).reduce((s,e)=>s+(e.cost||0),0) : 0;
+        const rev = (p.rev||0) + hhRev; const profit = rev - exps;
+        cumulative += profit; totalRevAll += rev; totalExpAll += exps;
+        return { label: p.label.split(' – ')[0], rev, exps, profit, cumulative };
      });
-     container.innerHTML = `<div class="gchart-wrap mb3"><div class="slabel mb2">Revenue from Customers (₹)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div><div class="gchart-wrap"><div class="slabel mb2">All-Time Customer Totals</div><div class="row gap2" style="justify-content:space-between;"><div><div class="eyebrow">Billed</div><div style="font-size:18px;font-weight:800;color:#e8b800;">₹${fmt(hhSummary.billed)}</div></div><div class="tr"><div class="eyebrow">Milk Sold</div><div style="font-size:18px;font-weight:800;">${fmt(hhSummary.qty)}L</div></div></div></div>`;
+     const vals = rows.map(r=>r.cumulative); const maxV = Math.max(...vals, 1), minV = Math.min(...vals, 0);
+     const range = (maxV - minV) || 1;
+     const zeroY = PAD.t + cH - ((0-minV)/range)*cH;
+     svg += gridLines(maxV, PAD, W, cW, cH, v=>Math.round(v));
+     svg += `<line x1="${PAD.l}" y1="${zeroY}" x2="${W-PAD.r}" y2="${zeroY}" class="chart-axis"/>`;
+     const stepX = rows.length>1 ? cW/(rows.length-1) : 0;
+     const pts = rows.map((r,i)=>({x: PAD.l + i*stepX, y: PAD.t + cH - ((r.cumulative-minV)/range)*cH}));
+     const lineCol = cumulative >= 0 ? 'var(--success)' : 'var(--danger)';
+     svg += `<defs><linearGradient id="gprofit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${lineCol}" stop-opacity="0.35"/><stop offset="100%" stop-color="${lineCol}" stop-opacity="0"/></linearGradient></defs>`;
+     const topD = smoothPath(pts);
+     const fillD = `${topD} L ${pts[pts.length-1].x} ${zeroY} L ${pts[0].x} ${zeroY} Z`;
+     svg += `<path d="${fillD}" fill="url(#gprofit)" stroke="none"/>`;
+     svg += `<path d="${topD}" fill="none" stroke="${lineCol}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+     pts.forEach((pt,i)=>{
+        svg += `<circle cx="${pt.x}" cy="${pt.y}" r="3.5" fill="${lineCol}" class="chart-pt" onclick="gTip(event,'₹${fmt(rows[i].profit)} this period','Cumulative: ₹${fmt(rows[i].cumulative)}')"/>`;
+        svg += `<text x="${pt.x}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${rows[i].label}</text>`;
+     });
+     container.innerHTML = `<div class="gchart-wrap">${gKpiRow([{l:'Total Revenue',v:'₹'+fmt(totalRevAll)},{l:'Total Expenses',v:'₹'+fmt(totalExpAll),color:'var(--danger)'},{l:'Net Profit',v:'₹'+fmt(cumulative),color:lineCol}])}<div class="slabel mb2">Cumulative Net Profit Across Periods (₹)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // CUSTOMER DUES TIMELINE — multi-line running-balance "horizon" view
+  // ─────────────────────────────────────────────────────────────
+  else if(gChartType === 'households') {
+     const hhSummary = householdAllTimeSummary();
+     const active = hhSummary.perHousehold.filter(d=>d.stats.totalMilkValue>0).sort((a,b)=>b.stats.totalMilkValue-a.stats.totalMilkValue).slice(0,5);
+     if(!active.length) { container.innerHTML = `<div class="empty"><div class="esub">No local customer revenue recorded yet.</div></div>`; return; }
+     const households = DB.households();
+     const DAYS = 21;
+     const series = active.map(a => {
+        const h = households.find(x=>x.id===a.id);
+        const ser = h ? householdDueTimeline(h, DAYS) : [];
+        return { id:a.id, name:a.name, points: ser };
+     }).filter(s=>s.points.length);
+     if(!series.length) { container.innerHTML = `<div class="empty"><div class="esub">Not enough recent billing history yet.</div></div>`; return; }
+     const allVals = series.flatMap(s=>s.points.map(p=>p.due));
+     const maxV = Math.max(...allVals, 1), minV = Math.min(...allVals, 0); const range = (maxV-minV)||1;
+     const nDays = series[0].points.length; const stepX = nDays>1 ? cW/(nDays-1) : 0;
+     svg += gridLines(maxV, PAD, W, cW, cH, v=>Math.round(v));
+     const zeroY = PAD.t + cH - ((0-minV)/range)*cH;
+     svg += `<line x1="${PAD.l}" y1="${zeroY}" x2="${W-PAD.r}" y2="${zeroY}" class="chart-axis"/>`;
+     series.forEach(s => {
+        const col = generateLivestockColor(s.name);
+        const pts = s.points.map((p,i)=>({x: PAD.l+i*stepX, y: PAD.t+cH-((p.due-minV)/range)*cH}));
+        const dim = gIsolated && gIsolated !== s.name ? ' dim' : '';
+        svg += `<path d="${smoothPath(pts)}" fill="none" stroke="${col}" stroke-width="2" class="line-path${dim}" stroke-linecap="round" stroke-linejoin="round"/>`;
+        const last = pts[pts.length-1];
+        svg += `<circle cx="${last.x}" cy="${last.y}" r="3.5" fill="${col}" class="chart-pt${dim?' dim':''}" onclick="gTip(event,'${s.name}','Due: ₹${fmt(s.points[s.points.length-1].due)}')"/>`;
+     });
+     [0, Math.floor(nDays/2), nDays-1].forEach(i => { const d = series[0].points[i]; if(!d) return; const x = PAD.l+i*stepX; svg += `<text x="${x}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${fmtDS(d.date)}</text>`; });
+     const legend = series.map(s => {
+        const col = generateLivestockColor(s.name); const dim = gIsolated && gIsolated !== s.name ? ' dim' : ''; const activeCls = gIsolated===s.name ? ' active-pick' : '';
+        return `<div class="g-legend-item${dim}${activeCls}" onclick="toggleIsolate('${s.name.replace(/'/g,"\\'")}')"><span class="g-legend-dot2" style="background:${col};"></span>${s.name}</div>`;
+     }).join('');
+     container.innerHTML = `<div class="gchart-wrap">${gKpiRow([{l:'Billed',v:'₹'+fmt(hhSummary.billed),color:'#e8b800'},{l:'Collected',v:'₹'+fmt(hhSummary.collected),color:'var(--success)'},{l:'Outstanding',v:'₹'+fmt(hhSummary.billed-hhSummary.collected),color:'var(--danger)'}])}<div class="slabel mb2">Customer Outstanding Balance — Last ${DAYS} Days (Top ${series.length})</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg><div class="g-legend">${legend}</div></div>`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MILK / REVENUE SPLIT — dynamic per-name colors + tap-to-isolate legend
+  // ─────────────────────────────────────────────────────────────
   else if(gChartType === 'pie_milk' || gChartType === 'pie_rev') {
      const isRev = gChartType === 'pie_rev'; const source = gChartFilter === 'category' ? cache.allTime.byCategory : cache.allTime.byName;
      const items = Object.keys(source).map(k => ({ name: k, val: isRev ? source[k].rev : source[k].milk, type: source[k].type || k })).filter(i => i.val > 0);
      if(!items.length) { container.innerHTML = `<div class="empty"><div class="esub">No data to split yet.</div></div>`; return; }
-     
+
      const total = items.reduce((s, i) => s + i.val, 0); const CR=60, CX=80, CY=80; let pie='', startA=-Math.PI/2, legendRows='';
-     const fallbackColors = ['#4e8cff','#7b8794','#d4a373','#a0aec0','#e53e3e','#38a169','#d69e2e'];
-     
-     items.forEach((item, i) => {
+
+     items.forEach((item) => {
         const pct = item.val / total, angle = pct * 2 * Math.PI, lg=angle>Math.PI?1:0;
         const x1=CX+CR*Math.cos(startA), y1=CY+CR*Math.sin(startA), x2=CX+CR*Math.cos(startA+angle), y2=CY+CR*Math.sin(startA+angle);
-        let col = aColors[item.type] || fallbackColors[i % fallbackColors.length];
-        if (pct === 1) pie += `<circle cx="${CX}" cy="${CY}" r="${CR}" fill="${col}" class="pie-slice"/>`;
-        else pie += `<path d="M${CX},${CY} L${x1.toFixed(1)},${y1.toFixed(1)} A${CR},${CR} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${col}" class="pie-slice"/>`;
+        const col = gChartFilter === 'category' ? (aColors[item.type] || generateLivestockColor(item.name)) : generateLivestockColor(item.name);
+        const dim = gIsolated && gIsolated !== item.name ? ' dim' : '';
+        const sliceAttrs = `class="pie-slice${dim}" onclick="toggleIsolate('${item.name.replace(/'/g,"\\'")}'); gTip(event,'${item.name}','${isRev?'₹':''}${fmt(item.val)}${!isRev?'L':''} (${(pct*100).toFixed(0)}%)')"`;
+        if (pct === 1) pie += `<circle cx="${CX}" cy="${CY}" r="${CR}" fill="${col}" ${sliceAttrs}/>`;
+        else pie += `<path d="M${CX},${CY} L${x1.toFixed(1)},${y1.toFixed(1)} A${CR},${CR} 0 ${lg},1 ${x2.toFixed(1)},${y2.toFixed(1)} Z" fill="${col}" ${sliceAttrs}/>`;
         const midA = startA + angle/2, lx = CX + (CR*0.6)*Math.cos(midA), ly = CY + (CR*0.6)*Math.sin(midA);
-        if(pct > 0.08) pie += `<text x="${lx.toFixed(0)}" y="${ly.toFixed(0)}" text-anchor="middle" dominant-baseline="middle" style="fill:#fff;font-size:10px;font-weight:700;">${(pct*100).toFixed(0)}%</text>`;
-        legendRows += `<div class="row gap2 mb2" style="font-size:12px;"><span class="g-legend-dot" style="background:${col};"></span><span class="trunc f1" style="text-transform:capitalize;">${item.name}</span><span style="font-weight:700;">${isRev?'₹':''}${fmt(item.val)}${!isRev?'L':''}</span></div>`;
+        if(pct > 0.08) pie += `<text x="${lx.toFixed(0)}" y="${ly.toFixed(0)}" text-anchor="middle" dominant-baseline="middle" style="fill:#fff;font-size:10px;font-weight:700;pointer-events:none;">${(pct*100).toFixed(0)}%</text>`;
+        const dimLeg = gIsolated && gIsolated !== item.name ? ' dim' : ''; const activeLeg = gIsolated===item.name ? ' active-pick' : '';
+        legendRows += `<div class="g-legend-item${dimLeg}${activeLeg}" style="width:100%;justify-content:space-between;" onclick="toggleIsolate('${item.name.replace(/'/g,"\\'")}')"><span class="row gap2" style="align-items:center;"><span class="g-legend-dot2" style="background:${col};"></span><span class="trunc" style="text-transform:capitalize;">${item.name}</span></span><span style="font-weight:700;">${isRev?'₹':''}${fmt(item.val)}${!isRev?'L':''}</span></div>`;
         startA += angle;
      });
-     container.innerHTML = `<div class="row gap2 mb3"><button class="ppill ${gChartFilter==='category'?'on':''}" onclick="setGFilter('category')">By Category</button><button class="ppill ${gChartFilter==='name'?'on':''}" onclick="setGFilter('name')">By Animal Name</button></div><div class="gchart-wrap"><div class="slabel mb3">${isRev ? 'All-Time Revenue Split' : 'All-Time Milk Split'}</div><div class="row gap3" style="align-items:flex-start;"><svg viewBox="0 0 160 160" style="width:140px;flex-shrink:0;">${pie}</svg><div class="f1">${legendRows}</div></div></div>`;
+     container.innerHTML = `<div class="row gap2 mb3"><button class="ppill ${gChartFilter==='category'?'on':''}" onclick="setGFilter('category')">By Category</button><button class="ppill ${gChartFilter==='name'?'on':''}" onclick="setGFilter('name')">By Animal Name</button></div><div class="gchart-wrap"><div class="slabel mb3">${isRev ? 'All-Time Revenue Split' : 'All-Time Milk Split'}</div><div class="row gap3" style="align-items:flex-start;"><svg viewBox="0 0 160 160" style="width:140px;flex-shrink:0;">${pie}</svg><div class="f1" style="display:flex;flex-direction:column;gap:6px;">${legendRows}</div></div></div>`;
   }
 }
 
