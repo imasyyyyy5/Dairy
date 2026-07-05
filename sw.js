@@ -1,7 +1,7 @@
 // Milk Dairy Notebook — Service Worker
 // Bump CACHE_VERSION on every deploy that changes index.html / icons /
 // manifest, otherwise users keep getting the old cached version forever.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = 'mdn-cache-' + CACHE_VERSION;
 
 // Everything needed to open and run the app with zero network.
@@ -39,24 +39,19 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  // Page navigations: serve the cached app shell instantly (works offline
-  // on first try), and quietly refresh the cache in the background when
-  // online so next time you get the latest version.
+  // Page navigations: ALWAYS try the network first so users get today's
+  // update immediately. Only fall back to the cached app shell when
+  // there's no network (offline support). Whatever comes back from the
+  // network is also stored, so offline mode stays fresh too.
   if (req.mode === 'navigate') {
     event.respondWith(
-      caches.match('./index.html').then((cached) => {
-        if (cached) {
-          event.waitUntil(
-            fetch(req).then((res) => {
-              if (res && res.status === 200) {
-                return caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', res.clone()));
-              }
-            }).catch(() => {})
-          );
-          return cached;
+      fetch(req).then((res) => {
+        if (res && res.status === 200) {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', resClone));
         }
-        return fetch(req).catch(() => caches.match('./index.html'));
-      })
+        return res;
+      }).catch(() => caches.match('./index.html').then((cached) => cached || caches.match('./')))
     );
     return;
   }
