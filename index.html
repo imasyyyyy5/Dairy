@@ -105,17 +105,6 @@ select{-webkit-appearance:none;}
 .qe-input.active-inp { border-color: #fff; transform: scale(1.05); background: rgba(0,0,0,0.8); box-shadow: 0 0 0 4px rgba(255,255,255,0.1); }
 .qe-input-sm { font-size: 14px; width: 60px; padding: 6px; }
 
-/* HOLD & COMBINE (pour multiple animals' milk together) */
-.qe-hold-toggle { font-size: 12px; padding: 7px 12px; border-radius: 100px; border: 1px solid var(--border2); background: var(--bg2); color: var(--sub); font-weight: 700; white-space:nowrap; }
-.qe-hold-toggle.on { background: rgba(138,180,255,0.16); border-color: #8ab4ff; color: #cfe0ff; }
-.qe-card.qe-selectable { cursor: pointer; }
-.qe-card.qe-selectable .qe-input { pointer-events: none; }
-.qe-card.qe-selected { border-color: #8ab4ff; box-shadow: 0 0 0 3px rgba(138,180,255,0.25), 0 6px 12px rgba(0,0,0,0.4); }
-.qe-select-badge { width:20px; height:20px; border-radius:50%; border:2px solid var(--border2); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:900; color:transparent; transition: all .15s; }
-.qe-card.qe-selected .qe-select-badge { background:#8ab4ff; border-color:#8ab4ff; color:#04122b; }
-.qe-combo-card { border: 1.5px solid rgba(138,180,255,0.4) !important; background: linear-gradient(145deg, rgba(138,180,255,0.09), var(--bg1)) !important; }
-#qe-hold-bar { display:none; justify-content:space-between; align-items:center; background: var(--bg2); border: 1px solid rgba(138,180,255,0.4); border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; }
-
 /* NUMPAD */
 .numpad {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 5px;
@@ -402,19 +391,9 @@ svg.chart{display:block;width:100%;overflow:visible;}
        <button class="btn bg" style="font-size:13px; color:var(--sub); padding:4px 8px;" onclick="openFullApp()">Skip ➔</button>
       </div>
       <div id="qe-warning" class="warning-box anim-stagger d1">Data already exists for this shift. Saving will overwrite previous entries.</div>
-      <div class="row anim-stagger d1" id="qe-hold-toggle-wrap" style="justify-content:flex-end; margin-bottom:10px;">
-       <button id="qe-hold-toggle" class="qe-hold-toggle" onclick="toggleQeHold()">🤝 Hold & Pour Together</button>
-      </div>
       <div id="qe-inputs" class="sp2 anim-stagger d2"></div>
   </div>
   <div class="anim-stagger d3" style="flex-shrink:0;">
-      <div id="qe-hold-bar">
-        <div style="font-size:12.5px; font-weight:700;">Selected <span id="qe-hold-count">0</span> animal(s) to pour together</div>
-        <div class="row gap2">
-          <button class="btn bg" style="font-size:12px; padding:6px 10px; border-radius:10px;" onclick="qeCancelHold()">Cancel</button>
-          <button class="btn bp" style="font-size:12px; padding:6px 12px; border-radius:10px;" onclick="qeConfirmCombine()">Combine</button>
-        </div>
-      </div>
       <div class="numpad">
           <button class="num-key" onclick="numpadPress('1')">1</button><button class="num-key" onclick="numpadPress('2')">2</button><button class="num-key" onclick="numpadPress('3')">3</button>
           <button class="num-key" onclick="numpadPress('4')">4</button><button class="num-key" onclick="numpadPress('5')">5</button><button class="num-key" onclick="numpadPress('6')">6</button>
@@ -1424,11 +1403,6 @@ function finishOnboarding() {
 }
 
 let justOnboarded = false; let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null };
-// HOLD & COMBINE state — lets a user select 2+ animals whose milk was physically poured
-// together and log it as a single combined amount. The combined amount is split evenly
-// across the selected animals' own columns (so totals/graphs/reports stay accurate), while
-// the grouping itself is kept as its own separate audit record on the row (row.combos).
-let qeHoldMode = false; let qeSelected = new Set(); let qeCombos = [];
 function getActivePage() { const td = today(); return DB.pages().find(p => !p.locked && td >= p.startDate && td <= p.endDate) || null; }
 
 function openQuickEntry() {
@@ -1438,93 +1412,28 @@ function openQuickEntry() {
   document.getElementById('qe-greeting').textContent = hour < 12 ? 'Good Morning' : (hour < 17 ? 'Good Afternoon' : 'Good Evening'); document.getElementById('qe-date-label').textContent = fmtD(today());
   let page = getActivePage(); let row;
   if (!page || !(row = page.rows.find(r => r.assignedDate === today()))) { showToast("No active record sheet for today.", false); setTimeout(() => { openFullApp(); openNewPageModal(); }, 400); return; }
-
+  
   qeContext.pageId = page.id; qeContext.rowId = row.id;
   const targetCols = page.cols.filter(c => c.type === (isPM ? 'milk_pm' : 'milk_am')); qeContext.cols = targetCols;
 
-  qeHoldMode = false; qeSelected = new Set();
-  const shiftKey = isPM ? 'pm' : 'am';
-  qeCombos = (row.combos && Array.isArray(row.combos[shiftKey])) ? row.combos[shiftKey].map(c => ({ id: c.id || uid(), colIds: c.colIds.slice(), value: (c.value || c.value === 0) ? String(c.value) : '' })) : [];
-  document.getElementById('qe-hold-toggle-wrap').style.display = targetCols.length >= 2 ? 'flex' : 'none';
-
-  renderQeInputs();
-}
-
-function renderQeInputs() {
-  const page = getActivePage(); if (!page) return;
-  const row = page.rows.find(r => r.id === qeContext.rowId); if (!row) return;
-  const targetCols = qeContext.cols; const isPM = qeContext.isPM; const profile = DB.profile();
-
   let html = '', hasData = false, firstInputId = null;
-  if (!targetCols.length) { html = `<div class="empty anim-stagger d1"><div class="esub">No milking animals found. Edit animals in the Profile section.</div></div>`; }
+  if (!targetCols.length) { html = `<div class="empty anim-stagger d1"><div class="esub">No milking animals found. Edit animals in the Profile section.</div></div>`; } 
   else {
-    const comboColIds = new Set(qeCombos.flatMap(c => c.colIds));
-
-    // Combined (pooled) entries first — one shared input per group.
-    qeCombos.forEach(combo => {
-      const names = combo.colIds.map(id => {
-        const c = targetCols.find(x => x.id === id); const info = profile.animals?.find(a => a.id === c?.animal);
-        return info ? info.name : (c ? c.name.replace(' AM','').replace(' PM','') : '?');
-      }).join(' + ');
-      if (combo.value) hasData = true; const inputId = `qe-combo-${combo.id}`; if (!firstInputId) firstInputId = inputId;
-      html += `<div class="qe-card qe-combo-card"><div class="row gap3 w-100" style="justify-content:space-between; align-items:flex-start;"><div class="row gap2"><span style="font-size:26px;">🔗</span><div><div style="font-weight:900; font-size:15px; letter-spacing:0.3px;">${names}</div><div style="font-size:11px; color:#8ab4ff; text-transform:uppercase; letter-spacing:1px; margin-top:1px;">Poured Together • ${combo.colIds.length} animals</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${combo.value || ''}" onclick="setNumpadTarget('${inputId}')"/></div><div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:10.5px; color:var(--muted);">Split evenly across these animals automatically</div><button class="btn bg" style="font-size:11px; color:var(--danger); padding:2px 8px;" onclick="qeSplitCombo('${combo.id}')">Split ✕</button></div></div>`;
-    });
-
-    // Individual animals not currently part of a combo.
     targetCols.forEach(c => {
-      if (comboColIds.has(c.id)) return;
       if (row[c.id]) hasData = true; const inputId = `qe-input-${c.id}`; if (!firstInputId) firstInputId = inputId;
-      const animalInfo = profile.animals?.find(a => a.id === c.animal); const icon = animalInfo ? (aIcon[animalInfo.type]||'🥛') : '🥛';
+      const animalInfo = DB.profile().animals?.find(a => a.id === c.animal); const icon = animalInfo ? (aIcon[animalInfo.type]||'🥛') : '🥛';
       const animalName = animalInfo ? animalInfo.name : c.name.replace(' AM','').replace(' PM','');
-      const selected = qeSelected.has(c.id);
       let rateHtml = '';
-      if (profile.ratePerEntry !== false) {
+      if (DB.profile().ratePerEntry !== false) {
          const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
          if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || (animalInfo ? animalInfo.rate : '')}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/></div></div>`;
       }
-      const cardClass = `qe-card${qeHoldMode ? ' qe-selectable' : ''}${selected ? ' qe-selected' : ''}`;
-      const cardClick = qeHoldMode ? ` onclick="qeToggleSelect('${c.id}')"` : '';
-      const badge = qeHoldMode ? `<div class="qe-select-badge">✓</div>` : '';
-      html += `<div class="${cardClass}"${cardClick}><div class="row gap3 w-100" style="justify-content:space-between;"><div class="row gap2">${badge}<span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span><div><div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${row[c.id] || ''}" onclick="setNumpadTarget('${inputId}')"/></div>${rateHtml}</div>`;
+      html += `<div class="qe-card"><div class="row gap3 w-100" style="justify-content:space-between;"><div class="row gap2"><span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span><div><div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${row[c.id] || ''}" onclick="setNumpadTarget('${inputId}')"/></div>${rateHtml}</div>`;
     });
     html += `<div class="qe-card anim-stagger d2" style="margin-top: 12px; padding: 14px;"><div class="row gap2" style="justify-content:space-between; align-items:center;"><div><div style="font-weight:900; font-size:14px;">Log Payment</div><div style="font-size:11px; color:var(--muted); margin-top:2px;">Record money received from Milkmen now</div></div><label class="tswitch"><input type="checkbox" id="qe-payment-toggle" onchange="document.getElementById('qe-payment-amount-wrap').style.display = this.checked ? 'flex' : 'none'"/><div class="tslider"></div></label></div><div id="qe-payment-amount-wrap" class="row gap2 w-100" style="display:none; justify-content:space-between; align-items:center; padding-top:12px; margin-top:12px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--success); font-weight:700; text-transform:uppercase;">Amount (₹)</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-payment-amount" class="qe-input qe-input-sm" readonly placeholder="0.0" onclick="setNumpadTarget('qe-payment-amount')"/></div></div></div>`;
   }
   document.getElementById('qe-inputs').innerHTML = html; document.getElementById('qe-warning').style.display = hasData ? 'block' : 'none';
   if(firstInputId) setNumpadTarget(firstInputId);
-
-  const toggleBtn = document.getElementById('qe-hold-toggle');
-  if (toggleBtn) { toggleBtn.classList.toggle('on', qeHoldMode); toggleBtn.textContent = qeHoldMode ? '✕ Cancel Selecting' : '🤝 Hold & Pour Together'; }
-  const holdBar = document.getElementById('qe-hold-bar');
-  if (holdBar) holdBar.style.display = qeHoldMode ? 'flex' : 'none';
-  const countEl = document.getElementById('qe-hold-count'); if (countEl) countEl.textContent = qeSelected.size;
-}
-
-function toggleQeHold() {
-  qeHoldMode = !qeHoldMode; qeSelected = new Set();
-  renderQeInputs();
-}
-function qeToggleSelect(colId) {
-  if (qeSelected.has(colId)) qeSelected.delete(colId); else qeSelected.add(colId);
-  renderQeInputs();
-}
-function qeCancelHold() { qeHoldMode = false; qeSelected = new Set(); renderQeInputs(); }
-function qeConfirmCombine() {
-  if (qeSelected.size < 2) { showToast('Select at least 2 animals to pour together.', false); return; }
-  qeCombos.push({ id: uid(), colIds: Array.from(qeSelected), value: '' });
-  qeHoldMode = false; qeSelected = new Set();
-  renderQeInputs();
-}
-function qeSplitCombo(comboId) {
-  qeCombos = qeCombos.filter(c => c.id !== comboId);
-  renderQeInputs();
-}
-// Splits a combined total into equal per-animal shares (2-decimal precision) whose sum
-// exactly equals the original total, so overall daily/period totals never drift.
-function qeSplitEvenly(total, n) {
-  const cents = Math.round(total * 100); const base = Math.floor(cents / n); let rem = cents - base * n;
-  const shares = [];
-  for (let i = 0; i < n; i++) { let c = base + (rem > 0 ? 1 : 0); if (rem > 0) rem--; shares.push(c / 100); }
-  return shares;
 }
 
 function setNumpadTarget(id) { document.querySelectorAll('.qe-input').forEach(el => el.classList.remove('active-inp')); const t = document.getElementById(id); if (t) { t.classList.add('active-inp'); qeContext.activeInputId = id; } }
@@ -1538,37 +1447,17 @@ function saveQuickEntry() {
   if (pageIdx < 0) { openFullApp(); return; }
   const page = pages[pageIdx]; const rowIdx = page.rows.findIndex(r => r.id === qeContext.rowId); if (rowIdx < 0) { openFullApp(); return; }
   const row = page.rows[rowIdx]; let shiftMilkAdded = false;
-  const comboColIds = new Set(qeCombos.flatMap(c => c.colIds));
 
   qeContext.cols.forEach(c => {
-    if (comboColIds.has(c.id)) return; // handled below as part of its combo group
     const valStr = document.getElementById(`qe-input-${c.id}`)?.value || ''; if (valStr) shiftMilkAdded = true; row[c.id] = valStr;
     if (DB.profile().ratePerEntry !== false) {
        const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
        if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '') row[rateCol.id] = rateInput.value; }
     }
   });
-
-  // Write each combo's total split evenly into the member animals' own columns, and keep
-  // a separate audit record (row.combos) noting which animals were pooled and for how much.
-  const savedCombos = [];
-  qeCombos.forEach(combo => {
-    const valStr = document.getElementById(`qe-combo-${combo.id}`)?.value || '';
-    const total = parseFloat(valStr) || 0;
-    if (valStr) shiftMilkAdded = true;
-    const shares = qeSplitEvenly(total, combo.colIds.length);
-    combo.colIds.forEach((colId, i) => { row[colId] = valStr ? String(shares[i]) : ''; });
-    const animalNames = combo.colIds.map(id => {
-      const c = page.cols.find(x => x.id === id); const info = DB.profile().animals?.find(a => a.id === c?.animal);
-      return info ? info.name : (c ? c.name.replace(' AM','').replace(' PM','') : '?');
-    });
-    savedCombos.push({ id: combo.id, colIds: combo.colIds, animalNames, value: total });
-  });
-  row.combos = row.combos || {}; row.combos[qeContext.isPM ? 'pm' : 'am'] = savedCombos;
-
   row.date = today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
-  DB.savePages(pages);
-  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)} via Quick Screen${savedCombos.length ? ` (${savedCombos.length} combined pour${savedCombos.length>1?'s':''})` : ''}.`, 'update');
+  DB.savePages(pages); 
+  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)} via Quick Screen.`, 'update');
 
   const pTog = document.getElementById('qe-payment-toggle');
   if (pTog && pTog.checked) {
