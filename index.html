@@ -1285,6 +1285,188 @@ function householdStatusLabel(h){
   return `Active since ${fmtD(h.startDate)}`;
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  HISAAB SHARE — Indian-notebook-style ledger images for milkmen & customers
+// ══════════════════════════════════════════════════════════════════
+const HISAAB_ROWS_PER_PAGE = 14;
+
+// Full day-one-to-stopped ledger for a household (not limited to a single period page)
+function householdFullLedger(h){
+  const out = []; const end = (h.stopped && h.stopDate) ? h.stopDate : today();
+  let d = h.startDate; if(!d || d > end) return out; let guard = 0;
+  while(d <= end && guard < 3660){
+    const e = getHouseholdDayEntry(h, d);
+    if((e.qty||0) > 0) out.push({date: d, qty: e.qty||0, rate: e.rate||0, amount: parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2))});
+    d = addDays(d,1); guard++;
+  }
+  return out;
+}
+
+// Per-day milk & amount for a milkmen record sheet (period page)
+function pageDailyLedger(page){
+  return page.rows.filter(r=>r.date).map(r=>{
+    let milk=0; page.cols.forEach(c=>{ if(c.type==='milk_am'||c.type==='milk_pm') milk += parseFloat(r[c.id])||0; });
+    return { date: r.date, qty: parseFloat(milk.toFixed(2)), amount: parseFloat((parseFloat(r.total)||0).toFixed(2)) };
+  }).filter(r=>r.qty>0 || r.amount>0);
+}
+
+function chunkArr(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
+function truncateHisaabText(t, n){ t = t || '—'; return t.length > n ? t.slice(0, n-1) + '…' : t; }
+
+// Draws a single Indian-notebook-page-style ledger sheet: cream ruled paper,
+// red left margin line, black headings/labels/columns, blue data entries.
+// `heading` is the big top-line title (who this sheet is for/about),
+// `subheading` is a smaller line under it (what this sheet is), `columns`
+// controls the table layout so the same drawer works for milk entries or payments.
+function drawNotebookPage({heading, subheading, subtitle, columns, rows, footerLines, pageNum, totalPages, footNote}){
+  const W = 900, H = 1272;
+  const canvas = document.createElement('canvas'); canvas.width=W; canvas.height=H;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#faf3df'; ctx.fillRect(0,0,W,H);
+  const shade = ctx.createLinearGradient(0,0,W,0);
+  shade.addColorStop(0,'rgba(0,0,0,0.04)'); shade.addColorStop(0.05,'rgba(0,0,0,0)');
+  shade.addColorStop(0.95,'rgba(0,0,0,0)'); shade.addColorStop(1,'rgba(0,0,0,0.04)');
+  ctx.fillStyle = shade; ctx.fillRect(0,0,W,H);
+
+  const marginX = 78, topStart = 158, lineGap = 34, rightEdge = W - 44;
+  ctx.strokeStyle = 'rgba(50,85,190,0.30)'; ctx.lineWidth = 1.3;
+  for(let y = topStart; y < H - 70; y += lineGap){ ctx.beginPath(); ctx.moveTo(26,y); ctx.lineTo(W-26,y); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(195,35,35,0.55)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(marginX,18); ctx.lineTo(marginX,H-18); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.14)'; ctx.lineWidth = 3; ctx.strokeRect(8,8,W-16,H-16);
+
+  ctx.fillStyle = '#141414'; ctx.font = '900 32px Georgia, "Times New Roman", serif';
+  ctx.fillText(heading, marginX+14, 62);
+  if(subheading){ ctx.fillStyle = '#1c1c1c'; ctx.font = '700 22px Georgia, serif'; ctx.fillText(subheading, marginX+14, 96); }
+  if(subtitle){ ctx.fillStyle = '#3a3a3a'; ctx.font = '400 16px Georgia, serif'; ctx.fillText(subtitle, marginX+14, 120); }
+  if(totalPages > 1){
+    ctx.textAlign='right'; ctx.fillStyle='#555'; ctx.font='600 14px Georgia, serif';
+    ctx.fillText(`Page ${pageNum}/${totalPages}`, rightEdge, 62); ctx.textAlign='left';
+  }
+
+  let y = topStart - 8;
+  ctx.fillStyle = '#111'; ctx.font = '800 16px Georgia, serif';
+  columns.forEach(c=>{ ctx.textAlign = c.align||'left'; ctx.fillText(c.label, c.x, y); });
+  ctx.textAlign = 'left';
+
+  ctx.font = '600 16px Georgia, serif'; y = topStart + lineGap - 8;
+  rows.forEach(r=>{
+    ctx.fillStyle = '#1a3fb0';
+    columns.forEach((c,ci)=>{ ctx.textAlign = c.align||'left'; ctx.fillText(r[ci], c.x, y); });
+    ctx.textAlign = 'left';
+    y += lineGap;
+  });
+  if(!rows.length){
+    ctx.fillStyle = '#888'; ctx.font = 'italic 16px Georgia, serif'; ctx.fillText('— No entries —', marginX+14, y);
+  }
+
+  if(footerLines && footerLines.length){
+    const footY = H - (footNote ? 118 : 96);
+    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.moveTo(26,footY-26); ctx.lineTo(W-26,footY-26); ctx.stroke();
+    ctx.fillStyle='#111'; ctx.font='900 21px Georgia, serif';
+    footerLines.forEach((line,i)=> ctx.fillText(line, marginX+14, footY + i*29));
+  }
+  if(footNote){ ctx.fillStyle='#777'; ctx.font='italic 13px Georgia, serif'; ctx.fillText(footNote, marginX+14, H-34); }
+  return canvas;
+}
+
+const HISAAB_ENTRY_COLS = [
+  {label:'Date', x:92, align:'left'},
+  {label:'Milk (L)', x:420, align:'left'},
+  {label:'Rate ₹/L', x:570, align:'left'},
+  {label:'Amount ₹', x:856, align:'right'}
+];
+const HISAAB_PAYMENT_COLS = [
+  {label:'Date', x:92, align:'left'},
+  {label:'Amount ₹', x:490, align:'right'},
+  {label:'Remark', x:560, align:'left'}
+];
+
+function buildHisaabPages_Page(page){
+  const profile = DB.profile(); const ledger = pageDailyLedger(page);
+  const chunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const chunkList = chunks.length?chunks:[[]];
+  const totalMilk = ledger.reduce((s,r)=>s+r.qty,0), totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
+  return chunkList.map((chunk, idx)=>{
+    const rows = chunk.map(r=>[ fmtDS(r.date), fmt(r.qty)+' L', r.qty>0?fmt(r.amount/r.qty):'0.00', '₹'+fmt(r.amount) ]);
+    const footerLines = (idx===chunkList.length-1) ? [ `Total Milk: ${fmt(totalMilk)} L`, `Total Amount: ₹${fmt(totalAmt)}` ] : null;
+    return drawNotebookPage({ heading: profile.name || 'Dairy Hisaab', subheading:'Milk Supply Hisaab', subtitle:`Period: ${page.label}`, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages: chunkList.length });
+  });
+}
+
+// Household hisaab: heading is the household's own name (this sheet is *for*
+// them, so their name — not the dairy's or any animal's — leads), followed by
+// the daily milk entries, and then a dedicated payments ledger with remarks so
+// they can see exactly when they paid, how much, and what's still outstanding.
+function buildHisaabPages_Household(h){
+  const profile = DB.profile(); const ledger = householdFullLedger(h);
+  const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
+  const stats = getCustomerStats(h);
+  const period = `${fmtD(h.startDate)} – ${(h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present'}`;
+  const payments = (h.payments||[]).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+  const paymentChunks = chunkArr(payments, HISAAB_ROWS_PER_PAGE); const paymentChunkList = paymentChunks.length?paymentChunks:[[]];
+  const totalPages = entryChunkList.length + paymentChunkList.length;
+  const footNote = `Milk supplied by ${profile.name||'Dairy'}`;
+
+  const entryPages = entryChunkList.map((chunk, idx)=>{
+    const rows = chunk.map(r=>[ fmtDS(r.date), fmt(r.qty)+' L', fmt(r.rate), '₹'+fmt(r.amount) ]);
+    const footerLines = (idx===entryChunkList.length-1) ? [ `Total Milk: ${fmt(stats.totalLiters)} L`, `Total Amount: ₹${fmt(stats.totalMilkValue)}` ] : null;
+    return drawNotebookPage({ heading:`${h.name}`, subheading:'Milk Hisaab', subtitle:period, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages, footNote });
+  });
+
+  const paymentPages = paymentChunkList.map((chunk, idx)=>{
+    const rows = chunk.map(p=>[ fmtDS(p.date), '₹'+fmt(p.amount), truncateHisaabText(p.note, 26) ]);
+    const isLast = idx===paymentChunkList.length-1;
+    const footerLines = isLast ? [ `Total Billed: ₹${fmt(stats.totalMilkValue)}`, `Total Paid: ₹${fmt(stats.totalPaid)}   Balance Due: ₹${fmt(stats.currentDue)}` ] : null;
+    return drawNotebookPage({ heading:`${h.name}`, subheading:'Payments Received', subtitle:period, columns: HISAAB_PAYMENT_COLS, rows, footerLines, pageNum: entryChunkList.length+idx+1, totalPages, footNote });
+  });
+
+  return [...entryPages, ...paymentPages];
+}
+
+async function canvasesToPdfFile(canvases, filename){
+  if(typeof PDFLib === 'undefined') throw new Error('PDF library not loaded');
+  const { PDFDocument } = PDFLib;
+  const pdfDoc = await PDFDocument.create();
+  for(const canvas of canvases){
+    const pngBytes = await fetch(canvas.toDataURL('image/png')).then(r=>r.arrayBuffer());
+    const img = await pdfDoc.embedPng(pngBytes);
+    const page = pdfDoc.addPage([canvas.width, canvas.height]);
+    page.drawImage(img, { x:0, y:0, width:canvas.width, height:canvas.height });
+  }
+  const pdfBytes = await pdfDoc.save();
+  return new File([pdfBytes], filename, { type: 'application/pdf' });
+}
+
+// Shares a single combined PDF via the native share sheet only — never
+// auto-downloads. If the device/browser can't share files, we say so instead
+// of silently dropping files onto disk.
+async function shareHisaabCanvases(canvases, baseName){
+  showToast('Preparing hisaab PDF...', true);
+  try{
+    const file = await canvasesToPdfFile(canvases, `${baseName}.pdf`);
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], title: baseName}).then(()=>showToast('Share sheet opened successfully.')).catch(()=>{});
+    } else {
+      appAlert('Sharing Not Supported', 'Your browser/device does not support direct file sharing. Try opening this app in Chrome (Android) or Safari (iPhone).');
+    }
+  } catch(err){ appAlert('Error','Could not generate hisaab PDF.'); }
+}
+
+async function shareHisaabForPage(pageId){
+  const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
+  if(!pageDailyLedger(page).length) return appAlert('No Entries','This period has no filled-in entries yet to share.');
+  await shareHisaabCanvases(buildHisaabPages_Page(page), `Hisaab_${page.label.replace(/[^\w]+/g,'_')}`);
+}
+
+async function shareHisaabForHousehold(hhId){
+  const h = DB.households().find(x=>x.id===hhId); if(!h) return;
+  if(!householdFullLedger(h).length && !(h.payments||[]).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
+  await shareHisaabCanvases(buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`);
+}
+
+
 function createPage(startDate){
   const profile=DB.profile(); const pLen = profile.periodLength || 10; const end=addDays(startDate, pLen - 1);
   const sD=new Date(startDate+'T00:00:00'),eD=new Date(end+'T00:00:00');
@@ -1528,7 +1710,7 @@ function renderDetailView(el){
 
   el.innerHTML=`
    <div class="ph">
-    <div class="row gap2 mb3"><button class="btn bg bsm" onclick="closeDetail()">×</button><div class="f1"></div><button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button><button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Edit Length</button><button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button></div>
+    <div class="row gap2 mb3" style="flex-wrap:nowrap;overflow-x:auto;"><button class="btn bg bsm" onclick="closeDetail()">×</button><div class="f1"></div><button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button><button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Length</button><button class="btn bg bsm" onclick="shareHisaabForPage('${page.id}')">📤 Share</button><button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button></div>
     <div class="eyebrow">${page.rows.length}-Day Period</div><div class="ptitle" style="font-size:17px;">${page.label}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">${detailPageIdx===0?'Each row unlocks on its assigned date.':'Milk sold to local customers — swipe right to go back.'}</div>
    </div>
@@ -1568,12 +1750,13 @@ function renderHouseholdsPageHTML(page){
         </div>
         ${expanded ? `
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
-         <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Total Billed: ₹${fmt(stats.totalMilkValue)} • Paid: ₹${fmt(stats.totalPaid)} <span style="color:var(--sub);">(Log payments from the Calc tab)</span></div>
+         <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Total Milk: ${fmt(stats.totalLiters)}L • Total Amount: ₹${fmt(stats.totalMilkValue)} • Paid: ₹${fmt(stats.totalPaid)} <span style="color:var(--sub);">(Log payments from the Calc tab)</span></div>
          <button class="btn bs bsm w-100 hh-history-btn" style="justify-content:center;" onclick="event.stopPropagation();toggleHHHistory('${h.id}')">📜 ${historyOpen?'Hide':'View'} Qty/Rate Change History ${historyOpen?'▲':'▼'}</button>
          ${historyOpen ? renderHHHistoryList(h) : ''}
-         <div class="row gap2 mt3" style="justify-content:flex-end;">
-          <button class="btn bs bsm" onclick="event.stopPropagation();openHHAddCorrection('${h.id}')">✎ Add Changes</button>
-          <button class="btn bs bsm" onclick="event.stopPropagation();openHouseholdModal('${h.id}')">⚙️ Edit Info</button>
+         <div class="row gap2 mt3" style="flex-wrap:nowrap;">
+          <button class="btn bs bsm" style="flex:1;justify-content:center;padding:5px 4px;" onclick="event.stopPropagation();shareHisaabForHousehold('${h.id}')">📤 Share</button>
+          <button class="btn bs bsm" style="flex:1;justify-content:center;padding:5px 4px;" onclick="event.stopPropagation();openHHAddCorrection('${h.id}')">✎ Edit</button>
+          <button class="btn bs bsm" style="flex:1;justify-content:center;padding:5px 4px;" onclick="event.stopPropagation();openHouseholdModal('${h.id}')">⚙️ Settings</button>
          </div>
         </div>` : ''}
        </div>`;
@@ -2166,7 +2349,7 @@ function renderHHHistoryList(h){
 function removeHHChange(householdId, dateStr){
   const households = DB.households(); const h = households.find(x=>x.id===householdId); if (!h || !h.changes) return;
   h.changes = h.changes.filter(c=>c.date!==dateStr);
-  DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 function openHouseholdModal(id){
@@ -2245,7 +2428,7 @@ function doSaveHousehold(){
     const h = households.find(x=>x.id===editHouseholdId); if (h) { h.name = name; h.startDate = startDate; }
     DB.log(`Updated customer info: ${name}`, 'update');
   }
-  DB.saveHouseholds(households); cm('m-household'); renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 async function toggleStopHousehold(){
@@ -2257,14 +2440,14 @@ async function toggleStopHousehold(){
     const agreed = await appConfirm('Stop Customer?', `Stop daily pouring for ${h.name}? Past records kept.`); if (!agreed) return;
     h.stopped = true; h.stopDate = addDays(today(), -1); DB.log(`Stopped service: ${h.name}`, 'delete');
   }
-  DB.saveHouseholds(households); cm('m-household'); renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 async function deleteHousehold(){
   const households = DB.households(); const h = households.find(x=>x.id===editHouseholdId); if (!h) return;
   const agreed = await appConfirm('Delete Account?', `Permanently delete ALL records and payments for ${h.name}?`); if (!agreed) return;
   DB.saveHouseholds(households.filter(x=>x.id!==editHouseholdId)); DB.log(`Deleted customer account: ${h.name}`, 'delete');
-  cm('m-household'); renderHome(); renderCalc(); renderGraphs();
+  cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 // ── CUSTOMER PAYMENTS LOGIC ──
@@ -2292,7 +2475,7 @@ function saveCustomerPayment() {
   
   DB.saveHouseholds(households);
   DB.log(`Logged payment of ₹${amount} from customer: ${h.name}`, 'payment');
-  cm('m-customer-payment'); renderHome(); renderCalc();
+  cm('m-customer-payment'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc();
 }
 
 async function deleteCustomerPayment(hId, pId) {
@@ -2300,7 +2483,7 @@ async function deleteCustomerPayment(hId, pId) {
   if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===hId); if(!h) return;
   h.payments = h.payments.filter(p => p.id !== pId);
-  DB.saveHouseholds(households); DB.log(`Removed payment for customer: ${h.name}`, 'delete'); renderHome(); renderCalc();
+  DB.saveHouseholds(households); DB.log(`Removed payment for customer: ${h.name}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc();
 }
 
 let hhExceptionTargetDates = null; // array of dates when applying a multi-date exception; null for single-date flow
@@ -2346,7 +2529,7 @@ async function saveHHException(){
     hhExceptionTargetDates.forEach(d => { h.exceptions[d] = {qty, rate}; });
     DB.log(`Added milk corrections for ${h.name} on ${hhExceptionTargetDates.length} dates`, 'update');
     hhExceptionTargetDates = null;
-    DB.saveHouseholds(households); cm('m-hh-exception'); renderHome(); renderCalc(); renderGraphs();
+    DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
     return;
   }
 
@@ -2364,13 +2547,13 @@ async function saveHHException(){
     DB.log(`Updated regular daily milk amount for ${h.name} from ${fmtD(dateStr)}`, 'update');
   }
   hhExceptionTargetDates = null;
-  DB.saveHouseholds(households); cm('m-hh-exception'); renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 function removeHHException(householdId, dateStr){
   const households = DB.households(); const h = households.find(x=>x.id===householdId);
   if (!h || !h.exceptions || !h.exceptions[dateStr]) return; delete h.exceptions[dateStr];
-  DB.saveHouseholds(households); DB.log(`Removed correction for ${h.name} on ${fmtD(dateStr)}`, 'delete'); renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); DB.log(`Removed correction for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 function openHouseholdsOverview(){
