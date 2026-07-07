@@ -1288,7 +1288,7 @@ function householdStatusLabel(h){
 // ══════════════════════════════════════════════════════════════════
 //  HISAAB SHARE — Indian-notebook-style ledger images for milkmen & customers
 // ══════════════════════════════════════════════════════════════════
-const HISAAB_ROWS_PER_PAGE = 14;
+const HISAAB_ROWS_PER_PAGE = 28;
 
 // Full day-one-to-stopped ledger for a household (not limited to a single period page)
 function householdFullLedger(h){
@@ -1313,12 +1313,29 @@ function pageDailyLedger(page){
 function chunkArr(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
 function truncateHisaabText(t, n){ t = t || '—'; return t.length > n ? t.slice(0, n-1) + '…' : t; }
 
+// Loads icon-192.png (sits next to index.html in the repo root) once and
+// caches the result so every notebook page reuses the same Image instead of
+// re-fetching. Resolves to null on failure so callers can fall back gracefully
+// (e.g. offline, or the file getting moved/renamed).
+let _dairyWatermarkIconPromise = null;
+function loadDairyWatermarkIcon(){
+  if(!_dairyWatermarkIconPromise){
+    _dairyWatermarkIconPromise = new Promise(resolve=>{
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = 'icon-192.png';
+    });
+  }
+  return _dairyWatermarkIconPromise;
+}
+
 // Draws a single Indian-notebook-page-style ledger sheet: cream ruled paper,
 // red left margin line, black headings/labels/columns, blue data entries.
 // `heading` is the big top-line title (who this sheet is for/about),
 // `subheading` is a smaller line under it (what this sheet is), `columns`
 // controls the table layout so the same drawer works for milk entries or payments.
-function drawNotebookPage({heading, subheading, subtitle, columns, rows, footerLines, pageNum, totalPages, footNote}){
+async function drawNotebookPage({heading, subheading, subtitle, columns, rows, footerLines, pageNum, totalPages, footNote}){
   const W = 900, H = 1272;
   const canvas = document.createElement('canvas'); canvas.width=W; canvas.height=H;
   const ctx = canvas.getContext('2d');
@@ -1369,6 +1386,55 @@ function drawNotebookPage({heading, subheading, subtitle, columns, rows, footerL
     footerLines.forEach((line,i)=> ctx.fillText(line, marginX+14, footY + i*29));
   }
   if(footNote){ ctx.fillStyle='#777'; ctx.font='italic 13px Georgia, serif'; ctx.fillText(footNote, marginX+14, H-34); }
+
+  // "Made with Dairy Notebook" watermark — bottom-right, right-aligned so it
+  // never collides with footNote/footerLines (which are left-aligned). Made
+  // clickable in the actual PDF by canvasesToPdfFile, which reads
+  // canvas._watermark and adds a real link annotation over this same box.
+  const wmIcon = await loadDairyWatermarkIcon();
+  const wmY1 = H - 32;
+  const wmY2 = H - 16;
+
+  ctx.font = '600 13px Georgia, serif';
+  if(wmIcon){
+    // Mixed text+image can't be right-aligned directly, so measure the two
+    // text halves first, then lay out icon-and-text as a block from the right.
+    const preText = 'Made with ', postText = ' Dairy Notebook';
+    ctx.textAlign = 'left';
+    const preWidth = ctx.measureText(preText).width;
+    const postWidth = ctx.measureText(postText).width;
+    const iconSize = 15;
+    const totalWidth = preWidth + iconSize + postWidth;
+    const startX = rightEdge - totalWidth;
+    ctx.fillStyle = 'rgba(70,90,140,0.6)';
+    ctx.fillText(preText, startX, wmY1);
+    ctx.drawImage(wmIcon, startX + preWidth, wmY1 - iconSize + 3, iconSize, iconSize);
+    ctx.fillText(postText, startX + preWidth + iconSize, wmY1);
+    var wmWidth1 = totalWidth, wmStartX = startX;
+  } else {
+    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(70,90,140,0.6)';
+    const wmLine1 = 'Made with 🥛 Dairy Notebook';
+    ctx.fillText(wmLine1, rightEdge, wmY1);
+    var wmWidth1 = ctx.measureText(wmLine1).width, wmStartX = rightEdge - wmWidth1;
+  }
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(100,100,100,0.5)';
+  ctx.font = '400 9px Georgia, serif';
+  const wmLine2 = 'Install directly from Chrome';
+  ctx.fillText(wmLine2, rightEdge, wmY2);
+  const wmWidth2 = ctx.measureText(wmLine2).width;
+  ctx.textAlign = 'left';
+
+  const wmLeftMost = Math.min(wmStartX, rightEdge - wmWidth2);
+  canvas._watermark = {
+    x: wmLeftMost,
+    y: wmY1 - 16,
+    width: rightEdge - wmLeftMost,
+    height: (wmY2 - (wmY1 - 16)) + 8,
+    url: 'https://imasyyyyy5.github.io/Dairy/'
+  };
+
   return canvas;
 }
 
@@ -1384,22 +1450,22 @@ const HISAAB_PAYMENT_COLS = [
   {label:'Remark', x:560, align:'left'}
 ];
 
-function buildHisaabPages_Page(page){
+async function buildHisaabPages_Page(page){
   const profile = DB.profile(); const ledger = pageDailyLedger(page);
   const chunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const chunkList = chunks.length?chunks:[[]];
   const totalMilk = ledger.reduce((s,r)=>s+r.qty,0), totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
-  return chunkList.map((chunk, idx)=>{
+  return Promise.all(chunkList.map((chunk, idx)=>{
     const rows = chunk.map(r=>[ fmtDS(r.date), fmt(r.qty)+' L', r.qty>0?fmt(r.amount/r.qty):'0.00', '₹'+fmt(r.amount) ]);
     const footerLines = (idx===chunkList.length-1) ? [ `Total Milk: ${fmt(totalMilk)} L`, `Total Amount: ₹${fmt(totalAmt)}` ] : null;
     return drawNotebookPage({ heading: profile.name || 'Dairy Hisaab', subheading:'Milk Supply Hisaab', subtitle:`Period: ${page.label}`, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages: chunkList.length });
-  });
+  }));
 }
 
 // Household hisaab: heading is the household's own name (this sheet is *for*
 // them, so their name — not the dairy's or any animal's — leads), followed by
 // the daily milk entries, and then a dedicated payments ledger with remarks so
 // they can see exactly when they paid, how much, and what's still outstanding.
-function buildHisaabPages_Household(h){
+async function buildHisaabPages_Household(h){
   const profile = DB.profile(); const ledger = householdFullLedger(h);
   const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
   const stats = getCustomerStats(h);
@@ -1409,18 +1475,18 @@ function buildHisaabPages_Household(h){
   const totalPages = entryChunkList.length + paymentChunkList.length;
   const footNote = `Milk supplied by ${profile.name||'Dairy'}`;
 
-  const entryPages = entryChunkList.map((chunk, idx)=>{
+  const entryPages = await Promise.all(entryChunkList.map((chunk, idx)=>{
     const rows = chunk.map(r=>[ fmtDS(r.date), fmt(r.qty)+' L', fmt(r.rate), '₹'+fmt(r.amount) ]);
     const footerLines = (idx===entryChunkList.length-1) ? [ `Total Milk: ${fmt(stats.totalLiters)} L`, `Total Amount: ₹${fmt(stats.totalMilkValue)}` ] : null;
     return drawNotebookPage({ heading:`${h.name}`, subheading:'Milk Hisaab', subtitle:period, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages, footNote });
-  });
+  }));
 
-  const paymentPages = paymentChunkList.map((chunk, idx)=>{
+  const paymentPages = await Promise.all(paymentChunkList.map((chunk, idx)=>{
     const rows = chunk.map(p=>[ fmtDS(p.date), '₹'+fmt(p.amount), truncateHisaabText(p.note, 26) ]);
     const isLast = idx===paymentChunkList.length-1;
     const footerLines = isLast ? [ `Total Billed: ₹${fmt(stats.totalMilkValue)}`, `Total Paid: ₹${fmt(stats.totalPaid)}   Balance Due: ₹${fmt(stats.currentDue)}` ] : null;
     return drawNotebookPage({ heading:`${h.name}`, subheading:'Payments Received', subtitle:period, columns: HISAAB_PAYMENT_COLS, rows, footerLines, pageNum: entryChunkList.length+idx+1, totalPages, footNote });
-  });
+  }));
 
   return [...entryPages, ...paymentPages];
 }
@@ -1434,9 +1500,36 @@ async function canvasesToPdfFile(canvases, filename){
     const img = await pdfDoc.embedPng(pngBytes);
     const page = pdfDoc.addPage([canvas.width, canvas.height]);
     page.drawImage(img, { x:0, y:0, width:canvas.width, height:canvas.height });
+    if(canvas._watermark){
+      const wm = canvas._watermark;
+      // Canvas coords are top-left/y-down; PDF coords are bottom-left/y-up —
+      // flip using the page height so the clickable box lands exactly on
+      // top of the drawn watermark text.
+      const rect = [ wm.x, canvas.height - (wm.y + wm.height), wm.x + wm.width, canvas.height - wm.y ];
+      addLinkAnnotation(pdfDoc, page, wm.url, rect);
+    }
   }
   const pdfBytes = await pdfDoc.save();
   return new File([pdfBytes], filename, { type: 'application/pdf' });
+}
+
+// Adds a clickable URI link annotation over `rect` ([x1,y1,x2,y2], bottom-left
+// origin, PDF points) — this is what makes the watermark actually tappable
+// rather than just a picture of a link.
+function addLinkAnnotation(pdfDoc, page, url, rect){
+  const { PDFName, PDFArray, PDFString } = PDFLib;
+  const linkAnnotation = pdfDoc.context.register(
+    pdfDoc.context.obj({
+      Type: 'Annot',
+      Subtype: 'Link',
+      Rect: rect,
+      Border: [0, 0, 0],
+      A: { Type: 'Action', S: 'URI', URI: PDFString.of(url) },
+    })
+  );
+  const existingAnnots = page.node.lookup(PDFName.of('Annots'), PDFArray);
+  if(existingAnnots){ existingAnnots.push(linkAnnotation); }
+  else { page.node.set(PDFName.of('Annots'), pdfDoc.context.obj([linkAnnotation])); }
 }
 
 // Shares a single combined PDF via the native share sheet only — never
@@ -1457,13 +1550,13 @@ async function shareHisaabCanvases(canvases, baseName){
 async function shareHisaabForPage(pageId){
   const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
   if(!pageDailyLedger(page).length) return appAlert('No Entries','This period has no filled-in entries yet to share.');
-  await shareHisaabCanvases(buildHisaabPages_Page(page), `Hisaab_${page.label.replace(/[^\w]+/g,'_')}`);
+  await shareHisaabCanvases(await buildHisaabPages_Page(page), `Hisaab_${page.label.replace(/[^\w]+/g,'_')}`);
 }
 
 async function shareHisaabForHousehold(hhId){
   const h = DB.households().find(x=>x.id===hhId); if(!h) return;
   if(!householdFullLedger(h).length && !(h.payments||[]).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
-  await shareHisaabCanvases(buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`);
+  await shareHisaabCanvases(await buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`);
 }
 
 
