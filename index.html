@@ -1302,11 +1302,18 @@ function householdFullLedger(h){
   return out;
 }
 
-// Per-day milk & amount for a milkmen record sheet (period page)
+// Per-day milk & amount for a milkmen record sheet (period page). Keeps AM
+// and PM totals separate (not just merged into one daily qty) so the hisaab
+// PDF can show both shift entries instead of a single blended number.
 function pageDailyLedger(page){
   return page.rows.filter(r=>r.date).map(r=>{
-    let milk=0; page.cols.forEach(c=>{ if(c.type==='milk_am'||c.type==='milk_pm') milk += parseFloat(r[c.id])||0; });
-    return { date: r.date, qty: parseFloat(milk.toFixed(2)), amount: parseFloat((parseFloat(r.total)||0).toFixed(2)) };
+    let am=0, pm=0;
+    page.cols.forEach(c=>{
+      if(c.type==='milk_am') am += parseFloat(r[c.id])||0;
+      else if(c.type==='milk_pm') pm += parseFloat(r[c.id])||0;
+    });
+    am = parseFloat(am.toFixed(2)); pm = parseFloat(pm.toFixed(2));
+    return { date: r.date, am, pm, qty: parseFloat((am+pm).toFixed(2)), amount: parseFloat((parseFloat(r.total)||0).toFixed(2)) };
   }).filter(r=>r.qty>0 || r.amount>0);
 }
 
@@ -1444,6 +1451,15 @@ const HISAAB_ENTRY_COLS = [
   {label:'Rate ₹/L', x:570, align:'left'},
   {label:'Amount ₹', x:856, align:'right'}
 ];
+// Milkmen/page hisaab shows both shift entries instead of one blended daily
+// total — same row count as HISAAB_ENTRY_COLS, just AM/PM in place of a
+// single Milk (L) + derived average Rate.
+const HISAAB_ENTRY_COLS_PAGE = [
+  {label:'Date', x:92, align:'left'},
+  {label:'AM (L)', x:380, align:'left'},
+  {label:'PM (L)', x:560, align:'left'},
+  {label:'Amount ₹', x:856, align:'right'}
+];
 const HISAAB_PAYMENT_COLS = [
   {label:'Date', x:92, align:'left'},
   {label:'Amount ₹', x:490, align:'right'},
@@ -1453,11 +1469,11 @@ const HISAAB_PAYMENT_COLS = [
 async function buildHisaabPages_Page(page){
   const profile = DB.profile(); const ledger = pageDailyLedger(page);
   const chunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const chunkList = chunks.length?chunks:[[]];
-  const totalMilk = ledger.reduce((s,r)=>s+r.qty,0), totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
+  const totalAM = ledger.reduce((s,r)=>s+r.am,0), totalPM = ledger.reduce((s,r)=>s+r.pm,0), totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
   return Promise.all(chunkList.map((chunk, idx)=>{
-    const rows = chunk.map(r=>[ fmtDS(r.date), fmt(r.qty)+' L', r.qty>0?fmt(r.amount/r.qty):'0.00', '₹'+fmt(r.amount) ]);
-    const footerLines = (idx===chunkList.length-1) ? [ `Total Milk: ${fmt(totalMilk)} L`, `Total Amount: ₹${fmt(totalAmt)}` ] : null;
-    return drawNotebookPage({ heading: profile.name || 'Dairy Hisaab', subheading:'Milk Supply Hisaab', subtitle:`Period: ${page.label}`, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages: chunkList.length });
+    const rows = chunk.map(r=>[ fmtDS(r.date), r.am>0?fmt(r.am)+' L':'—', r.pm>0?fmt(r.pm)+' L':'—', '₹'+fmt(r.amount) ]);
+    const footerLines = (idx===chunkList.length-1) ? [ `Total Milk: ${fmt(totalAM+totalPM)} L  (AM ${fmt(totalAM)} + PM ${fmt(totalPM)})`, `Total Amount: ₹${fmt(totalAmt)}` ] : null;
+    return drawNotebookPage({ heading: profile.name || 'Dairy Hisaab', subheading:'Milk Supply Hisaab', subtitle:`Period: ${page.label}`, columns: HISAAB_ENTRY_COLS_PAGE, rows, footerLines, pageNum: idx+1, totalPages: chunkList.length });
   }));
 }
 
@@ -1577,6 +1593,15 @@ function createPage(startDate){
 
 let curTab='home',curDetailId=null;
 let meView='profile', gChartType='overall', gChartFilter='category', gHorizon='30';
+let logFilterFrom=null, logFilterTo=null, logFilterType='';
+const LOG_TYPE_FILTERS = [
+  {id:'', label:'All'},
+  {id:'payment', label:'💰 Payments'},
+  {id:'create', label:'➕ Added'},
+  {id:'update', label:'✎ Updated'},
+  {id:'delete', label:'🗑 Deleted'},
+  {id:'info', label:'ℹ️ Info'}
+];
 let editAnimalId=null,animalType='cow';
 let detailPageIdx=0; 
 let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null;
@@ -2328,14 +2353,49 @@ function toggleCalcHHExpand(id){ calcHHExpandedId = (calcHHExpandedId===id) ? nu
 function updCalc(){ const q=parseFloat(document.getElementById('cqty')?.value)||0; const r=parseFloat(document.getElementById('crate')?.value)||0; const el=document.getElementById('cresult'); if(el) el.textContent='₹'+(q*r).toFixed(2); }
 function logDotColor(t){ return {payment:'#5db85d', delete:'var(--danger)', create:'#4e8cff', update:'#e8b800'}[t] || 'var(--border2)'; }
 
+function openLogFromPicker(){
+  openThemedCalendar('logf-from', null, (d)=>{ logFilterFrom = d; if(logFilterTo && logFilterFrom > logFilterTo) logFilterTo = logFilterFrom; renderMe(); });
+}
+function openLogToPicker(){
+  openThemedCalendar('logf-to', logFilterFrom || null, (d)=>{ logFilterTo = d; renderMe(); });
+}
+function setLogTypeFilter(t){ logFilterType = t; renderMe(); }
+function clearLogFilters(){ logFilterFrom = null; logFilterTo = null; logFilterType = ''; renderMe(); }
+
 function renderMe(){
   const profile=DB.profile(); const el=document.getElementById('p-me');
   let html=`<div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Account</div><div class="ptitle">Profile</div></div><div class="row gap2"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button></div></div>`;
   if(meView==='logs'){
-    const logs=DB.logs(); html+=`<div class="pc"><div class="slabel">Activity Log — Human Readable</div><div class="sp2">`;
-    if(!logs.length) html+=`<div class="empty"><div class="esub">No actions logged yet</div></div>`;
+    const allLogs=DB.logs();
+    let logs = allLogs;
+    if(logFilterType) logs = logs.filter(l=>l.type===logFilterType);
+    if(logFilterFrom) logs = logs.filter(l=> (l.ts||'').slice(0,10) >= logFilterFrom);
+    if(logFilterTo) logs = logs.filter(l=> (l.ts||'').slice(0,10) <= logFilterTo);
+    const filtersActive = !!(logFilterType || logFilterFrom || logFilterTo);
+
+    html += `<div class="pc"><div class="card">
+      <div class="slabel mb3">Filter Logs</div>
+      <div class="row gap2 mb3">
+        <div class="f1">
+          <label class="flabel">From</label>
+          <button type="button" class="btn bd-trigger w-100" id="logf-from-trigger" onclick="openLogFromPicker()">${logFilterFrom ? fmtD(logFilterFrom) : 'Any date'}</button>
+          <input type="hidden" id="logf-from" value="${logFilterFrom||''}"/>
+        </div>
+        <div class="f1">
+          <label class="flabel">To</label>
+          <button type="button" class="btn bd-trigger w-100" id="logf-to-trigger" onclick="openLogToPicker()">${logFilterTo ? fmtD(logFilterTo) : 'Any date'}</button>
+          <input type="hidden" id="logf-to" value="${logFilterTo||''}"/>
+        </div>
+      </div>
+      <div class="gh-scroll mb3" style="padding:0;">${LOG_TYPE_FILTERS.map(f=>`<button class="ppill sm ${logFilterType===f.id?'on':''}" onclick="setLogTypeFilter('${f.id}')">${f.label}</button>`).join('')}</div>
+      ${filtersActive ? `<button class="btn bg bsm" onclick="clearLogFilters()">✕ Clear Filters</button>` : ''}
+    </div></div>`;
+
+    html += `<div class="pc"><div class="slabel">Activity Log — Human Readable${filtersActive ? ' (Filtered)' : ''}</div><div class="sp2">`;
+    if(!allLogs.length) html+=`<div class="empty"><div class="esub">No actions logged yet</div></div>`;
+    else if(!logs.length) html+=`<div class="empty"><div class="esub">No logs match your filters</div></div>`;
     else logs.slice(0,200).forEach(l=> html+=`<div class="logrow"><div class="logdot" style="background:${logDotColor(l.type)};"></div><div class="f1"><div class="logmsg">${l.text}</div><div class="logtime">${fmtTime(l.ts)}</div></div></div>`);
-    if(logs.length>200)html+=`<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px;">Showing latest 200 of ${logs.length} entries</div>`;
+    if(logs.length>200)html+=`<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px;">Showing latest 200 of ${logs.length} matching entries</div>`;
     html+=`</div></div>`; el.innerHTML=html;return;
   }
 
