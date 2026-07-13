@@ -542,6 +542,12 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div class="mact"><button class="btn bs" onclick="cm('m-household')">Cancel</button><button class="btn bp" id="hh-btn" onclick="doSaveHousehold()">Save Customer</button></div>
 </div></div>
 
+<div class="moverlay" id="m-shared-view" onclick="moi(event,'m-shared-view')"><div class="mbox">
+ <div class="mh"><span class="mt">Shared Hisaab</span><button class="mx" onclick="closeSharedHisaabViewer()">✕</button></div>
+ <div id="shared-view-body"></div>
+ <div class="mact"><button class="btn bp w-100" onclick="closeSharedHisaabViewer()">Close</button></div>
+</div></div>
+
 <div class="moverlay" id="m-hh-exception" onclick="moi(event,'m-hh-exception')"><div class="mbox">
  <div class="mh"><span class="mt" id="hhe-title">Change Daily Milk & Rate</span><button class="mx" onclick="cm('m-hh-exception')">✕</button></div>
  <div class="mbody mb3">Update the daily milk given to this customer effective for <b id="hhe-date-label" style="color:#fff;"></b>.</div>
@@ -572,7 +578,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
 // ══════════════════════════════════════════════════════════════════
 //  SERVICE WORKER
 // ══════════════════════════════════════════════════════════════════
-document.addEventListener('visibilitychange', () => { if (!document.hidden && typeof checkShiftReminders === 'function') checkShiftReminders(); });
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => { console.warn('Service worker registration failed:', err); }); });
 }
@@ -587,6 +592,8 @@ const Store={
 
 const BACKUP_FORMAT = 'dairy-notebook-backup';
 const BACKUP_VERSION = 2;
+const SHARE_FORMAT = 'dairy-notebook-hisaab-share';
+const SHARE_VERSION = 1;
 
 function b64FromBuffer(buf) {
   const bytes = new Uint8Array(buf); let binary = ''; const chunk = 0x8000;
@@ -645,6 +652,24 @@ async function restoreBackupPayload(payload) {
   Store.set('mdn_trash', archiveData.trash || []);
   Store.set('mdn_logs', archiveData.logs || []);
   Store.set('mdn_households', archiveData.households || []);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SHARED HISAAB (received from someone else) — kept in its own key,
+//  never merged into the user's own pages/households. View-only.
+// ══════════════════════════════════════════════════════════════════
+function getSharedHisaabs(){ return Store.get('mdn_shared_hisaabs') || []; }
+function saveSharedHisaab(shareObj){
+  const list = getSharedHisaabs();
+  // De-dupe on shareId in case the same PDF is opened/imported twice.
+  const existingIdx = list.findIndex(x=>x.shareId===shareObj.shareId);
+  const record = Object.assign({}, shareObj, { receivedAt: new Date().toISOString() });
+  if(existingIdx !== -1) list[existingIdx] = record; else list.unshift(record);
+  Store.set('mdn_shared_hisaabs', list);
+  return record;
+}
+function deleteSharedHisaab(shareId){
+  Store.set('mdn_shared_hisaabs', getSharedHisaabs().filter(x=>x.shareId!==shareId));
 }
 
 const AutoBackup = {
@@ -974,7 +999,29 @@ function importBackup(e) {
   const reader = new FileReader();
   reader.onload = async function(ev) {
     try {
-        const rawContent = ev.target.result; let payloadString = rawContent;
+        const rawContent = ev.target.result;
+
+        // A shared hisaab PDF (someone else's period/customer record) is a
+        // different marker than a full backup — recognize it and route to
+        // the read-only shared-record flow instead of the overwrite flow.
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const shareStart = '###DAIRY_SHARE_BEGIN###', shareEnd = '###DAIRY_SHARE_END###';
+          const sIdx = rawContent.indexOf(shareStart);
+          if (sIdx !== -1) {
+            const eIdx = rawContent.indexOf(shareEnd);
+            let shareObj = null; try { shareObj = JSON.parse(rawContent.substring(sIdx + shareStart.length, eIdx).trim()); } catch(err) {}
+            if (shareObj && shareObj.format === SHARE_FORMAT) {
+              const rec = saveSharedHisaab(shareObj);
+              e.target.value = '';
+              showToast(`Received hisaab from ${rec.senderName}.`);
+              setMV('shared'); if(curTab!=='me'){ const btn = document.querySelector('.nb[onclick*="me"]'); if(btn) goTab('me', btn); }
+              openSharedHisaabViewer(rec.shareId);
+              return;
+            }
+          }
+        }
+
+        let payloadString = rawContent;
         if (file.name.toLowerCase().endsWith('.pdf')) {
             const startMarker = '###DAIRY_BACKUP_BEGIN###'; const endMarker = '###DAIRY_BACKUP_END###';
             const startIndex = rawContent.indexOf(startMarker); const endIndex = rawContent.indexOf(endMarker);
@@ -990,6 +1037,53 @@ function importBackup(e) {
     e.target.value = ''; 
   };
   reader.readAsText(file);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  RECEIVING A SHARED HISAAB via the OS share sheet (Web Share Target)
+//  sw.js intercepts the POST and stashes the file in the Cache API under
+//  'mdn-shared-incoming' / 'shared-file', then redirects here with
+//  ?shared=1. We pick it up, detect which kind of PDF it is, and either
+//  drop it into the read-only Shared viewer or the backup-import flow.
+// ══════════════════════════════════════════════════════════════════
+async function checkForIncomingShare(){
+  const params = new URLSearchParams(location.search);
+  if (params.get('shared') !== '1') return;
+  history.replaceState({}, '', location.pathname);
+  try {
+    if (!('caches' in window)) return;
+    const cache = await caches.open('mdn-shared-incoming');
+    const res = await cache.match('shared-file');
+    if (!res) return;
+    await cache.delete('shared-file');
+    const text = await res.text();
+
+    const shareStart = '###DAIRY_SHARE_BEGIN###', shareEnd = '###DAIRY_SHARE_END###';
+    const sIdx = text.indexOf(shareStart);
+    if (sIdx !== -1) {
+      const eIdx = text.indexOf(shareEnd);
+      let shareObj = null; try { shareObj = JSON.parse(text.substring(sIdx + shareStart.length, eIdx).trim()); } catch(err) {}
+      if (shareObj && shareObj.format === SHARE_FORMAT) {
+        const rec = saveSharedHisaab(shareObj);
+        if (!DB.profile().onboarded) { showToast(`Saved a hisaab shared by ${rec.senderName} — finish setup to view it.`); return; }
+        showToast(`Received hisaab from ${rec.senderName}.`);
+        setMV('shared'); { const btn = document.querySelector('.nb[onclick*="me"]'); if(btn) goTab('me', btn); }
+        openSharedHisaabViewer(rec.shareId);
+        return;
+      }
+    }
+
+    const backupStart = '###DAIRY_BACKUP_BEGIN###', backupEnd = '###DAIRY_BACKUP_END###';
+    const bIdx = text.indexOf(backupStart);
+    if (bIdx !== -1) {
+      const eIdx = text.indexOf(backupEnd);
+      let payload = null; try { payload = JSON.parse(text.substring(bIdx + backupStart.length, eIdx).trim()); } catch(err) {}
+      if (payload && payload.format === BACKUP_FORMAT) {
+        const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
+        if (confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading..."); setTimeout(() => location.reload(), 1500); }
+      }
+    }
+  } catch (err) { console.warn('Incoming share handling failed:', err); }
 }
 
 let currentTableFilter = 'all';
@@ -1303,19 +1397,82 @@ function householdFullLedger(h){
   return out;
 }
 
+// Resolves the ₹/L rate that applies to one animal's column on one row,
+// following the same priority computeRowTotal uses: fixed auto-rate mode →
+// per-record rate entered for that animal → single page-wide rate column.
+function resolveAnimalRateForRow(row, page, profile, animalId, fallbackRate){
+  if(profile.role==='farmer' && profile.ratePerEntry===false) return fallbackRate||0;
+  const perAnimalRateCol = page.cols.find(c=>c.type==='rate_per_animal' && c.animal===animalId);
+  if(perAnimalRateCol) return parseFloat(row[perAnimalRateCol.id])||0;
+  const rateCol = page.cols.find(c=>c.type==='rate');
+  if(rateCol) return parseFloat(row[rateCol.id])||0;
+  return fallbackRate||0;
+}
+
 // Per-day milk & amount for a milkmen record sheet (period page). Keeps AM
 // and PM totals separate (not just merged into one daily qty) so the hisaab
-// PDF can show both shift entries instead of a single blended number.
+// PDF can show both shift entries instead of a single blended number. Each
+// shift total is also broken down by the rate behind it (amBreakdown/
+// pmBreakdown) — a shift can blend two or more animals with different
+// rates, and the PDF renderer uses this breakdown to show that split
+// instead of silently flattening it into one number.
 function pageDailyLedger(page){
+  const profile = DB.profile();
   return page.rows.filter(r=>r.date).map(r=>{
-    let am=0, pm=0;
+    const amGroups = {}, pmGroups = {};
     page.cols.forEach(c=>{
-      if(c.type==='milk_am') am += parseFloat(r[c.id])||0;
-      else if(c.type==='milk_pm') pm += parseFloat(r[c.id])||0;
+      if(c.type!=='milk_am' && c.type!=='milk_pm') return;
+      const qty = parseFloat(r[c.id])||0; if(!qty) return;
+      const rate = resolveAnimalRateForRow(r, page, profile, c.animal, c.animalRate);
+      const key = rate.toFixed(2);
+      const groups = c.type==='milk_am' ? amGroups : pmGroups;
+      if(!groups[key]) groups[key] = { rate, qty:0 };
+      groups[key].qty += qty;
     });
-    am = parseFloat(am.toFixed(2)); pm = parseFloat(pm.toFixed(2));
-    return { date: r.date, am, pm, qty: parseFloat((am+pm).toFixed(2)), amount: parseFloat((parseFloat(r.total)||0).toFixed(2)) };
+    const amBreakdown = Object.values(amGroups).map(g=>({rate:g.rate, qty:parseFloat(g.qty.toFixed(2))})).sort((a,b)=>b.rate-a.rate);
+    const pmBreakdown = Object.values(pmGroups).map(g=>({rate:g.rate, qty:parseFloat(g.qty.toFixed(2))})).sort((a,b)=>b.rate-a.rate);
+    const am = parseFloat(amBreakdown.reduce((s,g)=>s+g.qty,0).toFixed(2));
+    const pm = parseFloat(pmBreakdown.reduce((s,g)=>s+g.qty,0).toFixed(2));
+    return { date: r.date, am, pm, amBreakdown, pmBreakdown, qty: parseFloat((am+pm).toFixed(2)), amount: parseFloat((parseFloat(r.total)||0).toFixed(2)) };
   }).filter(r=>r.qty>0 || r.amount>0);
+}
+
+// Builds the plain-data snapshot embedded (as hidden JSON) inside a shared
+// hisaab PDF for a single record-period page. Deliberately a flat, simple
+// {headers, rows} shape — independent of the live column/animal config —
+// so a *different* device/app-install can render it read-only with zero
+// knowledge of the sender's animals, rates, etc.
+function buildShareData_Page(page){
+  const ledger = pageDailyLedger(page); const t = pageSummary(page);
+  const rows = ledger.map(r=>[fmtD(r.date), r.am ? (r.am+' L') : '—', r.pm ? (r.pm+' L') : '—', fmt(r.qty)+' L', '₹'+fmt(r.amount)]);
+  return {
+    kind: 'period',
+    title: `Record Period: ${page.label}`,
+    subtitle: `${fmtD(page.startDate)} – ${fmtD(page.endDate)}`,
+    headers: ['Date','AM','PM','Total Milk','Amount'],
+    rows,
+    totals: [{label:'Total Milk', value: fmt(t.milk)+' L'}, {label:'Total Amount', value: '₹'+fmt(t.rev)}]
+  };
+}
+
+// Same idea as buildShareData_Page but for a household/customer's full
+// ledger, including any payments received against it.
+function buildShareData_Household(h){
+  const ledger = householdFullLedger(h);
+  const rows = ledger.map(r=>[fmtD(r.date), fmt(r.qty)+' L', '₹'+fmt(r.rate)+'/L', '₹'+fmt(r.amount)]);
+  const totalQty = ledger.reduce((s,r)=>s+r.qty,0); const totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
+  const paid = (h.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  const paymentRows = (h.payments||[]).map(p=>[fmtD(p.date), '₹'+fmt(p.amount), p.note||'—']);
+  return {
+    kind: 'household',
+    title: h.name,
+    subtitle: `${fmtD(h.startDate)} – ${(h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present'}`,
+    headers: ['Date','Milk','Rate','Amount'],
+    rows,
+    totals: [{label:'Total Milk', value: fmt(totalQty)+' L'}, {label:'Total Billed', value:'₹'+fmt(totalAmt)}, {label:'Total Paid', value:'₹'+fmt(paid)}, {label:'Outstanding', value:'₹'+fmt(totalAmt-paid)}],
+    paymentHeaders: ['Date','Amount','Note'],
+    paymentRows
+  };
 }
 
 function chunkArr(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
@@ -1376,9 +1533,27 @@ async function drawNotebookPage({heading, subheading, subtitle, columns, rows, f
   ctx.textAlign = 'left';
 
   ctx.font = '600 16px Georgia, serif'; y = topStart + lineGap - 8;
+  // A cell value is normally a plain string (drawn in the default blue).
+  // It can also be an array of {text,color} segments — used to show a
+  // shift total as separate colored pieces (e.g. "2 + 8 L") when it blends
+  // more than one animal's rate, instead of one flattened number.
   rows.forEach(r=>{
-    ctx.fillStyle = '#1a3fb0';
-    columns.forEach((c,ci)=>{ ctx.textAlign = c.align||'left'; ctx.fillText(r[ci], c.x, y); });
+    columns.forEach((c,ci)=>{
+      ctx.textAlign = c.align||'left';
+      const cell = r[ci];
+      if (Array.isArray(cell)) {
+        if (c.align === 'right') {
+          const totalW = cell.reduce((s,seg)=>s+ctx.measureText(seg.text).width,0);
+          let cx = c.x - totalW; ctx.textAlign = 'left';
+          cell.forEach(seg=>{ ctx.fillStyle = seg.color || '#1a3fb0'; ctx.fillText(seg.text, cx, y); cx += ctx.measureText(seg.text).width; });
+        } else {
+          let cx = c.x;
+          cell.forEach(seg=>{ ctx.fillStyle = seg.color || '#1a3fb0'; ctx.fillText(seg.text, cx, y); cx += ctx.measureText(seg.text).width; });
+        }
+      } else {
+        ctx.fillStyle = '#1a3fb0'; ctx.fillText(cell, c.x, y);
+      }
+    });
     ctx.textAlign = 'left';
     y += lineGap;
   });
@@ -1387,11 +1562,22 @@ async function drawNotebookPage({heading, subheading, subtitle, columns, rows, f
   }
 
   if(footerLines && footerLines.length){
-    const footY = H - (footNote ? 118 : 96);
+    // Extra footer lines (e.g. a rate-color legend) push the whole block
+    // upward so the last line keeps its usual distance from the watermark.
+    const extraLines = Math.max(0, footerLines.length - 2);
+    const footY = H - (footNote ? 118 : 96) - extraLines*29;
     ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1.6;
     ctx.beginPath(); ctx.moveTo(26,footY-26); ctx.lineTo(W-26,footY-26); ctx.stroke();
-    ctx.fillStyle='#111'; ctx.font='900 21px Georgia, serif';
-    footerLines.forEach((line,i)=> ctx.fillText(line, marginX+14, footY + i*29));
+    ctx.font='900 21px Georgia, serif';
+    footerLines.forEach((line,i)=>{
+      const ly = footY + i*29;
+      if (Array.isArray(line)) {
+        let cx = marginX+14;
+        line.forEach(seg=>{ ctx.fillStyle = seg.color || '#111'; ctx.fillText(seg.text, cx, ly); cx += ctx.measureText(seg.text).width; });
+      } else {
+        ctx.fillStyle='#111'; ctx.fillText(line, marginX+14, ly);
+      }
+    });
   }
   if(footNote){ ctx.fillStyle='#777'; ctx.font='italic 13px Georgia, serif'; ctx.fillText(footNote, marginX+14, H-34); }
 
@@ -1467,13 +1653,54 @@ const HISAAB_PAYMENT_COLS = [
   {label:'Remark', x:560, align:'left'}
 ];
 
+// Colors assigned (in order) to the distinct rates that get blended into a
+// single shift total, so a reader can tell "2 + 8 L" apart by eye and match
+// each piece back to its rate via the legend.
+const HISAAB_RATE_COLORS = ['#1f9d55','#c99a1f','#1a6fb0','#c2410c','#8347c9','#c9375f','#0f8f8f'];
+
 async function buildHisaabPages_Page(page){
   const profile = DB.profile(); const ledger = pageDailyLedger(page);
+
+  // Only rates that actually get blended together into one shift total (2+
+  // different animal rates summed into the same AM or PM figure) need a
+  // color/legend — a shift with just one rate behind it stays a plain number.
+  const ratesNeedingColor = new Set();
+  ledger.forEach(r=>{
+    if(r.amBreakdown.length>1) r.amBreakdown.forEach(g=>ratesNeedingColor.add(g.rate));
+    if(r.pmBreakdown.length>1) r.pmBreakdown.forEach(g=>ratesNeedingColor.add(g.rate));
+  });
+  const rateColorList = Array.from(ratesNeedingColor).sort((a,b)=>b-a);
+  const rateColorMap = {};
+  rateColorList.forEach((rate,i)=>{ rateColorMap[rate.toFixed(2)] = HISAAB_RATE_COLORS[i % HISAAB_RATE_COLORS.length]; });
+
+  function shiftCell(breakdown, totalQty){
+    if(breakdown.length<=1) return totalQty>0 ? fmt(totalQty)+' L' : '—';
+    const segs = [];
+    breakdown.forEach((g,i)=>{
+      if(i>0) segs.push({text:' + ', color:'#1a3fb0'});
+      segs.push({text: fmt(g.qty), color: rateColorMap[g.rate.toFixed(2)] || '#1a3fb0'});
+    });
+    segs.push({text:' L', color:'#1a3fb0'});
+    return segs;
+  }
+
   const chunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const chunkList = chunks.length?chunks:[[]];
   const totalAM = ledger.reduce((s,r)=>s+r.am,0), totalPM = ledger.reduce((s,r)=>s+r.pm,0), totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
   return Promise.all(chunkList.map((chunk, idx)=>{
-    const rows = chunk.map(r=>[ fmtDS(r.date), r.am>0?fmt(r.am)+' L':'—', r.pm>0?fmt(r.pm)+' L':'—', '₹'+fmt(r.amount) ]);
-    const footerLines = (idx===chunkList.length-1) ? [ `Total Milk: ${fmt(totalAM+totalPM)} L  (AM ${fmt(totalAM)} + PM ${fmt(totalPM)})`, `Total Amount: ₹${fmt(totalAmt)}` ] : null;
+    const rows = chunk.map(r=>[ fmtDS(r.date), shiftCell(r.amBreakdown, r.am), shiftCell(r.pmBreakdown, r.pm), '₹'+fmt(r.amount) ]);
+    let footerLines = null;
+    if(idx===chunkList.length-1){
+      footerLines = [ `Total Milk: ${fmt(totalAM+totalPM)} L  (AM ${fmt(totalAM)} + PM ${fmt(totalPM)})`, `Total Amount: ₹${fmt(totalAmt)}` ];
+      if(rateColorList.length){
+        const legendSegs = [{text:'Rate Key:  ', color:'#111'}];
+        rateColorList.forEach((rate,i)=>{
+          if(i>0) legendSegs.push({text:'    ', color:'#111'});
+          legendSegs.push({text:'● ', color: rateColorMap[rate.toFixed(2)]});
+          legendSegs.push({text:`₹${fmt(rate)}/L`, color:'#111'});
+        });
+        footerLines.push(legendSegs);
+      }
+    }
     return drawNotebookPage({ heading: profile.name || 'Dairy Hisaab', subheading:'Milk Supply Hisaab', subtitle:`Period: ${page.label}`, columns: HISAAB_ENTRY_COLS_PAGE, rows, footerLines, pageNum: idx+1, totalPages: chunkList.length });
   }));
 }
@@ -1508,7 +1735,7 @@ async function buildHisaabPages_Household(h){
   return [...entryPages, ...paymentPages];
 }
 
-async function canvasesToPdfFile(canvases, filename){
+async function canvasesToPdfFile(canvases, filename, shareData){
   if(typeof PDFLib === 'undefined') throw new Error('PDF library not loaded');
   const { PDFDocument } = PDFLib;
   const pdfDoc = await PDFDocument.create();
@@ -1527,6 +1754,15 @@ async function canvasesToPdfFile(canvases, filename){
     }
   }
   const pdfBytes = await pdfDoc.save();
+  if(shareData){
+    // Hidden data appended after the PDF's own bytes — PDF readers stop at
+    // %%EOF and ignore trailing bytes, but this app can find the marker by
+    // reading the file as text. Same trick as the full-backup PDF.
+    const payload = { format: SHARE_FORMAT, version: SHARE_VERSION, shareId: uid(), senderName: (DB.profile().name || 'A Dairy Notebook user'), createdAt: new Date().toISOString(), ...shareData };
+    const hiddenWrapper = `\n###DAIRY_SHARE_BEGIN###\n${JSON.stringify(payload)}\n###DAIRY_SHARE_END###\n`;
+    const finalBlob = new Blob([pdfBytes, new TextEncoder().encode(hiddenWrapper)], { type: 'application/pdf' });
+    return new File([finalBlob], filename, { type: 'application/pdf' });
+  }
   return new File([pdfBytes], filename, { type: 'application/pdf' });
 }
 
@@ -1552,10 +1788,10 @@ function addLinkAnnotation(pdfDoc, page, url, rect){
 // Shares a single combined PDF via the native share sheet only — never
 // auto-downloads. If the device/browser can't share files, we say so instead
 // of silently dropping files onto disk.
-async function shareHisaabCanvases(canvases, baseName){
+async function shareHisaabCanvases(canvases, baseName, shareData){
   showToast('Preparing hisaab PDF...', true);
   try{
-    const file = await canvasesToPdfFile(canvases, `${baseName}.pdf`);
+    const file = await canvasesToPdfFile(canvases, `${baseName}.pdf`, shareData);
     if(navigator.canShare && navigator.canShare({files:[file]})){
       navigator.share({files:[file], title: baseName}).then(()=>showToast('Share sheet opened successfully.')).catch(()=>{});
     } else {
@@ -1567,13 +1803,13 @@ async function shareHisaabCanvases(canvases, baseName){
 async function shareHisaabForPage(pageId){
   const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
   if(!pageDailyLedger(page).length) return appAlert('No Entries','This period has no filled-in entries yet to share.');
-  await shareHisaabCanvases(await buildHisaabPages_Page(page), `Hisaab_${page.label.replace(/[^\w]+/g,'_')}`);
+  await shareHisaabCanvases(await buildHisaabPages_Page(page), `Hisaab_${page.label.replace(/[^\w]+/g,'_')}`, buildShareData_Page(page));
 }
 
 async function shareHisaabForHousehold(hhId){
   const h = DB.households().find(x=>x.id===hhId); if(!h) return;
   if(!householdFullLedger(h).length && !(h.payments||[]).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
-  await shareHisaabCanvases(await buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`);
+  await shareHisaabCanvases(await buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h));
 }
 
 
@@ -1660,7 +1896,7 @@ const initWatchdog = setTimeout(() => {
 
 function initApp() {
   try {
-  const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } if (p.notifEnabled === undefined) { p.notifEnabled = false; } if (!p.amReminderOffset) { p.amReminderOffset = 60; } if (p.pmReminderHour === undefined || p.pmReminderHour === null) { p.pmReminderHour = 21; } p.role = 'farmer'; DB.saveProfile(p);
+  const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
   const minSplashEnd = Date.now() + 800;
   function transitionTo(targetFunction) { const remaining = Math.max(0, minSplashEnd - Date.now()); setTimeout(() => { const splash = document.getElementById('splash'); if (splash) splash.style.opacity = '0'; setTimeout(() => { if (splash) splash.style.display = 'none'; targetFunction(); }, 300); }, remaining); }
   if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); } }); return; }
@@ -1674,7 +1910,6 @@ function initApp() {
   if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); } 
   else { document.getElementById('app').style.display = 'none'; transitionTo(() => openQuickEntry()); }
   appLoaded = true; clearTimeout(initWatchdog);
-  scheduleReminderTimers();
   } catch (error) { console.error('Critical App Failure:', error); initError = error; appLoaded = false; }
 }
 
@@ -1704,16 +1939,25 @@ function finishOnboarding() {
   justOnboarded = true; document.getElementById('onboarding').classList.remove('active'); document.getElementById('onboarding').style.display = 'none'; openQuickEntry();
 }
 
-let justOnboarded = false; let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null };
+let justOnboarded = false; let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null, date: null, isBackfill: false };
 function getActivePage() { const td = today(); return DB.pages().find(p => !p.locked && td >= p.startDate && td <= p.endDate) || null; }
 
-function openQuickEntry() {
+// targetDate/forceIsPM let this be reused to backfill a specific past shift
+// (e.g. from the "previous shift not logged" prompt) instead of always
+// meaning "today's current shift".
+function openQuickEntry(targetDate, forceIsPM) {
   const qe = document.getElementById('quick-entry'); qe.style.display = 'flex'; qe.classList.add('active');
   document.getElementById('qe-active-content').style.display = 'flex'; document.getElementById('qe-success-content').style.display = 'none'; setTimeout(()=> qe.classList.add('start-anim'), 10);
-  const hour = new Date().getHours(); const isPM = hour >= (DB.profile().shiftTime || 15); qeContext.isPM = isPM;
-  document.getElementById('qe-greeting').textContent = hour < 12 ? 'Good Morning' : (hour < 17 ? 'Good Afternoon' : 'Good Evening'); document.getElementById('qe-date-label').textContent = fmtD(today());
-  let page = getActivePage(); let row;
-  if (!page || !(row = page.rows.find(r => r.assignedDate === today()))) { showToast("No active record sheet for today.", false); setTimeout(() => { openFullApp(); openNewPageModal(); }, 400); return; }
+  const dateStr = targetDate || today(); const isBackfill = dateStr !== today();
+  const hour = new Date().getHours(); const isPM = forceIsPM !== undefined ? forceIsPM : (hour >= (DB.profile().shiftTime || 15)); qeContext.isPM = isPM; qeContext.date = dateStr; qeContext.isBackfill = isBackfill;
+  document.getElementById('qe-greeting').textContent = isBackfill ? (isPM ? 'Evening Shift' : 'Morning Shift') : (hour < 12 ? 'Good Morning' : (hour < 17 ? 'Good Afternoon' : 'Good Evening'));
+  document.getElementById('qe-date-label').textContent = isBackfill ? `Adding missed entry — ${fmtD(dateStr)}` : fmtD(today());
+  const page = DB.pages().find(p => !p.locked && dateStr >= p.startDate && dateStr <= p.endDate); let row;
+  if (!page || !(row = page.rows.find(r => r.assignedDate === dateStr))) {
+    showToast(isBackfill ? "No record sheet covers that date." : "No active record sheet for today.", false);
+    if (isBackfill) { openFullApp(); } else { setTimeout(() => { openFullApp(); openNewPageModal(); }, 400); }
+    return;
+  }
   
   qeContext.pageId = page.id; qeContext.rowId = row.id;
   const targetCols = page.cols.filter(c => c.type === (isPM ? 'milk_pm' : 'milk_am')); qeContext.cols = targetCols;
@@ -1757,23 +2001,23 @@ function saveQuickEntry() {
        if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '') row[rateCol.id] = rateInput.value; }
     }
   });
-  row.date = today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
+  row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
   DB.savePages(pages); 
-  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)} via Quick Screen.`, 'update');
+  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update');
 
   const pTog = document.getElementById('qe-payment-toggle');
   if (pTog && pTog.checked) {
       const paid = parseFloat(document.getElementById('qe-payment-amount')?.value) || 0;
-      if (paid > 0) { const payments = DB.payments(); payments.unshift({ id: uid(), type: 'received', amount: paid, date: today(), note: `Logged via Quick Entry` }); DB.savePayments(payments); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment'); }
+      if (paid > 0) { const payments = DB.payments(); payments.unshift({ id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry` }); DB.savePayments(payments); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment'); }
   }
   document.getElementById('qe-active-content').style.display = 'none'; document.getElementById('qe-success-content').style.display = 'block';
-  setTimeout(() => { openFullApp(); }, 1500);
+  const wasBackfill = qeContext.isBackfill;
+  setTimeout(() => { openFullApp(); if (!wasBackfill) checkPreviousShiftPrompt(); }, 1500);
 }
 
 function openFullApp() {
   const qe = document.getElementById('quick-entry'); qe.classList.remove('active', 'start-anim'); qe.style.display = 'none';
   document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); checkInstallReminders(justOnboarded); justOnboarded = false;
-  scheduleReminderTimers();
 }
 
 function renderHome(){
@@ -2367,7 +2611,9 @@ function clearLogFilters(){ logFilterFrom = null; logFilterTo = null; logFilterT
 
 function renderMe(){
   const profile=DB.profile(); const el=document.getElementById('p-me');
-  let html=`<div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Account</div><div class="ptitle">Profile</div></div><div class="row gap2"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button></div></div>`;
+  const sharedCount = getSharedHisaabs().length;
+  let html=`<div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Account</div><div class="ptitle">Profile</div></div><div class="row gap2" style="flex-wrap:wrap;justify-content:flex-end;"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button><button class="btn ${meView==='shared'?'bp':'bg'} bsm" onclick="setMV('shared')">📥 Shared${sharedCount?' ('+sharedCount+')':''}</button></div></div>`;
+  if(meView==='shared'){ renderSharedHisaabList(el); return; }
   if(meView==='logs'){
     const allLogs=DB.logs();
     let logs = allLogs;
@@ -2411,10 +2657,7 @@ function renderMe(){
    <div class="card"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Settings</div>
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div><label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label></div>
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
-    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
-    <div class="row gap2 ${profile.notifEnabled ? 'mb2' : ''}" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Shift Reminders</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Notify if a shift's milk data isn't logged yet</div></div><label class="tswitch"><input type="checkbox" ${profile.notifEnabled ? 'checked' : ''} onchange="setNotifEnabled(this.checked)"/><div class="tslider"></div></label></div>
-    ${profile.notifEnabled ? `<div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Morning Reminder</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Before evening shift starts</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openAmReminderPicker(${profile.amReminderOffset || 60})">${(profile.amReminderOffset||60) < 60 ? (profile.amReminderOffset||60)+' min before' : ((profile.amReminderOffset||60)/60)+' hr before'}</button></div>
-    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Reminder</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Fixed time, later in the day</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openPmReminderPicker(${profile.pmReminderHour != null ? profile.pmReminderHour : 21})">${(profile.pmReminderHour!=null?profile.pmReminderHour:21) > 12 ? (profile.pmReminderHour!=null?profile.pmReminderHour:21)-12 : (profile.pmReminderHour!=null?profile.pmReminderHour:21)} PM</button></div>` : ''}
+    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
    </div>
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
@@ -2423,6 +2666,67 @@ function renderMe(){
   el.innerHTML=html;
 }
 function setMV(v){meView=v;renderMe();}
+
+// ══════════════════════════════════════════════════════════════════
+//  SHARED WITH ME — read-only list + viewer for hisaabs received from
+//  other people. Kept entirely separate from the user's own pages /
+//  households; nothing here is ever merged into their own records.
+// ══════════════════════════════════════════════════════════════════
+function renderSharedHisaabList(el){
+  const list = getSharedHisaabs();
+  let html = `<div class="pc"><div class="card" style="text-align:center;color:var(--muted);font-size:12px;">Hisaabs other Dairy Notebook users share with you show up here — view-only, kept separate from your own records.</div></div>`;
+  if(!list.length){
+    html += `<div class="pc"><div class="empty"><div class="esub">Nothing shared with you yet.<br>When someone shares a period or customer hisaab PDF with you, it'll appear here.</div></div></div>`;
+  } else {
+    html += `<div class="pc sp2">` + list.map(r=>{
+      const icon = r.kind==='household' ? '👤' : '📄';
+      return `<button class="card2 row gap2" style="width:100%;text-align:left;cursor:pointer;" onclick="openSharedHisaabViewer('${r.shareId}')">
+        <span style="font-size:20px;">${icon}</span>
+        <div class="f1">
+          <div style="font-weight:700;font-size:13px;">${r.title||'Shared Hisaab'}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:1px;">${r.subtitle||''}</div>
+          <div style="margin-top:5px;"><span class="badge" style="color:var(--success);border-color:var(--success);">🟢 Shared by ${r.senderName||'Unknown'}</span></div>
+        </div>
+        <button class="bic" style="width:26px;height:26px;font-size:13px;color:var(--danger);flex-shrink:0;" onclick="event.stopPropagation();confirmDeleteSharedHisaab('${r.shareId}')">×</button>
+      </button>`;
+    }).join('') + `</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function confirmDeleteSharedHisaab(shareId){
+  appConfirm('Remove Shared Hisaab?', 'This only removes it from your device — it does not affect the sender\'s data.').then(ok=>{
+    if(!ok) return; deleteSharedHisaab(shareId); showToast('Removed.'); renderMe();
+  });
+}
+
+function sharedTableHTML(headers, rows){
+  if(!rows.length) return `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No entries.</div>`;
+  const thead = `<tr>${headers.map(h=>`<th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr>`;
+  const tbody = rows.map(r=>`<tr>${r.map(c=>`<td style="padding:6px 8px;font-size:12px;border-bottom:1px solid var(--border);">${c}</td>`).join('')}</tr>`).join('');
+  return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">${thead}${tbody}</table></div>`;
+}
+
+function openSharedHisaabViewer(shareId){
+  const r = getSharedHisaabs().find(x=>x.shareId===shareId); if(!r) return;
+  const receivedLabel = r.receivedAt ? fmtD(r.receivedAt.slice(0,10)) : '';
+  let html = `<div style="background:rgba(45,138,78,0.12);border:1px solid var(--success);border-radius:var(--r);padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:16px;">🟢</span>
+    <div class="f1"><div style="font-weight:800;font-size:13px;color:var(--success);">Shared by ${r.senderName||'Unknown'}</div><div style="font-size:10px;color:var(--muted);margin-top:1px;">Received ${receivedLabel} · View-only, not part of your own records</div></div>
+  </div>`;
+  html += `<div style="font-weight:800;font-size:16px;">${r.title||''}</div><div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${r.subtitle||''}</div>`;
+  html += sharedTableHTML(r.headers||[], r.rows||[]);
+  if((r.totals||[]).length){
+    html += `<div class="sg2" style="margin-top:14px;">` + r.totals.map(t=>`<div class="sbox tc"><div class="sval" style="font-size:16px;">${t.value}</div><div class="ssub">${t.label}</div></div>`).join('') + `</div>`;
+  }
+  if(r.kind==='household' && (r.paymentRows||[]).length){
+    html += `<div style="font-weight:700;font-size:13px;margin:18px 0 8px;">Payments Received</div>`;
+    html += sharedTableHTML(r.paymentHeaders||[], r.paymentRows||[]);
+  }
+  document.getElementById('shared-view-body').innerHTML = html;
+  om('m-shared-view');
+}
+function closeSharedHisaabViewer(){ cm('m-shared-view'); }
 function editName(){ const p=DB.profile(); appPrompt('Dairy name:', p.name).then(n => { if(!n?.trim()) return; p.name=n.trim(); DB.saveProfile(p); DB.log(`Changed dairy name to ${p.name}`, 'info'); renderMe(); }); }
 function setRatePref(v){ const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p); showToast('Preference saved.'); }
 function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.'); renderMe(); }
@@ -2837,66 +3141,34 @@ function closeInstallGuide() {
   if (cb) cb();
 }
 
-// ---- Shift Reminder Notifications ----
-// Max 2/day: one AM checkpoint (a configurable offset before the evening shift
-// begins) and one PM checkpoint (a configurable evening hour), each firing only
-// once per calendar day and only if that shift still has no milk data logged.
-// Since this is a static PWA with no push server, delivery is best-effort: a
-// 5-minute poll runs while the app/tab is open in the background, plus an
-// immediate catch-up check on every app open and tab-foreground event.
-function hasShiftData(isPM) {
-  const td = today(); const page = DB.pages().find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
-  if (!page) return false; const row = page.rows.find(r => r.assignedDate === td); if (!row) return false;
-  return page.cols.filter(c => c.type === (isPM ? 'milk_pm' : 'milk_am')).some(c => parseFloat(row[c.id]) > 0);
+// ---- Missing Previous Shift Prompt ----
+// Right after a Quick Screen entry is saved, check whether the shift just
+// *before* it (same day's AM if this was PM, or yesterday's PM if this was
+// AM) is still empty, and offer to fill it in or skip — instead of a
+// notification, this is a same-session nudge shown once the save completes.
+function getShiftDataStatus(dateStr, isPM) {
+  const page = DB.pages().find(pg => !pg.trashed && dateStr >= pg.startDate && dateStr <= pg.endDate);
+  if (!page) return null;
+  const row = page.rows.find(r => r.assignedDate === dateStr);
+  if (!row) return null;
+  const cols = page.cols.filter(c => c.type === (isPM ? 'milk_pm' : 'milk_am'));
+  if (!cols.length) return null;
+  return { hasData: cols.some(c => parseFloat(row[c.id]) > 0) };
 }
-function notifAlreadySentToday(shiftKey) { try { return localStorage.getItem('mdn_notif_last_' + shiftKey) === today(); } catch (e) { return true; } }
-function notifMarkSentToday(shiftKey) { try { localStorage.setItem('mdn_notif_last_' + shiftKey, today()); } catch (e) {} }
-function fireShiftNotification(shiftKey, isPM) {
-  notifMarkSentToday(shiftKey);
-  const title = isPM ? "Evening milk not logged yet" : "Morning milk not logged yet";
-  const body = `Tap to add today's ${isPM ? 'evening' : 'morning'} shift data.`;
-  try {
-    const n = new Notification(title, { body, icon: 'icon-192.png', tag: 'mdn-shift-' + shiftKey + '-' + today() });
-    n.onclick = () => { window.focus(); openFullApp(); openQuickEntry(); n.close(); };
-    DB.log(`Sent ${isPM ? 'PM' : 'AM'} shift reminder notification.`, 'info');
-  } catch (e) { console.warn('Notification failed:', e); }
-}
-function checkShiftReminders() {
-  const p = DB.profile();
-  if (!p.notifEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
-  const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
-  const shiftStartMin = (p.shiftTime || 15) * 60;
-  const amCheckpoint = shiftStartMin - (p.amReminderOffset || 60);
-  const pmCheckpoint = (p.pmReminderHour != null ? p.pmReminderHour : 21) * 60;
-  if (nowMin >= amCheckpoint && nowMin < shiftStartMin && !hasShiftData(false) && !notifAlreadySentToday('am')) fireShiftNotification('am', false);
-  if (nowMin >= pmCheckpoint && !hasShiftData(true) && !notifAlreadySentToday('pm')) fireShiftNotification('pm', true);
-}
-function scheduleReminderTimers() {
-  clearTimeout(window._mdnReminderTimer);
-  if (!DB.profile().notifEnabled) return;
-  checkShiftReminders();
-  window._mdnReminderTimer = setTimeout(scheduleReminderTimers, 5 * 60 * 1000);
-}
-function setNotifEnabled(v) {
-  const p = DB.profile();
-  if (!v) { p.notifEnabled = false; DB.saveProfile(p); clearTimeout(window._mdnReminderTimer); showToast('Shift reminders turned off.'); renderMe(); return; }
-  if (!('Notification' in window)) { showToast('Notifications are not supported on this device.', false); return; }
-  Notification.requestPermission().then(perm => {
-    p.notifEnabled = perm === 'granted'; DB.saveProfile(p);
-    showToast(perm === 'granted' ? 'Shift reminders turned on.' : 'Notification permission was denied.', perm === 'granted');
-    if (perm === 'granted') { DB.log('Enabled shift reminder notifications.', 'info'); scheduleReminderTimers(); }
-    renderMe();
-  });
-}
-function setAmReminderOffset(v) { const p = DB.profile(); p.amReminderOffset = parseInt(v); DB.saveProfile(p); showToast('Morning reminder timing updated.'); renderMe(); }
-function openAmReminderPicker(current) {
-  const opts = [30, 45, 60, 90, 120].map(m => ({ value: String(m), label: m < 60 ? `${m} min before` : `${m / 60} hr before` }));
-  openThemedSelect('Morning Reminder Timing', opts, String(current || 60), setAmReminderOffset);
-}
-function setPmReminderHour(v) { const p = DB.profile(); p.pmReminderHour = parseInt(v); DB.saveProfile(p); showToast('Evening reminder time updated.'); renderMe(); }
-function openPmReminderPicker(current) {
-  const opts = [18, 19, 20, 21, 22, 23].map(h => ({ value: String(h), label: `${h > 12 ? h - 12 : h} PM` }));
-  openThemedSelect('Evening Reminder Time', opts, String(current != null ? current : 21), setPmReminderHour);
+function checkPreviousShiftPrompt() {
+  const pages = DB.pages(); const page = pages.find(p => p.id === qeContext.pageId); if (!page) return;
+  const row = page.rows.find(r => r.id === qeContext.rowId); if (!row) return;
+  const currentDate = row.assignedDate || row.date; if (!currentDate) return;
+  const currentIsPM = qeContext.isPM;
+  const prevDate = currentIsPM ? currentDate : addDays(currentDate, -1);
+  const prevIsPM = currentIsPM ? false : true;
+  const status = getShiftDataStatus(prevDate, prevIsPM);
+  if (!status || status.hasData) return;
+  appChoice(
+    'Previous Shift Not Logged',
+    `The ${prevIsPM ? 'evening' : 'morning'} shift on ${fmtDS(prevDate)} still has no milk data. Add it now, or skip it for now?`,
+    [ { label: 'Skip for Now', value: 'skip' }, { label: 'Add Now', value: 'add' } ]
+  ).then(choice => { if (choice === 'add') openQuickEntry(prevDate, prevIsPM); });
 }
 
 async function editPageLength(pageId) {
@@ -2926,6 +3198,7 @@ async function editPageLength(pageId) {
 })();
 
 initApp();
+setTimeout(checkForIncomingShare, 1200);
 </script>
 </body>
 </html>
