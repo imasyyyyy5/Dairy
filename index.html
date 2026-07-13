@@ -11,8 +11,7 @@
     - PATCH +1 → small fix / tweak
     - MINOR +1 → new feature
     - MAJOR +1 → breaking change / major rewrite
-  Optionally append a short suffix describing the change, e.g. 'v1.2.0-shared-hisaab'.
-
+  
   This is the ONLY way the developer can confirm a deployed update is
   actually live: a hidden watermark on the Profile tab shows the
   version, revealed only via a hard swipe-up at the very bottom of that
@@ -460,7 +459,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <div id="p-me" class="panel"></div>
  </div>
  <nav id="bnav">
-  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
+  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7
+  1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
   <button class="nb" onclick="goTab('graphs',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Graphs</span></button>
   <button class="nb" onclick="goTab('calc',this)"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg><span>Calc</span></button>
   <button class="nb" onclick="goTab('me',this)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></button>
@@ -882,7 +882,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.3.0-nav-fixes';
+const APP_VERSION = 'v1.3.1-swipe-unblock';
 
 const today=()=>{
   const d=new Date();
@@ -915,6 +915,14 @@ function showToast(message, isSuccess = true) {
 function coachSeen(id){ try { return localStorage.getItem('mdn_coach_'+id) === '1'; } catch(e){ return true; } }
 function coachMarkSeen(id){ try { localStorage.setItem('mdn_coach_'+id, '1'); } catch(e){} }
 function coachBlocked(){ return !!document.querySelector('.moverlay.open, .full-overlay.active') || document.getElementById('quick-entry')?.classList.contains('active') || document.getElementById('onboarding')?.classList.contains('active'); }
+// Same idea as coachBlocked(), but safe to use for gating swipe navigation.
+// #splash keeps its 'active' class forever after load (only its display
+// style gets hidden), so coachBlocked() itself always matches it — using
+// coachBlocked() here silently blocked every single swipe, permanently.
+function navBlocked(){
+  return !!document.querySelector('.moverlay.open')
+      || !!document.querySelector('.full-overlay.active:not(#splash):not(#error-screen)');
+}
 
 function showCoach(id, targetEl, text, side){
   if (coachSeen(id) || !targetEl || document.querySelector('.coachmark')) return;
@@ -1936,7 +1944,7 @@ function handleSwipe() {
   // Swipes must never act on whatever is underneath it — that's what caused
   // the background tab/sub-view to silently change while a sheet was open,
   // so when you closed the sheet you landed somewhere you didn't expect.
-  if (coachBlocked()) return;
+  if (navBlocked()) return;
 
   // Hidden version watermark: a HARD swipe-up starting near the bottom of
   // the screen, while on the Profile tab's main view, toggles it. Deliberately
@@ -3293,6 +3301,12 @@ async function editPageLength(pageId) {
   const now=Date.now(); const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000); DB.saveTrash(trash);
   AnalyticsEngine.build(); AutoBackup.trigger(); 
 })();
+
+initApp();
+setTimeout(checkForIncomingShare, 1200);
+</script>
+</body>
+</html>})();
 
 initApp();
 setTimeout(checkForIncomingShare, 1200);
