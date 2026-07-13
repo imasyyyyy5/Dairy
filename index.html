@@ -1,4 +1,25 @@
 <!DOCTYPE html>
+<!--
+  ════════════════════════════════════════════════════════════════════
+  ⚠️  AI ASSISTANT INSTRUCTION — READ BEFORE MAKING ANY CODE CHANGE  ⚠️
+  ════════════════════════════════════════════════════════════════════
+  Whenever you (an AI assistant, in this session or any future one) edit
+  this file in ANY way, you MUST bump the APP_VERSION constant defined
+  in the main <script> block below (search for: const APP_VERSION).
+
+  Rule of thumb: v<MAJOR>.<MINOR>.<PATCH>
+    - PATCH +1 → small fix / tweak
+    - MINOR +1 → new feature
+    - MAJOR +1 → breaking change / major rewrite
+  Optionally append a short suffix describing the change, e.g. 'v1.2.0-shared-hisaab'.
+
+  This is the ONLY way the developer can confirm a deployed update is
+  actually live: a hidden watermark on the Profile tab shows the
+  version, revealed only via a hard swipe-up at the very bottom of that
+  tab (see toggleVersionMark()). Do not remove this instruction block,
+  and do not skip the version bump — even for tiny edits.
+  ════════════════════════════════════════════════════════════════════
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -326,6 +347,13 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .eico{width:52px;height:52px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:24px;}
 .etitle{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;}
 .esub{font-size:12px;color:var(--muted);}
+
+#app-version-mark{
+  max-height:0; opacity:0; transform:translateY(18px); overflow:hidden; padding:0 0; margin:0;
+  text-align:center; color:rgba(255,255,255,0.5); font-size:11px; line-height:1;
+  transition: max-height 0.45s cubic-bezier(.34,1.56,.64,1), opacity 0.35s ease, transform 0.45s cubic-bezier(.34,1.56,.64,1), padding 0.45s ease;
+}
+#app-version-mark.show{ max-height:40px; opacity:0.5; transform:translateY(0); padding:14px 0 4px; }
 
 @media (orientation: landscape) {
   #app, .mbox { max-width: min(680px, 94vw); }
@@ -840,6 +868,10 @@ const fmtD=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(d
 const fmtDS=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});};
 const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+// ⚠️ AI: bump this on every code change (see instruction block at top of file).
+// Shown as a hidden watermark at the bottom of the Profile tab — revealed only
+// by a hard swipe-up right at the bottom edge of that tab.
+const APP_VERSION = 'v1.1.0';
 
 const today=()=>{
   const d=new Date();
@@ -1830,6 +1862,7 @@ function createPage(startDate){
 
 let curTab='home',curDetailId=null;
 let meView='profile', gChartType='overall', gChartFilter='category', gHorizon='30';
+let versionMarkShown = false; // reset whenever the tab/menu changes — requires a fresh hard swipe each time
 let logFilterFrom=null, logFilterTo=null, logFilterType='';
 const LOG_TYPE_FILTERS = [
   {id:'', label:'All'},
@@ -1868,13 +1901,25 @@ const SWIPE_THRESHOLD = 60;      // minimum horizontal travel (px) to count as a
 const SWIPE_MAX_SKEW = 0.45;     // vertical travel must stay under 45% of horizontal travel — keeps only "nearly horizontal" gestures
 
 function handleSwipe() {
+  if(document.getElementById('quick-entry').style.display !== 'none' && document.getElementById('quick-entry').classList.contains('active')) return;
+  if(document.getElementById('onboarding').classList.contains('active')) return;
+
+  // Hidden version watermark: a HARD swipe-up starting near the bottom of
+  // the screen, while on the Profile tab's main view, toggles it. Deliberately
+  // strict (long, mostly-vertical, starts low) so it's never triggered by
+  // accident during normal scrolling/navigation.
+  if (curTab === 'me' && meView === 'profile' && !curDetailId) {
+    const dyUp = touchStartY - touchEndY; // positive = moved upward
+    const dxSide = Math.abs(touchEndX - touchStartX);
+    const startedNearBottom = touchStartY > window.innerHeight * 0.75;
+    if (startedNearBottom && dyUp > 130 && dyUp > dxSide * 1.5) { revealVersionMark(); return; }
+  }
+
   const dx = touchEndX - touchStartX; const dy = touchEndY - touchStartY;
   const absDx = Math.abs(dx), absDy = Math.abs(dy);
   if (absDx < SWIPE_THRESHOLD) return;        // too short
   if (absDy > absDx * SWIPE_MAX_SKEW) return; // too diagonal/vertical — this was probably a scroll, not a swipe
   const diff = dx;
-  if(document.getElementById('quick-entry').style.display !== 'none' && document.getElementById('quick-entry').classList.contains('active')) return;
-  if(document.getElementById('onboarding').classList.contains('active')) return;
   if (curTab === 'me' && meView === 'logs' && diff > SWIPE_THRESHOLD) { setMV('profile'); return; }
   if (curDetailId) {
       if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); return; }
@@ -1915,6 +1960,7 @@ function initApp() {
 
 function goTab(id,btn){
   if(id === 'home') { curDetailId = null; }
+  if(id !== 'me'){ versionMarkShown = false; }
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('active'); btn.classList.add('on');curTab=id;
   ({home:renderHome,graphs:renderGraphs,calc:renderCalc,me:renderMe})[id]?.();
@@ -2663,9 +2709,15 @@ function renderMe(){
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
   const pages=DB.pages().filter(p=>!p.trashed);
   html+=`<div class="card mt4"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div><div class="sg2"><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.length}</div><div class="ssub">Total Pages</div></div><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>p.locked).length}</div><div class="ssub">Cleared</div></div></div></div></div>`;
+  html+=`<div id="app-version-mark" class="${versionMarkShown?'show':''}">${APP_VERSION}</div>`;
   el.innerHTML=html;
 }
-function setMV(v){meView=v;renderMe();}
+function revealVersionMark(){
+  versionMarkShown = true;
+  const el = document.getElementById('app-version-mark'); if(!el) return;
+  el.classList.add('show');
+}
+function setMV(v){meView=v;versionMarkShown=false;renderMe();}
 
 // ══════════════════════════════════════════════════════════════════
 //  SHARED WITH ME — read-only list + viewer for hisaabs received from
