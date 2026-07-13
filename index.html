@@ -95,6 +95,17 @@ select{-webkit-appearance:none;}
 .start-anim .d2 { animation-delay: 0.2s; }
 .start-anim .d3 { animation-delay: 0.3s; }
 
+/* PAGE-TRANSITION ANIMATIONS
+   Applied by slideTransition() any time a panel changes as a result of
+   in-app navigation — tab switch (tap OR swipe), Profile sub-view change,
+   or opening/closing a detail view. 'forward' = drilling in (content slides
+   in from the right); 'back' = returning (content slides in from the left).
+   One pair of keyframes, reused everywhere, so the whole app is consistent. */
+@keyframes transForward { 0% { transform: translateX(6%); opacity: .55; } 100% { transform: translateX(0); opacity: 1; } }
+@keyframes transBack    { 0% { transform: translateX(-6%); opacity: .55; } 100% { transform: translateX(0); opacity: 1; } }
+.trans-fwd  { animation: transForward .26s cubic-bezier(0.16, 1, 0.3, 1); }
+.trans-back { animation: transBack .26s cubic-bezier(0.16, 1, 0.3, 1); }
+
 /* APP-THEMED TOAST SYSTEM */
 #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 .toast { background-color: var(--bg2); border: 1px solid var(--border2); color: #fff; padding: 12px 20px; border-radius: 100px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); font-weight: 600; font-size: 13px; opacity: 0; animation: toastIn 0.3s forwards, toastOut 0.3s forwards 2.7s; display: flex; align-items: center; gap: 8px; }
@@ -236,7 +247,7 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 
 .mbox{background:var(--bg1);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;width:100%;max-width:500px;margin:0 auto;padding:20px;transform:translateY(16px);transition:transform .25s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto;}
 .moverlay.open .mbox{transform:translateY(0);}
-.mh{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.mh{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:sticky;top:-20px;padding-top:20px;margin-top:-20px;background:var(--bg1);z-index:2;}
 .mt{font-size:15px;font-weight:800;color:#fff;flex:1;}
 .mx{width:28px;height:28px;border-radius:7px;background:var(--bg2);display:flex;align-items:center;justify-content:center;border:1px solid var(--border);color:var(--sub);flex-shrink:0;}
 .mbody{font-size:13px;color:var(--sub);line-height:1.6;}
@@ -871,7 +882,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.3.0-nav-fixes';
 
 const today=()=>{
   const d=new Date();
@@ -1876,6 +1887,25 @@ let editAnimalId=null,animalType='cow';
 let detailPageIdx=0; 
 let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null;
 let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0, swipeBlocked = false; const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
+// Every "Profile" sub-view that should be reachable via swipe-right-to-go-back.
+// Add new sub-view names here (not to handleSwipe) so this stays a one-line change.
+const ME_SUBVIEWS = ['logs', 'shared'];
+// Plays a directional page-transition on whichever panel just changed.
+// dir: 'forward' (drilling into a sub-view/tab/detail) or 'back' (returning).
+// Called from goTab/setMV/openDetail/closeDetail — one function, so every
+// navigation path in the app animates the same way instead of each screen
+// needing its own one-off transition.
+function slideTransition(selector, dir){
+  requestAnimationFrame(() => {
+    const el = document.querySelector(selector);
+    if(!el) return;
+    const cls = dir === 'back' ? 'trans-back' : 'trans-fwd';
+    el.classList.remove('trans-back', 'trans-fwd');
+    void el.offsetWidth; // restart if this panel is still mid-animation from a rapid repeat gesture
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 300);
+  });
+}
 
 // Only elements with their OWN horizontal drag/scroll behavior need to opt out of swipe detection.
 // Everything else (buttons, cards, labels) stays swipeable — accuracy comes from the angle check below,
@@ -1901,8 +1931,12 @@ const SWIPE_THRESHOLD = 60;      // minimum horizontal travel (px) to count as a
 const SWIPE_MAX_SKEW = 0.45;     // vertical travel must stay under 45% of horizontal travel — keeps only "nearly horizontal" gestures
 
 function handleSwipe() {
-  if(document.getElementById('quick-entry').style.display !== 'none' && document.getElementById('quick-entry').classList.contains('active')) return;
-  if(document.getElementById('onboarding').classList.contains('active')) return;
+  // Any modal, bottom sheet, or full-screen overlay open (quick entry,
+  // onboarding, a shared-record viewer, a form sheet, a confirm dialog...)?
+  // Swipes must never act on whatever is underneath it — that's what caused
+  // the background tab/sub-view to silently change while a sheet was open,
+  // so when you closed the sheet you landed somewhere you didn't expect.
+  if (coachBlocked()) return;
 
   // Hidden version watermark: a HARD swipe-up starting near the bottom of
   // the screen, while on the Profile tab's main view, toggles it. Deliberately
@@ -1920,10 +1954,17 @@ function handleSwipe() {
   if (absDx < SWIPE_THRESHOLD) return;        // too short
   if (absDy > absDx * SWIPE_MAX_SKEW) return; // too diagonal/vertical — this was probably a scroll, not a swipe
   const diff = dx;
-  if (curTab === 'me' && meView === 'logs' && diff > SWIPE_THRESHOLD) { setMV('profile'); return; }
+  // Swipe RIGHT always means "go back one step", whichever screen that is.
+  // Using ME_SUBVIEWS here (instead of hardcoding 'logs') is what fixes the
+  // Shared page not going back — any sub-view added to that list later
+  // works automatically, without touching this function again. The
+  // forward/back slide animation itself now lives inside setMV/goTab/
+  // openDetail/closeDetail, so every path into those (tap OR swipe) animates
+  // the same way — this function just decides what state to move to.
+  if (curTab === 'me' && ME_SUBVIEWS.includes(meView) && diff > SWIPE_THRESHOLD) { setMV('profile'); return; }
   if (curDetailId) {
-      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); return; }
-      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { detailPageIdx = 0; renderHome(); return; }
+      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); slideTransition('#p-home', 'forward'); return; }
+      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); return; }
       if (diff > SWIPE_THRESHOLD && detailPageIdx === 0) { closeDetail(); return; }
       return;
   }
@@ -1959,11 +2000,13 @@ function initApp() {
 }
 
 function goTab(id,btn){
+  const prevIdx = TAB_ORDER.indexOf(curTab), nextIdx = TAB_ORDER.indexOf(id);
   if(id === 'home') { curDetailId = null; }
   if(id !== 'me'){ versionMarkShown = false; }
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('active'); btn.classList.add('on');curTab=id;
   ({home:renderHome,graphs:renderGraphs,calc:renderCalc,me:renderMe})[id]?.();
+  if(prevIdx>-1 && nextIdx>-1 && nextIdx!==prevIdx) slideTransition('#p-'+id, nextIdx>prevIdx?'forward':'back');
 }
 
 let obTempAnimals = []; let obType = 'cow';
@@ -2097,7 +2140,7 @@ function renderHomeContent(el){
   el.innerHTML=html+`</div>`;
 }
 
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome();}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward');}
 
 function renderDetailView(el){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===curDetailId);
@@ -2658,7 +2701,9 @@ function clearLogFilters(){ logFilterFrom = null; logFilterTo = null; logFilterT
 function renderMe(){
   const profile=DB.profile(); const el=document.getElementById('p-me');
   const sharedCount = getSharedHisaabs().length;
-  let html=`<div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Account</div><div class="ptitle">Profile</div></div><div class="row gap2" style="flex-wrap:wrap;justify-content:flex-end;"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button><button class="btn ${meView==='shared'?'bp':'bg'} bsm" onclick="setMV('shared')">📥 Shared${sharedCount?' ('+sharedCount+')':''}</button></div></div>`;
+  const meBackBtn = meView!=='profile' ? `<button class="btn bg bsm" style="margin-right:8px;padding:6px 10px;" onclick="setMV('profile')" aria-label="Back to Profile">← Back</button>` : '';
+  const meTitle = meView==='logs' ? 'Activity Logs' : meView==='shared' ? 'Shared With You' : 'Profile';
+  let html=`<div class="ph row" style="justify-content:space-between;"><div class="row gap2" style="align-items:center;">${meBackBtn}<div><div class="eyebrow">Account</div><div class="ptitle">${meTitle}</div></div></div><div class="row gap2" style="flex-wrap:wrap;justify-content:flex-end;"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button><button class="btn ${meView==='shared'?'bp':'bg'} bsm" onclick="setMV('shared')">📥 Shared${sharedCount?' ('+sharedCount+')':''}</button></div></div>`;
   if(meView==='shared'){ renderSharedHisaabList(el); return; }
   if(meView==='logs'){
     const allLogs=DB.logs();
@@ -2717,7 +2762,7 @@ function revealVersionMark(){
   const el = document.getElementById('app-version-mark'); if(!el) return;
   el.classList.add('show');
 }
-function setMV(v){meView=v;versionMarkShown=false;renderMe();}
+function setMV(v){ const dir = v==='profile' ? 'back' : 'forward'; meView=v;versionMarkShown=false;renderMe(); slideTransition('#p-me', dir); }
 
 // ══════════════════════════════════════════════════════════════════
 //  SHARED WITH ME — read-only list + viewer for hisaabs received from
@@ -3099,7 +3144,7 @@ function doNewPage() {
   } catch (err) { appAlert('Error', 'Could not create record.'); }
 }
 
-function closeDetail(){ curDetailId=null; currentTableFilter='all'; detailPageIdx=0; hhExpandedId=null; hhHistoryExpandedId=null; renderHome(); }
+function closeDetail(){ curDetailId=null; currentTableFilter='all'; detailPageIdx=0; hhExpandedId=null; hhHistoryExpandedId=null; renderHome(); slideTransition('#p-home', 'back'); }
 
 async function trashPage(pageId){
   const agreed = await appConfirm('Move to Trash?','Move to trash and delete after 30 days?'); if(!agreed) return;
