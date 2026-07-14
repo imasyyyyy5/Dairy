@@ -11,7 +11,8 @@
     - PATCH +1 → small fix / tweak
     - MINOR +1 → new feature
     - MAJOR +1 → breaking change / major rewrite
-  
+  Optionally append a short suffix describing the change, e.g. 'v1.2.0-shared-hisaab'.
+
   This is the ONLY way the developer can confirm a deployed update is
   actually live: a hidden watermark on the Profile tab shows the
   version, revealed only via a hard swipe-up at the very bottom of that
@@ -459,8 +460,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <div id="p-me" class="panel"></div>
  </div>
  <nav id="bnav">
-  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7
-  1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
+  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
   <button class="nb" onclick="goTab('graphs',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Graphs</span></button>
   <button class="nb" onclick="goTab('calc',this)"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg><span>Calc</span></button>
   <button class="nb" onclick="goTab('me',this)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></button>
@@ -882,7 +882,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.3.1-swipe-unblock';
+const APP_VERSION = 'v1.4.0-back-button';
 
 const today=()=>{
   const d=new Date();
@@ -1915,6 +1915,81 @@ function slideTransition(selector, dir){
   });
 }
 
+// ---------------------------------------------------------------------------
+// SYSTEM BACK BUTTON (hardware/OS back on Android, browser back elsewhere)
+//
+// The browser/WebView only fires a `popstate` event for a back-press if
+// there's a history entry *we* pushed to pop back to — otherwise it just
+// exits/closes the page directly, bypassing our JS entirely. So every time
+// the user drills into something (a modal, a tab, a Profile sub-view, a
+// detail view), we push one history entry and record how to undo that exact
+// step. A back-press pops one entry and we run its undo — same idea as the
+// swipe-back stack, just wired to the OS button instead of a touch gesture.
+//
+// navStack entries: {type: 'modal'|'tab'|'subview'|'detail'|'detailPage', payload}
+let navStack = [];
+let navUndoing = false; // true while we're programmatically reversing a step (so the reversal itself isn't re-pushed)
+let suppressPop = false; // true while WE call history.back() ourselves to reconcile a manual close (so that popstate is ignored, not treated as a second back-press)
+
+function navPush(type, payload) {
+  if (navUndoing) return;
+  navStack.push({type, payload});
+  history.pushState({d: navStack.length}, '', '');
+}
+// For a MANUAL close/return (tapping a modal's ✕, the new "← Back" button, a
+// tab button, etc. — anything that isn't the back button itself): if the top
+// of our stack matches, pop it and consume the matching real history entry
+// too, so a later back-press doesn't hit a stale/phantom step.
+function navConsumeIfTop(type, matchFn) {
+  const top = navStack[navStack.length - 1];
+  if (!top || top.type !== type || (matchFn && !matchFn(top.payload))) return;
+  navStack.pop();
+  suppressPop = true;
+  history.back();
+}
+function navUndo(entry) {
+  navUndoing = true;
+  switch (entry.type) {
+    case 'modal':
+      // Route through the same submit functions a manual Cancel/dismiss would
+      // use, so a back-press resolves the dialog's promise instead of just
+      // hiding it and leaving the caller awaiting forever.
+      if (entry.payload.id === 'm-confirm') submitAppConfirm(false);
+      else if (entry.payload.id === 'm-alert') submitAppAlert();
+      else if (entry.payload.id === 'm-prompt') submitAppPrompt(null);
+      else cm(entry.payload.id);
+      break;
+    case 'tab':        { const btn = document.querySelector(`.nb[onclick*="${entry.payload.from}"]`); if (btn) goTab(entry.payload.from, btn); } break;
+    case 'subview':    setMV('profile'); break;
+    case 'detail':     closeDetail(); break;
+    case 'detailPage': detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); break;
+  }
+  navUndoing = false;
+}
+window.addEventListener('popstate', () => {
+  if (suppressPop) { suppressPop = false; return; }
+  if (navStack.length > 0) { navUndo(navStack.pop()); return; }
+  handleRootBack(); // nothing left to undo — this is Home tab, nothing open
+});
+async function handleRootBack() {
+  // appConfirm() opens its dialog via om(), which pushes its own guard entry
+  // for us — no need to push one manually here too.
+  const exit = await appConfirm('Exit App?', 'Are you sure you want to exit the app?');
+  if (!exit) { history.pushState({d: 0}, '', ''); return; } // re-arm the guard so the next back-press doesn't fall through to a real exit
+  suppressPop = true;
+  // Best-effort across common native-wrapper exit bridges. If none apply
+  // (e.g. this is a plain installed PWA), falls back to letting the
+  // platform's own back-navigation finish the app naturally.
+  if (window.Capacitor?.Plugins?.App?.exitApp) { window.Capacitor.Plugins.App.exitApp(); return; }
+  if (window.Android?.exitApp) { window.Android.exitApp(); return; }
+  if (navigator.app?.exitApp) { navigator.app.exitApp(); return; }
+  history.back();
+}
+// One guard entry so the very first back-press (before the user has opened
+// anything) still produces a popstate for us to intercept, instead of the
+// browser/WebView exiting immediately on its own.
+history.pushState({d: 0}, '', '');
+
 // Only elements with their OWN horizontal drag/scroll behavior need to opt out of swipe detection.
 // Everything else (buttons, cards, labels) stays swipeable — accuracy comes from the angle check below,
 // not from blanket-blocking content.
@@ -1971,8 +2046,8 @@ function handleSwipe() {
   // the same way — this function just decides what state to move to.
   if (curTab === 'me' && ME_SUBVIEWS.includes(meView) && diff > SWIPE_THRESHOLD) { setMV('profile'); return; }
   if (curDetailId) {
-      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); slideTransition('#p-home', 'forward'); return; }
-      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); return; }
+      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); slideTransition('#p-home', 'forward'); navPush('detailPage', {}); return; }
+      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); navConsumeIfTop('detailPage', () => true); return; }
       if (diff > SWIPE_THRESHOLD && detailPageIdx === 0) { closeDetail(); return; }
       return;
   }
@@ -2008,13 +2083,15 @@ function initApp() {
 }
 
 function goTab(id,btn){
-  const prevIdx = TAB_ORDER.indexOf(curTab), nextIdx = TAB_ORDER.indexOf(id);
+  if (id === curTab) return;
+  const prevIdx = TAB_ORDER.indexOf(curTab), nextIdx = TAB_ORDER.indexOf(id), prevTab = curTab;
   if(id === 'home') { curDetailId = null; }
   if(id !== 'me'){ versionMarkShown = false; }
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('p-'+id).classList.add('active'); btn.classList.add('on');curTab=id;
   ({home:renderHome,graphs:renderGraphs,calc:renderCalc,me:renderMe})[id]?.();
   if(prevIdx>-1 && nextIdx>-1 && nextIdx!==prevIdx) slideTransition('#p-'+id, nextIdx>prevIdx?'forward':'back');
+  navPush('tab', {from: prevTab});
 }
 
 let obTempAnimals = []; let obType = 'cow';
@@ -2148,7 +2225,7 @@ function renderHomeContent(el){
   el.innerHTML=html+`</div>`;
 }
 
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward');}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward'); navPush('detail', {});}
 
 function renderDetailView(el){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===curDetailId);
@@ -2770,7 +2847,12 @@ function revealVersionMark(){
   const el = document.getElementById('app-version-mark'); if(!el) return;
   el.classList.add('show');
 }
-function setMV(v){ const dir = v==='profile' ? 'back' : 'forward'; meView=v;versionMarkShown=false;renderMe(); slideTransition('#p-me', dir); }
+function setMV(v){
+  const dir = v==='profile' ? 'back' : 'forward'; const prevView = meView;
+  meView=v;versionMarkShown=false;renderMe(); slideTransition('#p-me', dir);
+  if (v !== 'profile' && prevView === 'profile') navPush('subview', {});
+  else if (v === 'profile' && prevView !== 'profile' && !navUndoing) navConsumeIfTop('subview', () => true);
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  SHARED WITH ME — read-only list + viewer for hisaabs received from
@@ -3152,7 +3234,7 @@ function doNewPage() {
   } catch (err) { appAlert('Error', 'Could not create record.'); }
 }
 
-function closeDetail(){ curDetailId=null; currentTableFilter='all'; detailPageIdx=0; hhExpandedId=null; hhHistoryExpandedId=null; renderHome(); slideTransition('#p-home', 'back'); }
+function closeDetail(){ const wasOpen = !!curDetailId; curDetailId=null; currentTableFilter='all'; detailPageIdx=0; hhExpandedId=null; hhHistoryExpandedId=null; renderHome(); slideTransition('#p-home', 'back'); if (wasOpen && !navUndoing) navConsumeIfTop('detail', () => true); }
 
 async function trashPage(pageId){
   const agreed = await appConfirm('Move to Trash?','Move to trash and delete after 30 days?'); if(!agreed) return;
@@ -3196,8 +3278,12 @@ function restoreFromTrash(pageId){
   cm('m-confirm'); renderHome();
 }
 
-function om(id){document.getElementById(id).classList.add('open');}
-function cm(id){document.getElementById(id).classList.remove('open');}
+function om(id){document.getElementById(id).classList.add('open'); navPush('modal', {id});}
+function cm(id){
+  const el = document.getElementById(id); const wasOpen = el.classList.contains('open');
+  el.classList.remove('open');
+  if (wasOpen && !navUndoing) navConsumeIfTop('modal', p => p.id === id);
+}
 function moi(e,id){if(e.target.id===id)cm(id);}
 
 function isAppInstalled() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || document.referrer.startsWith('android-app://'); }
@@ -3301,12 +3387,6 @@ async function editPageLength(pageId) {
   const now=Date.now(); const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000); DB.saveTrash(trash);
   AnalyticsEngine.build(); AutoBackup.trigger(); 
 })();
-
-initApp();
-setTimeout(checkForIncomingShare, 1200);
-</script>
-</body>
-</html>})();
 
 initApp();
 setTimeout(checkForIncomingShare, 1200);
