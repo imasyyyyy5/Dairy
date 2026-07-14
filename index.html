@@ -37,7 +37,7 @@
 <meta name="apple-mobile-web-app-title" content="Dairy Notebook"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;background:#000;}
+html,body{height:100%;overflow:hidden;background:#000;overscroll-behavior-x:none;}
 body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent;font-size:14px;-webkit-user-select: none;user-select: none;}
 button{cursor:pointer;font-family:inherit;border:none;background:none;color:inherit;}
 input,select,textarea{font-family:inherit;-webkit-user-select: text;user-select: text;}
@@ -159,7 +159,7 @@ select{-webkit-appearance:none;}
 .warning-box {background: rgba(224, 51, 51, 0.1); border: 1px dashed var(--danger); color: #fff; padding: 10px; border-radius: 12px; font-size: 12px; margin-bottom: 15px; display: none; text-align: center;}
 
 /* STANDARD UI */
-#app{display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto;overflow:hidden;}
+#app{display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto;overflow:hidden;touch-action:pan-y;}
 #main{flex:1;overflow:hidden;position:relative;}
 .panel{display:none;position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 .panel.active{display:block;}
@@ -882,7 +882,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.4.0-back-button';
+const APP_VERSION = 'v1.4.1-back-button-hardening';
 
 const today=()=>{
   const d=new Date();
@@ -1949,22 +1949,25 @@ function navConsumeIfTop(type, matchFn) {
 }
 function navUndo(entry) {
   navUndoing = true;
-  switch (entry.type) {
-    case 'modal':
-      // Route through the same submit functions a manual Cancel/dismiss would
-      // use, so a back-press resolves the dialog's promise instead of just
-      // hiding it and leaving the caller awaiting forever.
-      if (entry.payload.id === 'm-confirm') submitAppConfirm(false);
-      else if (entry.payload.id === 'm-alert') submitAppAlert();
-      else if (entry.payload.id === 'm-prompt') submitAppPrompt(null);
-      else cm(entry.payload.id);
-      break;
-    case 'tab':        { const btn = document.querySelector(`.nb[onclick*="${entry.payload.from}"]`); if (btn) goTab(entry.payload.from, btn); } break;
-    case 'subview':    setMV('profile'); break;
-    case 'detail':     closeDetail(); break;
-    case 'detailPage': detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); break;
+  try {
+    switch (entry.type) {
+      case 'modal':
+        // Route through the same submit functions a manual Cancel/dismiss would
+        // use, so a back-press resolves the dialog's promise instead of just
+        // hiding it and leaving the caller awaiting forever.
+        if (entry.payload.id === 'm-confirm') submitAppConfirm(false);
+        else if (entry.payload.id === 'm-alert') submitAppAlert();
+        else if (entry.payload.id === 'm-prompt') submitAppPrompt(null);
+        else cm(entry.payload.id);
+        break;
+      case 'tab':        { const btn = document.querySelector(`.nb[onclick*="${entry.payload.from}"]`); if (btn) goTab(entry.payload.from, btn); } break;
+      case 'subview':    setMV('profile'); break;
+      case 'detail':     closeDetail(); break;
+      case 'detailPage': detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); break;
+    }
+  } finally {
+    navUndoing = false;
   }
-  navUndoing = false;
 }
 window.addEventListener('popstate', () => {
   if (suppressPop) { suppressPop = false; return; }
@@ -1987,8 +1990,13 @@ async function handleRootBack() {
 }
 // One guard entry so the very first back-press (before the user has opened
 // anything) still produces a popstate for us to intercept, instead of the
-// browser/WebView exiting immediately on its own.
-history.pushState({d: 0}, '', '');
+// browser/WebView exiting immediately on its own. Pushed after a tick (not
+// synchronously during script parse) because some Android WebViews don't
+// reliably register a pushState issued in the same tick as the initial
+// navigation commit — which is what made the very first back-press
+// sometimes fail to bring up the exit confirmation.
+if (document.readyState === 'complete') { history.pushState({d: 0}, '', ''); }
+else { window.addEventListener('load', () => history.pushState({d: 0}, '', ''), {once: true}); }
 
 // Only elements with their OWN horizontal drag/scroll behavior need to opt out of swipe detection.
 // Everything else (buttons, cards, labels) stays swipeable — accuracy comes from the angle check below,
