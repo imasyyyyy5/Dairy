@@ -1,13 +1,16 @@
 // Milk Dairy Notebook — Service Worker
-// Bump CACHE_VERSION on every deploy that changes index.html / icons /
-// manifest, otherwise users keep getting the old cached version forever.
-const CACHE_VERSION = 'v3';
+// Bump CACHE_VERSION on every deploy that changes app.html / index.html /
+// icons / manifest, otherwise users keep getting the old cached version
+// forever.
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = 'mdn-cache-' + CACHE_VERSION;
 
 // Everything needed to open and run the app with zero network.
-// Add any other local files you reference (extra icons, fonts, etc).
+// app.html is the real app (start_url in manifest.json) — it must be
+// precached. index.html (the promo/landing page) is precached too so it
+// also works offline, but it is NOT the app shell.
 const PRECACHE_URLS = [
-  './',
+  './app.html',
   './index.html',
   './manifest.json',
   './icon-192.png',
@@ -74,18 +77,21 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   // Page navigations: ALWAYS try the network first so users get today's
-  // update immediately. Only fall back to the cached app shell when
-  // there's no network (offline support). Whatever comes back from the
-  // network is also stored, so offline mode stays fresh too.
+  // update immediately. Only fall back to the cached copy when there's no
+  // network (offline support). Cache/match by the ACTUAL url being
+  // navigated to (app.html vs index.html) — not a hardcoded page — so the
+  // two pages never overwrite each other's cached copy. If a page has never
+  // been cached (e.g. first-ever offline launch), fall back to app.html
+  // since that's the real app and the more useful thing to show.
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req).then((res) => {
         if (res && res.status === 200) {
           const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', resClone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
         }
         return res;
-      }).catch(() => caches.match('./index.html').then((cached) => cached || caches.match('./')))
+      }).catch(() => caches.match(req).then((cached) => cached || caches.match('./app.html')))
     );
     return;
   }
