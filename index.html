@@ -3,9 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="google-site-verification" content="Tjf1KCSVqw2DIdWFJZ1Li1UtKZGX9LYnZ6MgSZhLXvs" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>Dairy Notebook | The Khata Book That Writes Itself</title>
 <meta name="description" content="Automate your daily milk hisaab — animal records, auto-repeating customer accounts, expenses and payments. Built for the dairy farmers of Bharat.">
+
+<!-- Same manifest + icons as app.html. This is what lets Chrome offer to
+     install the app from THIS page too. start_url/scope inside manifest.json
+     must point at app.html (or wherever the real app lives) — this page
+     itself is never the thing that gets installed. -->
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#0b0d09"/>
+<meta name="background-color" content="#0b0d09"/>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Dairy Notebook"/>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,900&family=Hind:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -26,7 +41,7 @@
   }
 
   *{margin:0;padding:0;box-sizing:border-box;}
-  html{scroll-behavior:smooth;}
+  html{scroll-behavior:smooth;touch-action:manipulation;}
   body{
     background:var(--ink);
     color:var(--cream);
@@ -34,6 +49,11 @@
     font-size:17px;
     line-height:1.65;
     overflow-x:hidden;
+    touch-action:manipulation;
+    -webkit-user-select:none;
+    -moz-user-select:none;
+    user-select:none;
+    -webkit-touch-callout:none; /* stops the iOS long-press menu (copy/lookup/etc.) */
   }
   h1,h2,h3,.brand{font-family:'Fraunces',serif;}
   .mono{font-family:'IBM Plex Mono',monospace;}
@@ -76,7 +96,7 @@
     position:absolute;inset:0;z-index:-2;
     background:
       linear-gradient(180deg, rgba(11,13,9,0.55) 0%, rgba(11,13,9,0.75) 55%, var(--ink) 100%),
-      url('https://images.unsplash.com/photo-1596731056551-03260c6d573c?q=80&w=2070&auto=format&fit=crop') center 40%/cover;
+      url('https://images.unsplash.com/photo-1620901433789-1d2f85a93653?fm=jpg&q=80&w=2070&auto=format&fit=crop') center 40%/cover;
   }
   .hero-grid{
     display:grid;grid-template-columns:1.05fr .95fr;gap:3.5rem;align-items:center;
@@ -201,6 +221,32 @@
   .step-box h4{font-size:1.1rem;color:var(--cream);margin-bottom:.6rem;}
   .step-box p{color:var(--muted);font-size:.95rem;}
 
+  /* ---------- INSTALL HELP MODAL (replaces alert()) ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;z-index:200;
+    background:rgba(6,7,4,0.72);backdrop-filter:blur(3px);
+    display:flex;align-items:center;justify-content:center;
+    padding:1.6rem;
+    opacity:0;pointer-events:none;
+    transition:opacity .25s ease;
+  }
+  .modal-overlay.open{opacity:1;pointer-events:auto;}
+  .modal-card{
+    background:var(--ink-alt);border:1px solid rgba(245,239,224,0.12);
+    border-radius:var(--radius);max-width:380px;width:100%;
+    padding:1.8rem 1.7rem;box-shadow:0 30px 60px rgba(0,0,0,0.5);
+    transform:translateY(14px);transition:transform .25s ease;
+  }
+  .modal-overlay.open .modal-card{transform:translateY(0);}
+  .modal-card h3{font-size:1.2rem;color:var(--cream);margin-bottom:.9rem;display:flex;align-items:center;gap:.5rem;}
+  .modal-card p{color:var(--muted);font-size:.95rem;margin-bottom:.9rem;}
+  .modal-card p strong{color:var(--marigold);}
+  .modal-close{
+    margin-top:.4rem;width:100%;background:var(--marigold);color:#20160a;
+    border:none;padding:.75rem;border-radius:999px;font-weight:600;
+    font-family:'Hind',sans-serif;font-size:.98rem;cursor:pointer;
+  }
+
   /* ---------- FOOTER ---------- */
   footer{
     background:#080905;color:var(--muted);text-align:center;
@@ -274,7 +320,7 @@
       <p>No app-store download, no heavy install — it runs straight from your browser and lives on your home screen.</p>
     </div>
     <div class="impact-photo animate-on-scroll">
-      <img src="https://images.unsplash.com/photo-1529124443194-6d9b04753066?q=80&w=1000&auto=format&fit=crop" alt="Indian farmer with dairy animals">
+      <img src="https://images.unsplash.com/photo-1623211269755-569fec0536d2?fm=jpg&q=80&w=1200&auto=format&fit=crop" alt="Farmer with a milking pail on an Indian dairy farm">
     </div>
   </div>
 </section>
@@ -337,6 +383,17 @@
   <p>&copy; 2026 Dairy Notebook · Built for the farmers of Bharat · <a href="https://imasyyyyy5.github.io/Dairy/">Open the app</a></p>
 </footer>
 
+<!-- Themed fallback shown only when Chrome hasn't offered its own native
+     install dialog (e.g. iOS Safari, or Chrome hasn't judged the page
+     "installable" yet) — replaces the plain browser alert() -->
+<div class="modal-overlay" id="install-help-overlay" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
+  <div class="modal-card">
+    <h3 id="install-help-title">📲 Install Dairy Notebook</h3>
+    <p id="install-help-body">Open your browser menu (⋮) in the top right and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+    <button class="modal-close" id="install-help-close">Got it</button>
+  </div>
+</div>
+
 <script>
   // Scroll reveal
   const observer = new IntersectionObserver((entries)=>{
@@ -371,18 +428,47 @@
     setTimeout(()=>requestAnimationFrame(tick), 900);
   }
 
+  // Register the same service worker the app uses. Needed for THIS page to
+  // qualify as installable in Chrome's eyes (manifest + SW + HTTPS).
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => {
+        console.warn('Service worker registration failed:', err);
+      });
+    });
+  }
+
   // PWA install logic
   let deferredPrompt;
   const installBtn = document.getElementById('install-pwa-btn');
   const iosHint = document.getElementById('ios-hint');
+  const helpOverlay = document.getElementById('install-help-overlay');
+  const helpBody = document.getElementById('install-help-body');
+  const helpClose = document.getElementById('install-help-close');
   const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
   const isAppInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+  function openHelpModal(){
+    if(isIos()){
+      helpBody.innerHTML = 'Tap the <strong>Share</strong> icon at the bottom of Safari, scroll down, then tap <strong>Add to Home Screen</strong>.';
+    } else {
+      helpBody.innerHTML = "Open your browser menu (⋮) in the top right and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.";
+    }
+    helpOverlay.classList.add('open');
+  }
+  function closeHelpModal(){ helpOverlay.classList.remove('open'); }
+  helpClose.addEventListener('click', closeHelpModal);
+  helpOverlay.addEventListener('click', (e)=>{ if(e.target===helpOverlay) closeHelpModal(); });
 
   if(!isAppInstalled){
     if(isIos()){ iosHint.style.display='block'; }
     else { installBtn.style.display='inline-flex'; }
   }
 
+  // Chrome fires this only when it has decided the page is installable.
+  // Capturing + suppressing it, then firing prompt() ourselves on click,
+  // is what makes the button trigger Chrome's real native install dialog
+  // instead of the ambient mini-infobar Chrome sometimes shows on its own.
   window.addEventListener('beforeinstallprompt', (e)=>{
     e.preventDefault();
     deferredPrompt = e;
@@ -391,14 +477,22 @@
 
   installBtn.addEventListener('click', async ()=>{
     if(deferredPrompt){
-      deferredPrompt.prompt();
+      deferredPrompt.prompt(); // the real native Chrome "Install app?" dialog
       const {outcome} = await deferredPrompt.userChoice;
       if(outcome==='accepted') installBtn.style.display='none';
       deferredPrompt=null;
     } else {
-      alert("To install: open your browser menu (⋮) and select 'Install app' or 'Add to Home screen'.");
+      // Chrome hasn't fired beforeinstallprompt (iOS, unsupported browser,
+      // criteria not yet met, or a prior dismissal is still being throttled).
+      openHelpModal();
     }
   });
+
+  window.addEventListener('appinstalled', ()=>{ installBtn.style.display='none'; });
+</script>
+
+</body>
+</html>
 </script>
 
 </body>
