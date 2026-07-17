@@ -4,7 +4,7 @@
   "description": "Offline dairy farm record-keeping notebook for tracking milk yield, animals, and finances.",
   "start_url": "./index.html",
   "scope": "./",
-  "id": "./index.html",
+  "id": "./app.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000000",
