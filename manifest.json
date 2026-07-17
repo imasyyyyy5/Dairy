@@ -2,7 +2,7 @@
   "name": "Milk Dairy Notebook",
   "short_name": "Dairy Notebook",
   "description": "Offline dairy farm record-keeping notebook for tracking milk yield, animals, and finances.",
-  "start_url": "./index.html",
+  "start_url": "./app.html",
   "scope": "./",
   "id": "./app.html",
   "display": "standalone",
