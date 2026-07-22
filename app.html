@@ -360,11 +360,17 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .lgv-chip.on{background:var(--invbg);color:var(--invfg);border-color:var(--invbg);}
 .lgv-daylabel{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:16px 2px 8px;}
 .lgv-daylabel:first-child{padding-top:0;}
-.lgv-entry{display:flex;gap:11px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid var(--border);}
-.lgv-entry:last-child{border-bottom:none;}
+.lgv-row{position:relative;overflow:hidden;border-bottom:1px solid var(--border);}
+.lgv-row:last-child{border-bottom:none;}
+.lgv-entry{display:flex;gap:11px;align-items:flex-start;padding:10px 2px;position:relative;z-index:2;background:var(--bg);touch-action:pan-y;}
 .lgv-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border);}
 .lgv-text{font-size:13px;color:var(--text);line-height:1.45;}
+.lgv-text.undone{opacity:.5;text-decoration:line-through;}
 .lgv-time{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:monospace;}
+.lgv-undone-tag{font-size:9.5px;font-weight:800;color:var(--muted);background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:1px 6px;margin-left:6px;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle;}
+.lgv-swipe-actions{position:absolute;top:0;right:0;bottom:0;width:84px;display:flex;z-index:1;}
+.lgv-undo-btn{flex:1;border:none;background:var(--danger);color:#fff;font-size:11.5px;font-weight:800;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+.lgv-redo-btn{background:var(--success);}
 .lgv-count{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding-bottom:2px;}
 .lgv-loadmore{width:100%;margin-top:14px;}
 
@@ -728,6 +734,42 @@ const Store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}},
 };
 
+// ══════════════════════════════════════════════════════════════════
+//  HAPTICS
+//  A single named-tier table so every tap/action feel in the app is tuned
+//  in one place, never as raw millisecond numbers scattered through click
+//  handlers. `warn` is deliberately a different rhythm (not just a
+//  different length) so it reads as "something's wrong" by feel alone.
+//  Everything routes through Haptics.fire(), which is the one gate the
+//  Profile toggle needs to close to go fully silent.
+// ══════════════════════════════════════════════════════════════════
+const HAPTIC_PATTERNS = {
+  tick:   [10],                 // numpad digit, chip/filter toggle, tab switch
+  light:  [25],                 // Quick Entry saved, swipe-to-undo snaps open, toast appears
+  medium: [50],                 // undo/redo applied, payment logged, animal/customer added
+  heavy:  [45,40,45],           // delete customer, clear/lock sheet, trash a page, exit-confirm
+  warn:   [15,30,15,30,15],     // validation errors, blocked actions
+};
+const Haptics = {
+  _supported: typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function',
+  supported(){ return Haptics._supported; },
+  allowed(){
+    if(!Haptics._supported) return false;
+    const p = DB.profile();
+    return p.hapticsEnabled !== false; // defaults on
+  },
+  fire(tier){
+    if(!Haptics.allowed()) return;
+    const pattern = HAPTIC_PATTERNS[tier];
+    if(!pattern) return;
+    try { navigator.vibrate(pattern); } catch(e) { /* fire-and-forget, never block the tap */ }
+  },
+};
+// DB.log() already sits at the choke point almost every meaningful save
+// flows through, so keying off the log `type` covers most save-confirmation
+// haptics for free without touching every call site individually.
+const HAPTIC_LOG_TYPE_TIER = { create:'medium', update:'medium', payment:'medium', delete:'heavy' };
+
 const BACKUP_FORMAT = 'dairy-notebook-backup';
 const BACKUP_VERSION = 2;
 const SHARE_FORMAT = 'dairy-notebook-hisaab-share';
@@ -848,7 +890,7 @@ const AutoBackup = {
 };
 
 const DB={
-  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10},
+  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
   saveProfile:(p)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); },
   pages:()=>{
     const p = Store.get('mdn_pages')||[];
@@ -893,11 +935,163 @@ const DB={
     if (cleanLogs.length !== rawLogs.length) Store.set('mdn_logs', cleanLogs); 
     return cleanLogs;
   },
-  log(text, type='info'){
-    const l=DB.logs(); l.unshift({id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()});
+  log(text, type='info', undoOp=null, hapticOverride=null){
+    const l=DB.logs();
+    const entry = {id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()};
+    if(undoOp) entry.undoOp = undoOp;
+    l.unshift(entry);
     if(l.length>3000)l.splice(3000); Store.set('mdn_logs',l); AutoBackup.trigger();
+    // Covers most save-confirmation haptics for free, keyed off the log type
+    // almost every meaningful action already passes in. A call site can
+    // still override the tier (e.g. Quick Entry's save is `light`, lighter
+    // than the `medium` its 'update' type would otherwise imply).
+    const hapticTier = hapticOverride || HAPTIC_LOG_TYPE_TIER[type];
+    if(hapticTier) Haptics.fire(hapticTier);
   },
 };
+
+// ══════════════════════════════════════════════════════════════════
+//  PRECISE UNDO ENGINE
+//  Every undoable log entry carries an `undoOp` describing exactly which
+//  single field or record it changed — never a whole-store snapshot. That
+//  means undoing an old entry can never silently wipe out newer, unrelated
+//  changes to the same store: applying an op only ever touches the one
+//  row/field/record it names, the same way the original action did.
+//  Toggling an entry (undo, then swipe again to redo) never writes a new
+//  log line — it just flips that entry's own `undone` flag in place, kept
+//  invisible to the rest of the log.
+// ══════════════════════════════════════════════════════════════════
+// Checks whether an op's precondition still holds against the CURRENT live
+// data — not against log ordering or timestamps. This is what makes chains
+// of edits to the same field safe: undoing "0→2" is only ever offered while
+// the cell still actually reads 2 (i.e. nothing has changed it since); once
+// a later edit — like "2→3" — has landed, the current value is 3, the
+// precondition fails, and the earlier entry silently stops offering undo.
+// Redo is checked the same way in reverse, so a chain can only be redone in
+// the exact order it was undone — redoing "2→3" is refused while the cell
+// still sits at 0, because "0→2" hasn't been redone yet to bring it back to 2.
+// Identifies the target field/record(s) an op touches, as string keys, so we
+// can find every other log entry that ever touched the same thing.
+function undoOpKeys(op){
+  if(!op) return [];
+  if(op.kind === 'multi') return op.ops.flatMap(undoOpKeys);
+  if(op.kind === 'cell') return [`cell:${op.pageId}:${op.rowId}:${op.colId}`];
+  if(op.kind === 'payment') return [`payment:${op.payment.id}`];
+  if(op.kind === 'household-payment') return [`hh-payment:${op.householdId}:${op.payment.id}`];
+  return [];
+}
+
+// A value repeating earlier in a field's history (e.g. 0→2→3→6→2) means a
+// plain "does the current value match?" check can be fooled — the first
+// 0→2 entry would wrongly look valid again once the field cycles back to 2.
+// This layer fixes that by only ever allowing undo on the MOST RECENT still-
+// applied entry for a given target, and redo on the MOST RECENT still-undone
+// one — exactly mirroring a real per-field undo/redo stack, so a chain can
+// only be walked back and forth in the order it actually happened, never
+// out of sequence.
+function isNewestForKey(allLogs, entry, key, wantApplied){
+  let bestIdx = -1;
+  allLogs.forEach((l, idx) => {
+    if(!undoOpKeys(l.undoOp).includes(key)) return;
+    if(wantApplied ? l.undone : !l.undone) return; // wrong state for this comparison
+    if(bestIdx === -1 || idx < bestIdx) bestIdx = idx; // idx 0 = most recent
+  });
+  const entryIdx = allLogs.indexOf(entry);
+  return entryIdx === bestIdx;
+}
+
+// Combines both checks: an entry may only be toggled if it's the newest
+// touch on every field/record its op covers AND the live data still holds
+// exactly the value that op expects to find.
+function canToggleLogEntry(allLogs, entry, direction){
+  if(!entry.undoOp) return false;
+  if(direction === 'undo' && entry.undone) return false;
+  if(direction === 'redo' && !entry.undone) return false;
+  const wantApplied = direction === 'undo';
+  const keys = undoOpKeys(entry.undoOp);
+  if(!keys.length) return false;
+  if(!keys.every(k => isNewestForKey(allLogs, entry, k, wantApplied))) return false;
+  return checkUndoOpValidity(entry.undoOp, direction);
+}
+
+function checkUndoOpValidity(op, direction){
+  if(!op) return false;
+  if(op.kind === 'multi') return op.ops.every(o => checkUndoOpValidity(o, direction));
+  if(op.kind === 'cell'){
+    const p = DB.pages().find(pg=>pg.id===op.pageId); if(!p) return false;
+    const r = p.rows.find(rw=>rw.id===op.rowId); if(!r) return false;
+    const current = r[op.colId] || '';
+    return direction === 'undo' ? current === (op.to||'') : current === (op.from||'');
+  }
+  if(op.kind === 'payment'){
+    const exists = DB.payments().some(pp=>pp.id===op.payment.id);
+    return direction === 'undo' ? exists : !exists;
+  }
+  if(op.kind === 'household-payment'){
+    const h = DB.households().find(hh=>hh.id===op.householdId); if(!h) return false;
+    const exists = (h.payments||[]).some(pp=>pp.id===op.payment.id);
+    return direction === 'undo' ? exists : !exists;
+  }
+  return false;
+}
+
+function applyUndoOp(op, direction){ // direction: 'undo' or 'redo'
+  if(!op) return;
+  if(op.kind === 'multi'){ op.ops.forEach(o => applyUndoOp(o, direction)); return; }
+  if(op.kind === 'cell'){
+    const pages = DB.pages(); const p = pages.find(pg=>pg.id===op.pageId); if(!p) return;
+    const r = p.rows.find(rw=>rw.id===op.rowId); if(!r) return;
+    r[op.colId] = direction==='undo' ? op.from : op.to;
+    r.total = computeRowTotal(r, p.cols, DB.profile());
+    DB.savePages(pages);
+    return;
+  }
+  if(op.kind === 'payment'){ // standalone milkmen payment in mdn_payments
+    const payments = DB.payments();
+    if(direction==='undo'){ const i=payments.findIndex(pp=>pp.id===op.payment.id); if(i>=0) payments.splice(i,1); }
+    else if(!payments.find(pp=>pp.id===op.payment.id)) payments.unshift(op.payment);
+    DB.savePayments(payments);
+    return;
+  }
+  if(op.kind === 'household-payment'){ // a payment recorded against one specific customer
+    const households = DB.households(); const h = households.find(hh=>hh.id===op.householdId); if(!h) return;
+    h.payments = h.payments || [];
+    if(direction==='undo'){ h.payments = h.payments.filter(pp=>pp.id!==op.payment.id); }
+    else if(!h.payments.find(pp=>pp.id===op.payment.id)) h.payments.push(op.payment);
+    DB.saveHouseholds(households);
+    return;
+  }
+}
+
+// Toggles a single log entry between applied/undone, reapplying only the
+// exact op it carries. No new "Undid: ..." log line is ever created — the
+// reversal happens quietly, and the entry's own strike-through state is the
+// only visible trace. Swiping an already-undone entry redoes it the same way.
+function toggleLogUndo(id){
+  const logs = DB.logs();
+  const entry = logs.find(l=>l.id===id);
+  if(!entry || !entry.undoOp) return;
+  const goingToUndo = !entry.undone;
+  const direction = goingToUndo ? 'undo' : 'redo';
+  if(!canToggleLogEntry(logs, entry, direction)){
+    appAlert('No Longer Available', `This action can't be ${goingToUndo?'undone':'redone'} because a later change to the same data supersedes it.`);
+    renderMe(); // refresh so the now-invalid swipe action disappears
+    return;
+  }
+  const title = goingToUndo ? 'Undo This Action?' : 'Redo This Action?';
+  const body = goingToUndo ? `This will exactly reverse: "${entry.text}"` : `This will re-apply: "${entry.text}"`;
+  appConfirm(title, body).then(ok=>{
+    if(!ok) return;
+    const freshLogs = DB.logs(); const freshEntry = freshLogs.find(l=>l.id===id);
+    if(!freshEntry || !canToggleLogEntry(freshLogs, freshEntry, direction)){ appAlert('No Longer Available', 'The data changed while this was open, so it can no longer be applied safely.'); renderMe(); return; }
+    applyUndoOp(freshEntry.undoOp, direction);
+    freshEntry.undone = goingToUndo;
+    Store.set('mdn_logs', freshLogs);
+    Haptics.fire('medium');
+    showToast(goingToUndo ? 'Action undone.' : 'Action redone.');
+    renderHome(); renderGraphs(); renderCalc(); renderMe();
+  });
+}
 
 const aIcon = {cow:'🐄', buffalo:'🐃', goat:'🐐', other:'🥛'};
 const aColors = {cow:'#4e8cff', buffalo:'#7b8794', goat:'#d4a373', other:'#a0aec0'};
@@ -997,7 +1191,15 @@ const addDays=(dStr,n)=>{
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
 
-function showToast(message, isSuccess = true) {
+function showToast(message, isSuccess = true, haptic = null) {
+  // `haptic` lets a call site opt into the `light` "toast appears" feel when
+  // the toast IS the feedback for its action. Sites whose action already
+  // fired a stronger tier (via DB.log, an explicit Haptics.fire, etc.) pass
+  // nothing, so the toast doesn't stack a second, weaker vibration on top of
+  // (and cut short) the one that already fired. A failed/blocked toast
+  // (isSuccess === false) always gets `warn` regardless, matching validation
+  // errors and blocked actions elsewhere in the app.
+  Haptics.fire(haptic || (isSuccess === false ? 'warn' : null));
   const container = document.getElementById('toast-container');
   if (!container) return; 
   while (container.childElementCount >= 3) { container.removeChild(container.firstElementChild); }
@@ -1090,6 +1292,7 @@ function appChoice(title, body, choices) {
 }
 
 function appAlert(title, body) {
+  Haptics.fire('warn');
   return new Promise((resolve) => { alertResolution = resolve; document.getElementById('mal-title').textContent = title; document.getElementById('mal-body').innerHTML = body; om('m-alert'); });
 }
 function submitAppAlert() { cm('m-alert'); if(alertResolution) { alertResolution(); alertResolution = null; } }
@@ -1135,7 +1338,7 @@ async function shareBackup() {
         const file = new File([finalFile], `Dairy_Backup_${today()}.pdf`, { type: "application/pdf" });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], title: 'Dairy App Backup' }).then(() => showToast("Share sheet opened successfully.")).catch(() => fallbackDownload(file));
+            navigator.share({ files: [file], title: 'Dairy App Backup' }).then(() => showToast("Share sheet opened successfully.", true, 'light')).catch(() => fallbackDownload(file));
         } else { fallbackDownload(file); }
     } catch (err) { appAlert("Error", "Could not generate PDF backup."); }
 }
@@ -1143,7 +1346,7 @@ async function shareBackup() {
 function fallbackDownload(file) {
     const url = URL.createObjectURL(file); const a = document.createElement('a');
     a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    showToast("PDF Backup downloaded locally.");
+    showToast("PDF Backup downloaded locally.", true, 'light');
 }
 
 function importBackup(e) {
@@ -1183,7 +1386,7 @@ function importBackup(e) {
         let payload = null; try { payload = JSON.parse(payloadString); } catch (err) { }
         if (payload && payload.format === BACKUP_FORMAT) {
             const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
-            if(confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading..."); setTimeout(() => location.reload(), 1500); }
+            if(confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading...", true, 'light'); setTimeout(() => location.reload(), 1500); }
         } else appAlert("Import Failed", "Data extracted from the file is invalid.");
     } catch (err) { appAlert("Import Failed", "Could not read the backup file."); }
     e.target.value = ''; 
@@ -1232,7 +1435,7 @@ async function checkForIncomingShare(){
       let payload = null; try { payload = JSON.parse(text.substring(bIdx + backupStart.length, eIdx).trim()); } catch(err) {}
       if (payload && payload.format === BACKUP_FORMAT) {
         const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
-        if (confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading..."); setTimeout(() => location.reload(), 1500); }
+        if (confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading...", true, 'light'); setTimeout(() => location.reload(), 1500); }
       }
     }
   } catch (err) { console.warn('Incoming share handling failed:', err); }
@@ -1945,7 +2148,7 @@ async function shareHisaabCanvases(canvases, baseName, shareData){
   try{
     const file = await canvasesToPdfFile(canvases, `${baseName}.pdf`, shareData);
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      navigator.share({files:[file], title: baseName}).then(()=>showToast('Share sheet opened successfully.')).catch(()=>{});
+      navigator.share({files:[file], title: baseName}).then(()=>showToast('Share sheet opened successfully.', true, 'light')).catch(()=>{});
     } else {
       appAlert('Sharing Not Supported', 'Your browser/device does not support direct file sharing. Try opening this app in Chrome (Android) or Safari (iPhone).');
     }
@@ -2105,6 +2308,7 @@ async function handleRootBack() {
     else history.pushState({d: 0}, '', '');
     return;
   }
+  Haptics.fire('heavy');
   // Best-effort across common native-wrapper exit bridges. If none apply
   // (e.g. this is a plain installed PWA with no native wrapper), there is no
   // web API that lets a page force-close itself when the user — not a script
@@ -2151,7 +2355,7 @@ function isActuallyScrollable(el){
 }
 document.addEventListener('touchstart', e => {
   const t = e.changedTouches[0]; touchStartX = t.screenX; touchStartY = t.screenY;
-  swipeBlocked = !!e.target.closest('input, textarea, select') || isActuallyScrollable(e.target);
+  swipeBlocked = !!e.target.closest('input, textarea, select, .lgv-row') || isActuallyScrollable(e.target);
 }, {passive: true});
 document.addEventListener('touchend', e => { if(swipeBlocked) return; const t = e.changedTouches[0]; touchEndX = t.screenX; touchEndY = t.screenY; handleSwipe(); }, {passive: true});
 const SWIPE_THRESHOLD = 60;      // minimum horizontal travel (px) to count as an intentional swipe
@@ -2188,11 +2392,11 @@ function handleSwipe() {
   // forward/back slide animation itself now lives inside setMV/goTab/
   // openDetail/closeDetail, so every path into those (tap OR swipe) animates
   // the same way — this function just decides what state to move to.
-  if (curTab === 'me' && ME_SUBVIEWS.includes(meView) && diff > SWIPE_THRESHOLD) { setMV('profile'); return; }
+  if (curTab === 'me' && ME_SUBVIEWS.includes(meView) && diff > SWIPE_THRESHOLD) { Haptics.fire('tick'); setMV('profile'); return; }
   if (curDetailId) {
-      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { detailPageIdx = 1; renderHome(); slideTransition('#p-home', 'forward'); navPush('detailPage', {}); return; }
-      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); navConsumeIfTop('detailPage', () => true); return; }
-      if (diff > SWIPE_THRESHOLD && detailPageIdx === 0) { closeDetail(); return; }
+      if (diff < -SWIPE_THRESHOLD && detailPageIdx === 0) { Haptics.fire('tick'); detailPageIdx = 1; renderHome(); slideTransition('#p-home', 'forward'); navPush('detailPage', {}); return; }
+      if (diff > SWIPE_THRESHOLD && detailPageIdx === 1) { Haptics.fire('tick'); detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); navConsumeIfTop('detailPage', () => true); return; }
+      if (diff > SWIPE_THRESHOLD && detailPageIdx === 0) { Haptics.fire('tick'); closeDetail(); return; }
       return;
   }
   if (!curDetailId) {
@@ -2229,6 +2433,7 @@ function initApp() {
 
 function goTab(id,btn){
   if (id === curTab) return;
+  Haptics.fire('tick');
   const prevIdx = TAB_ORDER.indexOf(curTab), nextIdx = TAB_ORDER.indexOf(id), prevTab = curTab;
   if(id === 'home') { curDetailId = null; }
   if(id !== 'me'){ versionMarkShown = false; }
@@ -2240,7 +2445,7 @@ function goTab(id,btn){
 }
 
 let obTempAnimals = []; let obType = 'cow';
-function setObType(t) { obType = t; document.querySelectorAll('#ob-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ob-'+t+'-btn').classList.add('on'); }
+function setObType(t) { Haptics.fire('tick'); obType = t; document.querySelectorAll('#ob-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ob-'+t+'-btn').classList.add('on'); }
 function addObAnimal() {
   const name = document.getElementById('ob-name').value.trim(); const rate = parseFloat(document.getElementById('ob-rate').value) || 0;
   if(!name) return appAlert('Notice', 'Please enter an animal name or ID to continue.');
@@ -2305,29 +2510,38 @@ function setNumpadTarget(id) { document.querySelectorAll('.qe-input').forEach(el
 function numpadPress(val) {
     if (!qeContext.activeInputId) return; const inp = document.getElementById(qeContext.activeInputId);
     if (val === 'back') inp.value = inp.value.slice(0, -1); else if (val === '.') { if (!inp.value.includes('.')) inp.value += '.'; } else { if (inp.value === '0') inp.value = val; else inp.value += val; }
+    Haptics.fire('tick');
 }
 
 function saveQuickEntry() {
   const pages = DB.pages(); const pageIdx = pages.findIndex(p => p.id === qeContext.pageId);
   if (pageIdx < 0) { openFullApp(); return; }
   const page = pages[pageIdx]; const rowIdx = page.rows.findIndex(r => r.id === qeContext.rowId); if (rowIdx < 0) { openFullApp(); return; }
-  const row = page.rows[rowIdx]; let shiftMilkAdded = false;
+  const row = page.rows[rowIdx]; let shiftMilkAdded = false; const animalAmounts = []; const cellOps = [];
 
   qeContext.cols.forEach(c => {
-    const valStr = document.getElementById(`qe-input-${c.id}`)?.value || ''; if (valStr) shiftMilkAdded = true; row[c.id] = valStr;
+    const valStr = document.getElementById(`qe-input-${c.id}`)?.value || '';
+    if (valStr) {
+      shiftMilkAdded = true;
+      const animalInfo = DB.profile().animals?.find(a => a.id === c.animal);
+      const animalName = animalInfo ? animalInfo.name : c.name.replace(' AM','').replace(' PM','');
+      animalAmounts.push(`${animalName} ${valStr}L`);
+    }
+    if((row[c.id]||'') !== valStr) cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:c.id, from:row[c.id]||'', to:valStr});
+    row[c.id] = valStr;
     if (DB.profile().ratePerEntry !== false) {
        const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
-       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '') row[rateCol.id] = rateInput.value; }
+       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
   DB.savePages(pages); 
-  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} shift entries for ${fmtDS(row.date)}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update');
+  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} milk for ${fmtDS(row.date)}: ${animalAmounts.join(', ')}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update', cellOps.length ? {kind:'multi', ops:cellOps} : null, 'light');
 
   const pTog = document.getElementById('qe-payment-toggle');
   if (pTog && pTog.checked) {
       const paid = parseFloat(document.getElementById('qe-payment-amount')?.value) || 0;
-      if (paid > 0) { const payments = DB.payments(); payments.unshift({ id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry` }); DB.savePayments(payments); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment'); }
+      if (paid > 0) { const payment = { id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry` }; const payments = DB.payments(); payments.unshift(payment); DB.savePayments(payments); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment', {kind:'payment', payment}); }
   }
   document.getElementById('qe-active-content').style.display = 'none'; document.getElementById('qe-success-content').style.display = 'block';
   const wasBackfill = qeContext.isBackfill;
@@ -2473,7 +2687,7 @@ function openFilterSheetModal(pageId) {
 }
 
 function applyThemedFilter(pageId, targetFilterValue) {
-   cm('m-filter-sheet'); currentTableFilter = targetFilterValue;
+   Haptics.fire('tick'); cm('m-filter-sheet'); currentTableFilter = targetFilterValue;
    document.getElementById('table-container').innerHTML = buildCompactTable(DB.pages().find(p=>p.id===pageId), DB.profile(), today(), currentTableFilter);
 }
 
@@ -2523,7 +2737,7 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   if(!pages[pi].rows[ri].dateFrozen){ pages[pi].rows[ri].date=pages[pi].rows[ri].assignedDate||today(); pages[pi].rows[ri].dateFrozen=true; }
   pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile()); DB.savePages(pages);
   const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
-  DB.log(`Changed ${colName} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update');
+  if((old||'0') !== (value||'0')) DB.log(`Changed ${colName} from ${old||'0'}${unit} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update', {kind:'cell', pageId, rowId, colId, from:old||'', to:value||''});
   document.getElementById('table-container').innerHTML = buildCompactTable(pages[pi], DB.profile(), today(), currentTableFilter);
 }
 
@@ -2554,7 +2768,7 @@ function horizonSlice(dates, horizon) {
   const n = parseInt(horizon, 10);
   return dates.slice(-n);
 }
-function setGFilter(filter) { gChartFilter = filter; gIsolated = null; drawSelectedGraph(); }
+function setGFilter(filter) { Haptics.fire('tick'); gChartFilter = filter; gIsolated = null; drawSelectedGraph(); }
 let gIsolated = null; // currently isolated/highlighted legend key (animal name or customer id), null = show all
 
 function toggleIsolate(key){ gIsolated = (gIsolated === key) ? null : key; drawSelectedGraph(); }
@@ -2924,7 +3138,7 @@ function openLogFromPicker(){
 function openLogToPicker(){
   openThemedCalendar('logf-to', logFilterFrom || null, (d)=>{ logFilterTo = d; renderMe(); });
 }
-function setLogTypeFilter(t){ logFilterType = t; logShowCount = 50; renderMe(); }
+function setLogTypeFilter(t){ Haptics.fire('tick'); logFilterType = t; logShowCount = 50; renderMe(); }
 function clearLogFilters(){ logFilterFrom = null; logFilterTo = null; logFilterType = ''; logFilterSearch = ''; logShowCount = 50; logCustomOpen = false; renderMe(); }
 function setLogSearch(v){ logFilterSearch = v; logShowCount = 50; renderMe(); }
 function loadMoreLogs(){ logShowCount += 50; renderMe(); }
@@ -2956,6 +3170,38 @@ const LOG_META = {
   info:{icon:'ℹ️', color:'var(--sub)'}
 };
 function logMeta(t){ return LOG_META[t] || {icon:'•', color:'var(--sub)'}; }
+
+// ── SWIPE-TO-UNDO for individual log rows ──
+// The row itself slides left over a fixed Undo button sitting underneath it;
+// releasing past the threshold snaps it open, releasing short snaps it shut.
+const LGV_REVEAL = 84;
+let lgvStartX=0, lgvStartY=0, lgvCurDX=0, lgvActiveEl=null, lgvOpenId=null, lgvDragging=false;
+function lgvTouchStart(e, id){
+  const t=e.touches[0]; lgvStartX=t.clientX; lgvStartY=t.clientY; lgvCurDX=(lgvOpenId===id)?-LGV_REVEAL:0; lgvDragging=false;
+  lgvActiveEl = e.currentTarget; lgvActiveEl.style.transition='none';
+  if(lgvOpenId && lgvOpenId!==id) lgvCloseRow(lgvOpenId);
+}
+function lgvTouchMove(e, id){
+  if(!lgvActiveEl) return;
+  const t=e.touches[0]; const dx=t.clientX-lgvStartX, dy=t.clientY-lgvStartY;
+  if(!lgvDragging && Math.abs(dy) > Math.abs(dx)*0.6) return; // vertical scroll, not our gesture
+  lgvDragging = true;
+  const base = (lgvOpenId===id) ? -LGV_REVEAL : 0;
+  lgvCurDX = Math.max(-LGV_REVEAL, Math.min(0, base + dx));
+  lgvActiveEl.style.transform = `translateX(${lgvCurDX}px)`;
+}
+function lgvTouchEnd(e, id){
+  if(!lgvActiveEl) return;
+  lgvActiveEl.style.transition='transform .22s cubic-bezier(.2,.8,.2,1)';
+  if(lgvCurDX < -LGV_REVEAL*0.4){ if(lgvOpenId!==id) Haptics.fire('light'); lgvActiveEl.style.transform=`translateX(-${LGV_REVEAL}px)`; lgvOpenId=id; }
+  else { lgvActiveEl.style.transform='translateX(0)'; if(lgvOpenId===id) lgvOpenId=null; }
+  lgvActiveEl=null; lgvDragging=false;
+}
+function lgvCloseRow(id){
+  const row = document.querySelector(`.lgv-entry[data-log-id="${id}"]`);
+  if(row){ row.style.transition='transform .22s cubic-bezier(.2,.8,.2,1)'; row.style.transform='translateX(0)'; }
+  if(lgvOpenId===id) lgvOpenId=null;
+}
 function logDayLabel(dateStr){
   const t = today();
   if(dateStr===t) return 'Today';
@@ -3018,7 +3264,12 @@ function renderMe(){
         const day = (l.ts||'').slice(0,10);
         if(day !== lastDay){ html += `<div class="lgv-daylabel">${logDayLabel(day)}</div>`; lastDay = day; }
         const meta = logMeta(l.type);
-        html += `<div class="lgv-entry"><div class="lgv-icon" style="color:${meta.color};border-color:${meta.color};">${meta.icon}</div><div class="f1 mw0"><div class="lgv-text">${l.text}</div><div class="lgv-time">${fmtTimeOnly(l.ts)}</div></div></div>`;
+        const canToggle = canToggleLogEntry(allLogs, l, l.undone ? 'redo' : 'undo');
+        const touchAttrs = canToggle ? `ontouchstart="lgvTouchStart(event,'${l.id}')" ontouchmove="lgvTouchMove(event,'${l.id}')" ontouchend="lgvTouchEnd(event,'${l.id}')"` : '';
+        const actionBtn = l.undone
+          ? `<button class="lgv-undo-btn lgv-redo-btn" onclick="toggleLogUndo('${l.id}')"><span style="font-size:15px;">↻</span>Redo</button>`
+          : `<button class="lgv-undo-btn" onclick="toggleLogUndo('${l.id}')"><span style="font-size:15px;">↩</span>Undo</button>`;
+        html += `<div class="lgv-row">${canToggle ? `<div class="lgv-swipe-actions">${actionBtn}</div>` : ''}<div class="lgv-entry" data-log-id="${l.id}" ${touchAttrs}><div class="lgv-icon" style="color:${meta.color};border-color:${meta.color};">${meta.icon}</div><div class="f1 mw0"><div class="lgv-text ${l.undone?'undone':''}">${l.text}${l.undone?'<span class="lgv-undone-tag">Undone</span>':''}</div><div class="lgv-time">${fmtTimeOnly(l.ts)}</div></div></div></div>`;
       });
       if(logs.length > logShowCount) html += `<button class="btn bs lgv-loadmore" onclick="loadMoreLogs()">Load ${Math.min(50, logs.length-logShowCount)} More</button>`;
     }
@@ -3034,6 +3285,7 @@ function renderMe(){
   html+=`</div></div>
    <div class="card"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Settings</div>
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div><label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label></div>
+    ${Haptics.supported() ? `<div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Haptic Feedback</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Vibration on taps, saves, and alerts</div></div><label class="tswitch"><input type="checkbox" ${profile.hapticsEnabled!==false?'checked':''} onchange="setHapticsPref(this.checked)"/><div class="tslider"></div></label></div>` : ''}
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
@@ -3086,7 +3338,7 @@ function renderSharedHisaabList(el){
 
 function confirmDeleteSharedHisaab(shareId){
   appConfirm('Remove Shared Hisaab?', 'This only removes it from your device — it does not affect the sender\'s data.').then(ok=>{
-    if(!ok) return; deleteSharedHisaab(shareId); showToast('Removed.'); renderMe();
+    if(!ok) return; deleteSharedHisaab(shareId); showToast('Removed.', true, 'light'); renderMe();
   });
 }
 
@@ -3118,13 +3370,14 @@ function openSharedHisaabViewer(shareId){
 }
 function closeSharedHisaabViewer(){ cm('m-shared-view'); }
 function editName(){ const p=DB.profile(); appPrompt('Dairy name:', p.name).then(n => { if(!n?.trim()) return; p.name=n.trim(); DB.saveProfile(p); DB.log(`Changed dairy name to ${p.name}`, 'info'); renderMe(); }); }
-function setRatePref(v){ const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p); showToast('Preference saved.'); }
-function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.'); renderMe(); }
+function setRatePref(v){ const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p); showToast('Preference saved.', true, 'light'); }
+function setHapticsPref(v){ const p=DB.profile(); p.hapticsEnabled=v; DB.saveProfile(p); if(v) Haptics.fire('medium'); showToast(v?'Haptic feedback on.':'Haptic feedback off.'); }
+function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.', true, 'light'); renderMe(); }
 function openShiftTimePicker(current){
   const opts = [12,13,14,15,16,17,18,19].map(h => ({value: String(h), label: `${h>12?h-12:h} PM`}));
   openThemedSelect('Evening Shift Starts At', opts, String(current), (value) => setShiftTime(value));
 }
-function setPeriodLength(v) { const p = DB.profile(); let val = parseInt(v); if(val < 1 || isNaN(val)) val = 10; p.periodLength = val; DB.saveProfile(p); showToast(`Default period length set to ${val}`); }
+function setPeriodLength(v) { const p = DB.profile(); let val = parseInt(v); if(val < 1 || isNaN(val)) val = 10; p.periodLength = val; DB.saveProfile(p); showToast(`Default period length set to ${val}`, true, 'light'); }
 
 // ---- APPEARANCE / THEME ----
 // 'system' follows the OS/browser color-scheme live (via matchMedia listener below),
@@ -3145,7 +3398,7 @@ function applyTheme(pref){
   const themeColor = resolved === 'light' ? '#f4f4f2' : '#000000';
   document.querySelectorAll('meta[name="theme-color"], meta[name="background-color"]').forEach(m => m.setAttribute('content', themeColor));
 }
-function setThemePref(pref){ themeMemory = pref; Store.set('mdn_theme', pref); applyTheme(pref); showToast(`Theme set to ${THEME_LABELS[pref]}.`); renderMe(); }
+function setThemePref(pref){ themeMemory = pref; Store.set('mdn_theme', pref); applyTheme(pref); showToast(`Theme set to ${THEME_LABELS[pref]}.`, true, 'light'); renderMe(); }
 function openThemePicker(){
   const opts = Object.keys(THEME_LABELS).map(k => ({ value: k, label: THEME_LABELS[k] }));
   openThemedSelect('Appearance', opts, getThemePref(), (value) => setThemePref(value));
@@ -3173,7 +3426,7 @@ function openAnimalModal(id){
   }
   om('m-animal');
 }
-function setAT(t){ animalType=t; document.querySelectorAll('#ma-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ma-'+t+'-btn').classList.add('on'); }
+function setAT(t){ Haptics.fire('tick'); animalType=t; document.querySelectorAll('#ma-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ma-'+t+'-btn').classList.add('on'); }
 async function doSaveAnimal() {
   const name = document.getElementById('ma-name').value.trim(); if (!name) { appAlert('Missing Field', 'Please enter an animal name.'); return; }
   const milks = document.getElementById('ma-milks').checked; const rate = milks ? (parseFloat(document.getElementById('ma-rate').value) || 0) : 0;
@@ -3191,7 +3444,7 @@ async function doSaveAnimal() {
            activePage.cols.forEach(c => { if ((c.type === 'milk_am' || c.type === 'milk_pm') && c.animal === editAnimalId) c.animalRate = rate; });
            const rateCol = activePage.cols.find(c => c.type === 'rate_per_animal' && c.animal === editAnimalId);
            activePage.rows.forEach(r => { if (rateCol) { r[rateCol.id] = rate; } r.total = computeRowTotal(r, activePage.cols, profile); });
-           DB.savePages(pages); showToast('Active period updated with the new rate.'); if (curDetailId === activePage.id) renderHome();
+           DB.savePages(pages); showToast('Active period updated with the new rate.', true, 'light'); if (curDetailId === activePage.id) renderHome();
        }
     }
   }
@@ -3352,10 +3605,11 @@ function saveCustomerPayment() {
   
   const households = DB.households(); const h = households.find(x=>x.id===id); if(!h) return;
   if(!h.payments) h.payments = [];
-  h.payments.push({ id: uid(), date, amount, note });
+  const payment = { id: uid(), date, amount, note };
+  h.payments.push(payment);
   
   DB.saveHouseholds(households);
-  DB.log(`Logged payment of ₹${amount} from customer: ${h.name}`, 'payment');
+  DB.log(`Logged payment of ₹${amount} from customer: ${h.name}`, 'payment', {kind:'household-payment', householdId:h.id, payment});
   cm('m-customer-payment'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc();
 }
 
@@ -3480,10 +3734,10 @@ async function reqLock(pageId){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0) return; const page=pages[pi];
   if(page.locked){
     const agreed=await appConfirm('Unlock Record?','Unlock to edit again?'); if(!agreed) return;
-    page.locked=false; page.clearedAt=null; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info');
+    page.locked=false; page.clearedAt=null; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
   } else {
     const agreed=await appConfirm('Mark as Cleared?','Lock record and mark account cleared?'); if(!agreed) return;
-    page.locked=true; page.clearedAt=new Date().toISOString(); DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info');
+    page.locked=true; page.clearedAt=new Date().toISOString(); DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
   }
   renderHome();
 }
