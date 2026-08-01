@@ -1177,7 +1177,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.8.0';
+const APP_VERSION = 'v1.9.0';
 
 const today=()=>{
   const d=new Date();
@@ -1189,6 +1189,28 @@ const addDays=(dStr,n)=>{
   const dt = new Date(y, m-1, d);
   dt.setDate(dt.getDate() + n);
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+};
+
+const daysInMonth=(dStr)=>{ const [y,m]=dStr.split('-').map(Number); return new Date(y, m, 0).getDate(); };
+
+// If a default-length period would spill a few days into the next month,
+// or leave a short stub of fewer than `pLen` days before the month
+// actually ends, absorb those extra/leftover days into THIS period instead
+// of spawning a lonely mini-period. e.g. with a 10-day default and a
+// 31-day month: 1–10, 11–20, then 21–31 (11 days, not a stray 21–30 plus a
+// 1-day orphan on the 31st). A 28-day Feb naturally closes at 21–28 (8
+// days), a leap Feb at 21–29 (9 days).
+const adjustEndForMonthBoundary=(startDate, naturalEnd, pLen)=>{
+  const [sy, sm] = startDate.split('-').map(Number);
+  const monthEnd = `${sy}-${String(sm).padStart(2,'0')}-${String(daysInMonth(startDate)).padStart(2,'0')}`;
+  if (naturalEnd >= monthEnd) return monthEnd; // this period would cross into (or lands exactly on) next month — cap it at this month's end
+  const remaining = Math.round((new Date(monthEnd+'T00:00:00') - new Date(naturalEnd+'T00:00:00')) / 86400000);
+  // Only fold the leftover into this period when it's a small sliver (under
+  // half a period) — a genuinely sizeable final chunk (e.g. 8 or 9 days out
+  // of a 10-day default, for a 28/29-day February) is a perfectly good
+  // period on its own and gets handled by the naturalEnd>=monthEnd branch
+  // above when *its* page is created, rather than being merged backwards.
+  return remaining < pLen / 2 ? monthEnd : naturalEnd;
 };
 
 function showToast(message, isSuccess = true, haptic = null) {
@@ -2169,13 +2191,15 @@ async function shareHisaabForHousehold(hhId){
 
 
 function createPage(startDate){
-  const profile=DB.profile(); const pLen = profile.periodLength || 10; const end=addDays(startDate, pLen - 1);
+  const profile=DB.profile(); const pLen = profile.periodLength || 10;
+  const end = adjustEndForMonthBoundary(startDate, addDays(startDate, pLen - 1), pLen);
   const sD=new Date(startDate+'T00:00:00'),eD=new Date(end+'T00:00:00');
+  const numDays = Math.round((eD - sD) / 86400000) + 1;
   const label=sD.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' – '+eD.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const cols=defaultColumns(profile);
   return{
     id:uid(),label,startDate,endDate:end, cols,
-    rows:Array.from({length: pLen},(_,i)=>{
+    rows:Array.from({length: numDays},(_,i)=>{
       const r={id:uid(),index:i,assignedDate:addDays(startDate,i),date:'',dateFrozen:false,total:0};
       cols.forEach(c=>{if(!['sr','date','total'].includes(c.type))r[c.id]='';}); return r;
     }),
@@ -2535,7 +2559,8 @@ function saveQuickEntry() {
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
-  DB.savePages(pages); 
+  DB.savePages(pages);
+  if (rowIdx === page.rows.length - 1) maybeAutoCreateNextPage(page.id); 
   if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} milk for ${fmtDS(row.date)}: ${animalAmounts.join(', ')}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update', cellOps.length ? {kind:'multi', ops:cellOps} : null, 'light');
 
   const pTog = document.getElementById('qe-payment-toggle');
@@ -2730,6 +2755,29 @@ function buildCompactTable(page,profile,todayStr, filter){
   return `<table>${thead}<tbody>${rows}</tbody><tfoot><tr style="height: 44px; background: var(--bg2); border-top: 2px solid var(--border2);"><td colspan="${sys1.length}" style="text-align:center; font-weight:900; font-size:14px; color:var(--fg);">Total:</td><td colspan="${colCount}" style="text-align:center; font-weight:900; font-size:14px; color:var(--fg);">${fmt(totalMilk)} L</td><td colspan="${sys2.length}" style="text-align:right; font-weight:900; font-size:14px; color:var(--fg); padding-right: 6px;">₹${fmt(totalRev)}</td></tr></tfoot></table>`;
 }
 
+// The moment the very last row of a period is filled in *on schedule* (its
+// date lands exactly on the period's own end date — the 10th/20th/month-end
+// etc, not an early/late/backfilled entry), the next period is started
+// automatically so the user never has to remember to tap "+ Record". Silent
+// no-op if a page already covers the next day, so this is safe to call on
+// every edit to the last row without ever double-creating.
+function maybeAutoCreateNextPage(pageId){
+  const pages = DB.pages();
+  const page = pages.find(p => p.id === pageId && !p.trashed);
+  if (!page || page.locked) return;
+  const lastRow = page.rows[page.rows.length - 1];
+  if (!lastRow || !lastRow.dateFrozen) return;
+  if (lastRow.date !== page.endDate || lastRow.assignedDate !== page.endDate) return;
+  const nextStart = addDays(page.endDate, 1);
+  const alreadyExists = pages.some(p => !p.trashed && nextStart >= p.startDate && nextStart <= p.endDate);
+  if (alreadyExists) return;
+  const newPg = createPage(nextStart);
+  pages.unshift(newPg);
+  DB.savePages(pages);
+  DB.log(`Auto-created new record sheet: ${newPg.label}`, 'create');
+  showToast(`New record started: ${newPg.label}`, true, 'light');
+}
+
 function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0||pages[pi].locked)return;
   const ri=pages[pi].rows.findIndex(r=>r.id===rowId); if(ri<0)return;
@@ -2738,6 +2786,7 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile()); DB.savePages(pages);
   const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
   if((old||'0') !== (value||'0')) DB.log(`Changed ${colName} from ${old||'0'}${unit} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update', {kind:'cell', pageId, rowId, colId, from:old||'', to:value||''});
+  if (ri === pages[pi].rows.length - 1) maybeAutoCreateNextPage(pageId);
   document.getElementById('table-container').innerHTML = buildCompactTable(pages[pi], DB.profile(), today(), currentTableFilter);
 }
 
@@ -3875,25 +3924,6 @@ async function editPageLength(pageId) {
 
 initApp();
 setTimeout(checkForIncomingShare, 1200);
-</script>
-  <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyC4nVXDtUBzsSVddaNXKRLxRvLkFES3wQk",
-    authDomain: "dairy-notebook-d0d11.firebaseapp.com",
-    projectId: "dairy-notebook-d0d11",
-    storageBucket: "dairy-notebook-d0d11.firebasestorage.app",
-    messagingSenderId: "919726483647",
-    appId: "1:919726483647:web:1ce88eff999e8d7c4efe0a"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
 </script>
 </body>
 </html>>
