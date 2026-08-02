@@ -518,8 +518,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
    <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObAnimal()">+ Add This Animal</button>
   </div>
   <div class="anim-stagger d3">
-      <button class="btn bg mb3" style="width:100%; color:var(--text);" onclick="document.getElementById('import-file').click()">⬆️ Import Existing Backup</button>
-      <button class="btn bp" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()">Complete Setup ›</button>
+      <div class="row gap2 mb3"><button class="btn bg" style="flex:1; color:var(--text);" onclick="openCloudSyncModal('signup')">Sign Up</button><button class="btn bg" style="flex:1; color:var(--text);" onclick="openCloudSyncModal('signin')">Sign In</button></div>
+      <button class="btn bp" id="ob-finish-btn" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()">Continue as Guest ›</button>
   </div>
  </div>
 </div>
@@ -622,11 +622,33 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
 <div class="moverlay" id="m-cloudsync" onclick="moi(event,'m-cloudsync')"><div class="mbox">
  <div class="mh"><span class="mt">☁️ Cloud Sync</span><button class="mx" onclick="cm('m-cloudsync')">✕</button></div>
- <div class="mbody mb3">Sign in to sync your records across devices. Creating an account uploads what's already on this device.</div>
- <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-email" autocomplete="email" placeholder="you@example.com"/></div>
- <div style="margin-bottom:4px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-password" autocomplete="current-password" placeholder="At least 6 characters"/></div>
- <div id="cs-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
- <div class="mact"><button class="btn bs" style="flex:1;" onclick="cloudSignUp()">Create Account</button><button class="btn bp" style="flex:1;" onclick="cloudSignIn()">Sign In</button></div>
+
+ <div id="cs-view-choice">
+  <div class="mbody mb3">Sign in to sync your records across devices, or create a new account.</div>
+  <div class="mact" style="flex-direction:column;gap:8px;">
+   <button class="btn bp" style="width:100%;" onclick="csShowView('signin')">Sign In</button>
+   <button class="btn bs" style="width:100%;" onclick="csShowView('signup')">Create Account</button>
+  </div>
+ </div>
+
+ <div id="cs-view-signin" style="display:none;">
+  <div class="mbody mb3">Sign in with your email and password.</div>
+  <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-si-email" autocomplete="email" placeholder="you@example.com"/></div>
+  <div style="margin-bottom:4px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-si-password" autocomplete="current-password" placeholder="Your password"/></div>
+  <div style="margin-top:8px;"><span onclick="cloudForgotPassword()" style="font-size:12px;color:var(--accent,#2f6fed);cursor:pointer;text-decoration:underline;">Forgot password?</span></div>
+  <div id="cs-error-signin" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
+  <div class="mact"><button class="btn bg" style="flex:1;" onclick="csShowView('choice')">Back</button><button class="btn bp" style="flex:1;" onclick="cloudSignIn()">Sign In</button></div>
+ </div>
+
+ <div id="cs-view-signup" style="display:none;">
+  <div class="mbody mb3">Creating an account uploads what's already on this device.</div>
+  <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-su-email" autocomplete="email" placeholder="you@example.com"/></div>
+  <div style="margin-bottom:9px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-su-password" autocomplete="new-password" placeholder="At least 6 characters"/></div>
+  <div style="margin-bottom:4px;"><label class="flabel">Confirm Password</label><input class="inp" type="password" id="cs-su-password2" autocomplete="new-password" placeholder="Re-enter password"/></div>
+  <div id="cs-error-signup" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
+  <div class="mact"><button class="btn bg" style="flex:1;" onclick="csShowView('choice')">Back</button><button class="btn bs" style="flex:1;" onclick="cloudSignUp()">Create Account</button></div>
+ </div>
+
 </div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
@@ -823,8 +845,9 @@ async function buildBackupPayload(pretty) {
   const trash = Store.get('mdn_trash') || [];
   const logs = Store.get('mdn_logs') || [];
   const households = Store.get('mdn_households') || [];
+  const expenses = Store.get('mdn_expenses') || [];
 
-  const archive = await compressArchive({ clearedPages: allPages.filter(p=>p.locked), payments, trash, logs, households });
+  const archive = await compressArchive({ clearedPages: allPages.filter(p=>p.locked), payments, trash, logs, households, expenses });
   return JSON.stringify({
     app: 'Milk Dairy Notebook', format: BACKUP_FORMAT, version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
@@ -841,6 +864,7 @@ async function restoreBackupPayload(payload) {
   Store.set('mdn_trash', archiveData.trash || []);
   Store.set('mdn_logs', archiveData.logs || []);
   Store.set('mdn_households', archiveData.households || []);
+  Store.set('mdn_expenses', archiveData.expenses || []);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -961,7 +985,7 @@ const DB={
 
 // ══════════════════════════════════════════════════════════════════
 //  CLOUD SYNC
-//  Whole-collection last-write-wins, decided per collection. Each of the 5
+//  Whole-collection last-write-wins, decided per collection. Each of the 6
 //  collections below syncs as ONE Firestore document (users/{uid}/state/{key})
 //  rather than per-row — far simpler than a granular outbox, and plenty for
 //  one farmer's data across a couple of personal devices. Activity Logs stay
@@ -979,10 +1003,21 @@ let cloudPushTimers = {};
 let cloudListeners = [];
 let cloudApplyingRemote = false; // true while writing data that just arrived FROM the cloud, so it doesn't loop back into another push
 
-const CLOUD_COLLECTIONS = { profile:'mdn_profile', pages:'mdn_pages', payments:'mdn_payments', trash:'mdn_trash', households:'mdn_households' };
+const CLOUD_COLLECTIONS = { profile:'mdn_profile', pages:'mdn_pages', payments:'mdn_payments', trash:'mdn_trash', households:'mdn_households', expenses:'mdn_expenses' };
 
 function cloudLocalMeta(){ const m = Store.get('mdn_cloud_meta') || {}; if(!m.localUpdatedAt) m.localUpdatedAt = {}; return m; }
 function cloudMarkLocalTs(key, ts){ const m = cloudLocalMeta(); m.localUpdatedAt[key] = ts; Store.set('mdn_cloud_meta', m); }
+function cloudSetLastUid(uidVal){ const m = cloudLocalMeta(); m.lastUid = uidVal; Store.set('mdn_cloud_meta', m); }
+// Whether this device is holding any real, non-empty local records — used to
+// decide whether an account switch needs a confirmation before merging.
+function cloudHasLocalData(){
+  for (const key in CLOUD_COLLECTIONS) {
+    const d = Store.get(CLOUD_COLLECTIONS[key]);
+    if (Array.isArray(d) && d.length) return true;
+    if (d && typeof d === 'object' && !Array.isArray(d) && d.onboarded) return true; // profile counts once it's actually been set up
+  }
+  return false;
+}
 
 // Called from every DB.save* — marks a collection dirty and pushes it to
 // Firestore. `immediate=true` (used for deliberate "save" actions — Quick
@@ -1017,6 +1052,21 @@ async function cloudPushOne(key){
 // a device that's been used offline pushes its changes up.
 async function cloudInitialMerge(){
   if (!cloudUser || !window.CloudDB) return;
+  // If this device last synced to a DIFFERENT account (or was used offline
+  // under one), and still has real records sitting in local storage, merging
+  // blind could silently overwrite either side — this account's cloud data
+  // with stale leftovers from another account, or vice versa. Confirm first.
+  const meta0 = cloudLocalMeta();
+  if (meta0.lastUid && meta0.lastUid !== cloudUser.uid && cloudHasLocalData()) {
+    const proceed = await appConfirm(
+      'Overwrite existing data?',
+      `This device has local records that weren't synced to ${cloudUser.email}. Continuing will merge them in — whichever copy is newer, on this device or in the cloud, will overwrite the other for each type of record. Cancel to sign back out without changing anything.`
+    );
+    if (!proceed) {
+      try { await window.CloudAuth.signOutUser(); } catch (e) {}
+      return;
+    }
+  }
   cloudSyncStatus = 'syncing'; renderCloudStatus();
   const localMeta = cloudLocalMeta().localUpdatedAt;
   let pulledAny = false;
@@ -1036,6 +1086,8 @@ async function cloudInitialMerge(){
     }
     if (pulledAny) { AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); showToast('Synced from cloud', true, 'light'); }
     cloudSyncStatus = 'synced';
+    cloudSetLastUid(cloudUser.uid);
+    maybeSkipOnboardingAfterSync();
   } catch (e) { cloudSyncStatus = 'error'; }
   attachCloudListeners();
   renderCloudStatus();
@@ -1075,12 +1127,24 @@ function cloudSyncCardHtml(){
   return `<div class="card" id="cloud-sync-card"><div class="row gap2" style="justify-content:space-between;align-items:center;"><div><div style="font-weight:700;font-size:13px;">☁️ Cloud Sync</div><div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:${meta[1]};display:inline-block;flex-shrink:0;"></span>${meta[0]} · ${escAttr(cloudUser.email)}</div></div><div class="row gap2"><button class="bic" style="width:30px;height:30px;font-size:13px;" title="Sync now" onclick="cloudInitialMerge()">🔄</button><button class="btn bg bsm" onclick="cloudSignOut()">Sign Out</button></div></div></div>`;
 }
 
-function openCloudSyncModal(){
-  document.getElementById('cs-email').value = ''; document.getElementById('cs-password').value = '';
-  document.getElementById('cs-error').style.display = 'none';
+function csShowView(view){
+  ['choice','signin','signup'].forEach(v => {
+    const el = document.getElementById('cs-view-' + v);
+    if (el) el.style.display = (v === view) ? '' : 'none';
+  });
+  const es = document.getElementById('cs-error-signin'); if (es) es.style.display = 'none';
+  const eu = document.getElementById('cs-error-signup'); if (eu) eu.style.display = 'none';
+}
+function openCloudSyncModal(view){
+  document.getElementById('cs-si-email').value = ''; document.getElementById('cs-si-password').value = '';
+  document.getElementById('cs-su-email').value = ''; document.getElementById('cs-su-password').value = ''; document.getElementById('cs-su-password2').value = '';
+  csShowView(view === 'signin' || view === 'signup' ? view : 'choice');
   om('m-cloudsync');
 }
-function cloudShowError(msg){ const el = document.getElementById('cs-error'); el.textContent = msg; el.style.display = 'block'; }
+function cloudShowError(msg, view){
+  const el = document.getElementById(view === 'signup' ? 'cs-error-signup' : 'cs-error-signin');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
 function cloudFriendlyError(e){
   console.error('CloudAuth error:', e);
   const map = {
@@ -1088,6 +1152,7 @@ function cloudFriendlyError(e){
     'auth/invalid-email': 'That email address looks invalid.',
     'auth/weak-password': 'Password is too weak (minimum 6 characters).',
     'auth/user-not-found': 'No account found with that email.',
+    'auth/missing-email': 'Enter your email address first.',
     'auth/wrong-password': 'Incorrect password.',
     'auth/invalid-credential': 'Incorrect email or password.',
     'auth/network-request-failed': 'Network error — check your connection.',
@@ -1119,19 +1184,34 @@ function waitForCloudSDK(timeoutMs = 8000){
   });
 }
 async function cloudSignIn(){
-  const email = document.getElementById('cs-email').value.trim(); const pw = document.getElementById('cs-password').value;
-  if (!email || !pw) return cloudShowError('Enter email and password.');
-  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again."); }
+  const email = document.getElementById('cs-si-email').value.trim(); const pw = document.getElementById('cs-si-password').value;
+  if (!email || !pw) return cloudShowError('Enter email and password.', 'signin');
+  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again.", 'signin'); }
   try { await window.CloudAuth.signIn(email, pw); cm('m-cloudsync'); showToast('Signed in', true, 'light'); }
-  catch (e) { cloudShowError(cloudFriendlyError(e)); }
+  catch (e) { cloudShowError(cloudFriendlyError(e), 'signin'); }
 }
 async function cloudSignUp(){
-  const email = document.getElementById('cs-email').value.trim(); const pw = document.getElementById('cs-password').value;
-  if (!email || !pw) return cloudShowError('Enter email and password.');
-  if (pw.length < 6) return cloudShowError('Password must be at least 6 characters.');
-  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again."); }
-  try { await window.CloudAuth.signUp(email, pw); cm('m-cloudsync'); showToast('Account created — syncing your records...', true, 'light'); }
-  catch (e) { cloudShowError(cloudFriendlyError(e)); }
+  const email = document.getElementById('cs-su-email').value.trim();
+  const pw = document.getElementById('cs-su-password').value;
+  const pw2 = document.getElementById('cs-su-password2').value;
+  if (!email || !pw || !pw2) return cloudShowError('Fill in all fields.', 'signup');
+  if (pw.length < 6) return cloudShowError('Password must be at least 6 characters.', 'signup');
+  if (pw !== pw2) return cloudShowError('Passwords do not match.', 'signup');
+  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again.", 'signup'); }
+  try {
+    await window.CloudAuth.signUp(email, pw);
+    try { await window.CloudAuth.sendVerification(); } catch (e) { /* non-fatal — account still works without it */ }
+    cm('m-cloudsync');
+    showToast('Account created — check your email to verify it. Syncing your records...', true, 'light');
+  }
+  catch (e) { cloudShowError(cloudFriendlyError(e), 'signup'); }
+}
+async function cloudForgotPassword(){
+  const email = document.getElementById('cs-si-email').value.trim();
+  if (!email) return cloudShowError('Enter your email above, then tap "Forgot password?" again.', 'signin');
+  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection and try again.", 'signin'); }
+  try { await window.CloudAuth.resetPassword(email); showToast('Password reset email sent', true, 'light'); }
+  catch (e) { cloudShowError(cloudFriendlyError(e), 'signin'); }
 }
 async function cloudSignOut(){
   const agreed = await appConfirm('Sign Out?', 'Cloud sync pauses until you sign in again. Your data stays safely on this device either way.');
@@ -1150,6 +1230,7 @@ window.addEventListener('cloud-auth-change', (e) => {
   if (cloudUser) { cloudInitialMerge(); }
   else { detachCloudListeners(); cloudSyncStatus = 'signed-out'; renderCloudStatus(); }
   if (curTab === 'me') renderMe();
+  renderObSetupButton();
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -1389,7 +1470,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.12.1';
+const APP_VERSION = 'v1.13.1-onboarding-auth';
 
 const today=()=>{
   const d=new Date();
@@ -1542,10 +1623,10 @@ function saveNewExpense() {
     const name = document.getElementById('m-exp-name').value.trim(); const cost = parseFloat(document.getElementById('m-exp-cost').value) || 0;
     if(!name || cost <= 0) return appAlert('Error', 'Please enter a valid expense name and cost.');
     const exps = Store.get('mdn_expenses') || [];
-    exps.unshift({id: uid(), name, cost, date: today()}); Store.set('mdn_expenses', exps); AutoBackup.trigger(); DB.log(`Added expense: ${name} for ₹${cost}`, 'create'); cm('m-expense'); renderCalc();
+    exps.unshift({id: uid(), name, cost, date: today()}); Store.set('mdn_expenses', exps); AutoBackup.trigger(); cloudTouch('expenses', true); DB.log(`Added expense: ${name} for ₹${cost}`, 'create'); cm('m-expense'); renderCalc();
 }
 function deleteExpense(id) {
-    const exps = Store.get('mdn_expenses') || []; Store.set('mdn_expenses', exps.filter(e => e.id !== id)); AutoBackup.trigger(); renderCalc();
+    const exps = Store.get('mdn_expenses') || []; Store.set('mdn_expenses', exps.filter(e => e.id !== id)); AutoBackup.trigger(); cloudTouch('expenses', true); renderCalc();
 }
 
 async function shareBackup() {
@@ -2653,7 +2734,7 @@ function initApp() {
   const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
   const minSplashEnd = Date.now() + 800;
   function transitionTo(targetFunction) { const remaining = Math.max(0, minSplashEnd - Date.now()); setTimeout(() => { const splash = document.getElementById('splash'); if (splash) splash.style.opacity = '0'; setTimeout(() => { if (splash) splash.style.display = 'none'; targetFunction(); }, 300); }, remaining); }
-  if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); } }); return; }
+  if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); renderObSetupButton(); } }); return; }
   
   const td = today(); const activePage = DB.pages().find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
   let shiftHasData = false;
@@ -2700,6 +2781,29 @@ function finishOnboarding() {
 }
 
 let justOnboarded = false; let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null, date: null, isBackfill: false };
+// Onboarding's finish button reads differently depending on whether the
+// person has signed in mid-setup: signed in, their data belongs to a real
+// account (so it just says "Continue"); otherwise it's explicit that
+// skipping sign-in means the records stay local-only on this device.
+function renderObSetupButton(){
+  const btn = document.getElementById('ob-finish-btn');
+  if (!btn) return;
+  btn.textContent = cloudUser ? 'Continue ›' : 'Continue as Guest ›';
+}
+// If sign-in during onboarding pulls down an ALREADY-onboarded profile (i.e.
+// this is a returning user's real account, not a blank one), there's no
+// reason to march them through the animal-setup wizard again — and doing so
+// would be actively harmful, since finishOnboarding() below overwrites
+// profile.animals with whatever's in the (empty) wizard state.
+function maybeSkipOnboardingAfterSync(){
+  const ob = document.getElementById('onboarding');
+  if (!ob || !ob.classList.contains('active')) return;
+  if (!DB.profile().onboarded) return;
+  ob.classList.remove('active'); ob.style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  renderHome(); renderGraphs(); renderCalc(); renderMe();
+  showToast('Welcome back — your data has been restored.', true, 'light');
+}
 function getActivePage() { const td = today(); return DB.pages().find(p => !p.locked && td >= p.startDate && td <= p.endDate) || null; }
 
 // targetDate/forceIsPM let this be reused to backfill a specific past shift
@@ -4142,7 +4246,7 @@ setTimeout(checkForIncomingShare, 1200);
   <script type="module">
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
+  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
   // Your web app's Firebase configuration
@@ -4167,7 +4271,9 @@ setTimeout(checkForIncomingShare, 1200);
   window.CloudAuth = {
     signUp: (email, password) => createUserWithEmailAndPassword(auth, email, password),
     signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
-    signOutUser: () => signOut(auth)
+    signOutUser: () => signOut(auth),
+    resetPassword: (email) => sendPasswordResetEmail(auth, email),
+    sendVerification: () => auth.currentUser ? sendEmailVerification(auth.currentUser) : Promise.resolve()
   };
   window.CloudDB = {
     async setDoc(pathSegs, data) { await setDoc(doc(db, ...pathSegs), data); },
