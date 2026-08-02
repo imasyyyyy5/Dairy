@@ -620,6 +620,15 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div id="select-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:4px;"></div>
 </div></div>
 
+<div class="moverlay" id="m-cloudsync" onclick="moi(event,'m-cloudsync')"><div class="mbox">
+ <div class="mh"><span class="mt">☁️ Cloud Sync</span><button class="mx" onclick="cm('m-cloudsync')">✕</button></div>
+ <div class="mbody mb3">Sign in to sync your records across devices. Creating an account uploads what's already on this device.</div>
+ <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-email" autocomplete="email" placeholder="you@example.com"/></div>
+ <div style="margin-bottom:4px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-password" autocomplete="current-password" placeholder="At least 6 characters"/></div>
+ <div id="cs-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
+ <div class="mact"><button class="btn bs" style="flex:1;" onclick="cloudSignUp()">Create Account</button><button class="btn bp" style="flex:1;" onclick="cloudSignIn()">Sign In</button></div>
+</div></div>
+
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
  <div class="mh"><span class="mt" id="mnp-modal-title">New Record</span><button class="mx" onclick="cm('m-newpage')">✕</button></div>
  <div class="mbody mb3">Choose the start date. Each row unlocks only on its corresponding date.</div>
@@ -891,17 +900,17 @@ const AutoBackup = {
 
 const DB={
   profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
-  saveProfile:(p)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); },
+  saveProfile:(p,opts)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); cloudTouch('profile', opts&&opts.immediate); },
   pages:()=>{
     const p = Store.get('mdn_pages')||[];
     p.forEach(pg => { pg.cols.forEach(c => { if (c.type === 'sr' || c.id === 'sr' || c.name === 'S.No') { c.type = 'date'; c.id = 'date'; c.name = 'Date'; } }); });
     return p;
   },
-  savePages:(p)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); AutoBackup.trigger(); },
+  savePages:(p,opts)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); AutoBackup.trigger(); cloudTouch('pages', opts&&opts.immediate); },
   payments:()=>Store.get('mdn_payments')||[],
-  savePayments:(p)=>{ Store.set('mdn_payments',p); AutoBackup.trigger(); },
+  savePayments:(p,opts)=>{ Store.set('mdn_payments',p); AutoBackup.trigger(); cloudTouch('payments', opts&&opts.immediate); },
   trash:()=>Store.get('mdn_trash')||[],
-  saveTrash:(t)=>{ Store.set('mdn_trash',t); AutoBackup.trigger(); },
+  saveTrash:(t,opts)=>{ Store.set('mdn_trash',t); AutoBackup.trigger(); cloudTouch('trash', opts&&opts.immediate); },
   // ── CUSTOMER UPGRADE MIGRATION ──
   households:()=>{
     const raw = Store.get('mdn_households')||[];
@@ -925,10 +934,10 @@ const DB={
             updated = true;
         }
     });
-    if(updated) { Store.set('mdn_households', raw); AutoBackup.trigger(); }
+    if(updated) { Store.set('mdn_households', raw); AutoBackup.trigger(); cloudTouch('households'); }
     return raw;
   },
-  saveHouseholds:(h)=>{ Store.set('mdn_households',h); AutoBackup.trigger(); },
+  saveHouseholds:(h,opts)=>{ Store.set('mdn_households',h); AutoBackup.trigger(); cloudTouch('households', opts&&opts.immediate); },
   logs:()=>{
     const rawLogs = Store.get('mdn_logs')||[];
     const cleanLogs = rawLogs.filter(l => l && l.text && l.text !== 'undefined' && l.text.trim() !== '');
@@ -949,6 +958,190 @@ const DB={
     if(hapticTier) Haptics.fire(hapticTier);
   },
 };
+
+// ══════════════════════════════════════════════════════════════════
+//  CLOUD SYNC
+//  Whole-collection last-write-wins, decided per collection. Each of the 5
+//  collections below syncs as ONE Firestore document (users/{uid}/state/{key})
+//  rather than per-row — far simpler than a granular outbox, and plenty for
+//  one farmer's data across a couple of personal devices. Activity Logs stay
+//  device-local by design (large, low-value to sync, keeps doc size small).
+//
+//  Scope/limitation to be upfront about: this is last-write-wins at the
+//  collection level, decided on login + live listener updates — it does NOT
+//  merge concurrent edits made on two devices at the same moment. Fine for
+//  "phone in the morning, desktop in the evening" use; not safe for two
+//  people actively editing the same account simultaneously.
+// ══════════════════════════════════════════════════════════════════
+let cloudUser = null;
+let cloudSyncStatus = 'signed-out'; // 'signed-out' | 'syncing' | 'synced' | 'error'
+let cloudPushTimers = {};
+let cloudListeners = [];
+let cloudApplyingRemote = false; // true while writing data that just arrived FROM the cloud, so it doesn't loop back into another push
+
+const CLOUD_COLLECTIONS = { profile:'mdn_profile', pages:'mdn_pages', payments:'mdn_payments', trash:'mdn_trash', households:'mdn_households' };
+
+function cloudLocalMeta(){ const m = Store.get('mdn_cloud_meta') || {}; if(!m.localUpdatedAt) m.localUpdatedAt = {}; return m; }
+function cloudMarkLocalTs(key, ts){ const m = cloudLocalMeta(); m.localUpdatedAt[key] = ts; Store.set('mdn_cloud_meta', m); }
+
+// Called from every DB.save* — marks a collection dirty and pushes it to
+// Firestore. `immediate=true` (used for deliberate "save" actions — Quick
+// Entry, creating a new record page, first-time filling a row) skips the
+// debounce and pushes right away, since there's no more typing coming for
+// that action. Rapid inline edits (typing across table cells) still debounce
+// so we're not writing to Firestore on every keystroke.
+function cloudTouch(key, immediate){
+  if (cloudApplyingRemote) return; // this write just came FROM the cloud — don't echo it back
+  cloudMarkLocalTs(key, Date.now());
+  if (!cloudUser || !window.CloudDB) return;
+  clearTimeout(cloudPushTimers[key]);
+  if (immediate) cloudPushOne(key);
+  else cloudPushTimers[key] = setTimeout(() => cloudPushOne(key), 2000);
+}
+
+async function cloudPushOne(key){
+  if (!cloudUser || !window.CloudDB) return;
+  cloudSyncStatus = 'syncing'; renderCloudStatus();
+  const data = Store.get(CLOUD_COLLECTIONS[key]);
+  const ts = cloudLocalMeta().localUpdatedAt[key] || Date.now();
+  try {
+    await window.CloudDB.setDoc(['users', cloudUser.uid, 'state', key], { data: data === undefined ? null : data, updatedAt: ts, device: DEVICE_ID });
+    cloudSyncStatus = 'synced';
+  } catch (e) { cloudSyncStatus = 'error'; }
+  renderCloudStatus();
+}
+
+// Runs once right after sign-in (and can be re-run manually): for each
+// collection, whichever side — local or remote — has the newer timestamp
+// wins. A brand-new device with no local data simply pulls everything down;
+// a device that's been used offline pushes its changes up.
+async function cloudInitialMerge(){
+  if (!cloudUser || !window.CloudDB) return;
+  cloudSyncStatus = 'syncing'; renderCloudStatus();
+  const localMeta = cloudLocalMeta().localUpdatedAt;
+  let pulledAny = false;
+  try {
+    for (const key in CLOUD_COLLECTIONS) {
+      const remote = await window.CloudDB.getDoc(['users', cloudUser.uid, 'state', key]);
+      const localTs = localMeta[key] || 0;
+      if (remote && (remote.updatedAt || 0) > localTs) {
+        cloudApplyingRemote = true;
+        Store.set(CLOUD_COLLECTIONS[key], remote.data);
+        cloudApplyingRemote = false;
+        cloudMarkLocalTs(key, remote.updatedAt);
+        pulledAny = true;
+      } else {
+        await cloudPushOne(key);
+      }
+    }
+    if (pulledAny) { AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); showToast('Synced from cloud', true, 'light'); }
+    cloudSyncStatus = 'synced';
+  } catch (e) { cloudSyncStatus = 'error'; }
+  attachCloudListeners();
+  renderCloudStatus();
+}
+
+// Live updates from another device, once merge has run once for this session.
+function attachCloudListeners(){
+  detachCloudListeners();
+  if (!cloudUser || !window.CloudDB) return;
+  for (const key in CLOUD_COLLECTIONS) {
+    const unsub = window.CloudDB.onSnapshot(['users', cloudUser.uid, 'state', key], (remote) => {
+      if (!remote) return;
+      const localTs = cloudLocalMeta().localUpdatedAt[key] || 0;
+      if ((remote.updatedAt || 0) <= localTs) return; // our own write echoing back, or already-applied/stale
+      cloudApplyingRemote = true;
+      Store.set(CLOUD_COLLECTIONS[key], remote.data);
+      cloudApplyingRemote = false;
+      cloudMarkLocalTs(key, remote.updatedAt);
+      AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc();
+      showToast('Updated from another device', true, 'light');
+    });
+    cloudListeners.push(unsub);
+  }
+}
+function detachCloudListeners(){ cloudListeners.forEach(u => { try { u(); } catch(e) {} }); cloudListeners = []; }
+
+// Only re-paints the small status card in the Profile tab, not the whole tab.
+function renderCloudStatus(){
+  const el = document.getElementById('cloud-sync-card');
+  if (el) el.outerHTML = cloudSyncCardHtml();
+}
+function cloudSyncCardHtml(){
+  if (!cloudUser) {
+    return `<div class="card" id="cloud-sync-card"><div class="row gap2" style="justify-content:space-between;align-items:center;"><div><div style="font-weight:700;font-size:13px;">☁️ Cloud Sync</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Not signed in — records stay on this device only</div></div><button class="btn bp bsm" onclick="openCloudSyncModal()">Sign In</button></div></div>`;
+  }
+  const meta = { syncing:['Syncing…','#e8b800'], synced:['Synced','var(--success)'], error:['Sync error — will retry','var(--danger)'] }[cloudSyncStatus] || ['Synced','var(--success)'];
+  return `<div class="card" id="cloud-sync-card"><div class="row gap2" style="justify-content:space-between;align-items:center;"><div><div style="font-weight:700;font-size:13px;">☁️ Cloud Sync</div><div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:${meta[1]};display:inline-block;flex-shrink:0;"></span>${meta[0]} · ${escAttr(cloudUser.email)}</div></div><div class="row gap2"><button class="bic" style="width:30px;height:30px;font-size:13px;" title="Sync now" onclick="cloudInitialMerge()">🔄</button><button class="btn bg bsm" onclick="cloudSignOut()">Sign Out</button></div></div></div>`;
+}
+
+function openCloudSyncModal(){
+  document.getElementById('cs-email').value = ''; document.getElementById('cs-password').value = '';
+  document.getElementById('cs-error').style.display = 'none';
+  om('m-cloudsync');
+}
+function cloudShowError(msg){ const el = document.getElementById('cs-error'); el.textContent = msg; el.style.display = 'block'; }
+function cloudFriendlyError(e){
+  const map = {
+    'auth/email-already-in-use': 'That email already has an account — try Sign In instead.',
+    'auth/invalid-email': 'That email address looks invalid.',
+    'auth/weak-password': 'Password is too weak (minimum 6 characters).',
+    'auth/user-not-found': 'No account found with that email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/network-request-failed': 'Network error — check your connection.',
+    'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.'
+  };
+  return map[(e && e.code) || ''] || 'Something went wrong. Please try again.';
+}
+// window.CloudAuth/CloudDB come from a <script type="module"> that fetches
+// the Firebase SDK over the network — that can genuinely take a second or
+// two, especially on a slow connection, and the person may tap Sign In
+// before it's landed. Poll briefly instead of failing on the very first
+// check; only report a real problem once it's actually timed out.
+function waitForCloudSDK(timeoutMs = 8000){
+  return new Promise((resolve, reject) => {
+    if (window.CloudAuth && window.CloudDB) return resolve();
+    const start = Date.now();
+    const iv = setInterval(() => {
+      if (window.CloudAuth && window.CloudDB) { clearInterval(iv); resolve(); }
+      else if (Date.now() - start > timeoutMs) { clearInterval(iv); reject(new Error('cloud-sdk-timeout')); }
+    }, 150);
+  });
+}
+async function cloudSignIn(){
+  const email = document.getElementById('cs-email').value.trim(); const pw = document.getElementById('cs-password').value;
+  if (!email || !pw) return cloudShowError('Enter email and password.');
+  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again."); }
+  try { await window.CloudAuth.signIn(email, pw); cm('m-cloudsync'); showToast('Signed in', true, 'light'); }
+  catch (e) { cloudShowError(cloudFriendlyError(e)); }
+}
+async function cloudSignUp(){
+  const email = document.getElementById('cs-email').value.trim(); const pw = document.getElementById('cs-password').value;
+  if (!email || !pw) return cloudShowError('Enter email and password.');
+  if (pw.length < 6) return cloudShowError('Password must be at least 6 characters.');
+  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again."); }
+  try { await window.CloudAuth.signUp(email, pw); cm('m-cloudsync'); showToast('Account created — syncing your records...', true, 'light'); }
+  catch (e) { cloudShowError(cloudFriendlyError(e)); }
+}
+async function cloudSignOut(){
+  const agreed = await appConfirm('Sign Out?', 'Cloud sync pauses until you sign in again. Your data stays safely on this device either way.');
+  if (!agreed) return;
+  detachCloudListeners();
+  try { await window.CloudAuth.signOutUser(); showToast('Signed out', true, 'light'); } catch (e) {}
+}
+
+// Fires whenever Firebase's own auth state resolves — on load (if a session
+// was already persisted), and after every sign-in/sign-up/sign-out. Wired via
+// a CustomEvent rather than calling window.CloudAuth directly at load time,
+// since the module <script> that defines it loads/executes independently of
+// this (classic, non-module) script's own top-level run order.
+window.addEventListener('cloud-auth-change', (e) => {
+  cloudUser = e.detail;
+  if (cloudUser) { cloudInitialMerge(); }
+  else { detachCloudListeners(); cloudSyncStatus = 'signed-out'; renderCloudStatus(); }
+  if (curTab === 'me') renderMe();
+});
 
 // ══════════════════════════════════════════════════════════════════
 //  PRECISE UNDO ENGINE
@@ -1173,11 +1366,21 @@ const fmtDS=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(
 const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
 const fmtTimeOnly=ts=>{const d=new Date(ts);return isNaN(d)?'':d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
 const escAttr=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+// Persisted once per install/browser. Prefixing every id with this means two
+// devices creating records around the same moment (e.g. right after a
+// cloud-sync merge) can never produce a colliding id — plain Date.now()+random
+// was fine single-device, but isn't collision-proof across devices.
+const DEVICE_ID = (() => {
+  let id;
+  try { id = localStorage.getItem('mdn_device_id'); } catch(e) {}
+  if (!id) { id = Math.random().toString(36).slice(2,8); try { localStorage.setItem('mdn_device_id', id); } catch(e) {} }
+  return id;
+})();
+const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`;
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.9.0';
+const APP_VERSION = 'v1.12.0';
 
 const today=()=>{
   const d=new Date();
@@ -2559,14 +2762,14 @@ function saveQuickEntry() {
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
-  DB.savePages(pages);
+  DB.savePages(pages, {immediate:true});
   if (rowIdx === page.rows.length - 1) maybeAutoCreateNextPage(page.id); 
   if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} milk for ${fmtDS(row.date)}: ${animalAmounts.join(', ')}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update', cellOps.length ? {kind:'multi', ops:cellOps} : null, 'light');
 
   const pTog = document.getElementById('qe-payment-toggle');
   if (pTog && pTog.checked) {
       const paid = parseFloat(document.getElementById('qe-payment-amount')?.value) || 0;
-      if (paid > 0) { const payment = { id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry` }; const payments = DB.payments(); payments.unshift(payment); DB.savePayments(payments); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment', {kind:'payment', payment}); }
+      if (paid > 0) { const payment = { id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry` }; const payments = DB.payments(); payments.unshift(payment); DB.savePayments(payments, {immediate:true}); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment', {kind:'payment', payment}); }
   }
   document.getElementById('qe-active-content').style.display = 'none'; document.getElementById('qe-success-content').style.display = 'block';
   const wasBackfill = qeContext.isBackfill;
@@ -2773,7 +2976,7 @@ function maybeAutoCreateNextPage(pageId){
   if (alreadyExists) return;
   const newPg = createPage(nextStart);
   pages.unshift(newPg);
-  DB.savePages(pages);
+  DB.savePages(pages, {immediate:true});
   DB.log(`Auto-created new record sheet: ${newPg.label}`, 'create');
   showToast(`New record started: ${newPg.label}`, true, 'light');
 }
@@ -2782,8 +2985,9 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0||pages[pi].locked)return;
   const ri=pages[pi].rows.findIndex(r=>r.id===rowId); if(ri<0)return;
   const old=pages[pi].rows[ri][colId]; pages[pi].rows[ri][colId]=value;
-  if(!pages[pi].rows[ri].dateFrozen){ pages[pi].rows[ri].date=pages[pi].rows[ri].assignedDate||today(); pages[pi].rows[ri].dateFrozen=true; }
-  pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile()); DB.savePages(pages);
+  const isNewRecord = !pages[pi].rows[ri].dateFrozen;
+  if(isNewRecord){ pages[pi].rows[ri].date=pages[pi].rows[ri].assignedDate||today(); pages[pi].rows[ri].dateFrozen=true; }
+  pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile()); DB.savePages(pages, {immediate:isNewRecord});
   const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
   if((old||'0') !== (value||'0')) DB.log(`Changed ${colName} from ${old||'0'}${unit} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update', {kind:'cell', pageId, rowId, colId, from:old||'', to:value||''});
   if (ri === pages[pi].rows.length - 1) maybeAutoCreateNextPage(pageId);
@@ -3327,6 +3531,7 @@ function renderMe(){
   }
 
   html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
+  html+=cloudSyncCardHtml();
 
   html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;"><span style="font-size:13px;font-weight:700;">My Animals</span><button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div><div class="sp2">`;
   if(!(profile.animals||[]).length) html+=`<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No animals yet</div>`;
@@ -3484,7 +3689,7 @@ async function doSaveAnimal() {
   let oldRate = 0; if (!isNew) { const existing = profile.animals.find(a => a.id === editAnimalId); if (existing) oldRate = existing.rate || 0; }
   const entry = { id: isNew ? uid() : editAnimalId, name, type: animalType, milks, rate, vaxDate, calvingDate, illness };
   if (isNew) profile.animals.push(entry); else { const i = profile.animals.findIndex(a => a.id === editAnimalId); if (i >= 0) profile.animals[i] = entry; }
-  DB.saveProfile(profile); DB.log(isNew ? `Added new animal: ${name}` : `Updated animal details for: ${name}`, 'create'); cm('m-animal');
+  DB.saveProfile(profile, {immediate:true}); DB.log(isNew ? `Added new animal: ${name}` : `Updated animal details for: ${name}`, 'create'); cm('m-animal');
   if (!isNew && rate !== oldRate) {
     const pages = DB.pages(); const activePage = pages.find(p => !p.locked && !p.trashed);
     if (activePage) {
@@ -3611,7 +3816,7 @@ function doSaveHousehold(){
     const h = households.find(x=>x.id===editHouseholdId); if (h) { h.name = name; h.startDate = startDate; }
     DB.log(`Updated customer info: ${name}`, 'update');
   }
-  DB.saveHouseholds(households); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households, {immediate:true}); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
 async function toggleStopHousehold(){
@@ -3657,7 +3862,7 @@ function saveCustomerPayment() {
   const payment = { id: uid(), date, amount, note };
   h.payments.push(payment);
   
-  DB.saveHouseholds(households);
+  DB.saveHouseholds(households, {immediate:true});
   DB.log(`Logged payment of ₹${amount} from customer: ${h.name}`, 'payment', {kind:'household-payment', householdId:h.id, payment});
   cm('m-customer-payment'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc();
 }
@@ -3763,7 +3968,7 @@ function doNewPage() {
     const pages = DB.pages(); const newPg = createPage(dateVal);
     const overlapping = pages.find(p => !p.trashed && newPg.startDate <= p.endDate && newPg.endDate >= p.startDate);
     if (overlapping) { const nextAllowed = addDays(overlapping.endDate, 1); return appAlert('Dates Overlap', `Overlaps "${overlapping.label}". Choose ${fmtD(nextAllowed)} or later.`); }
-    pages.unshift(newPg); DB.savePages(pages); DB.log(`Created new record sheet: ${newPg.label}`, 'create');
+    pages.unshift(newPg); DB.savePages(pages, {immediate:true}); DB.log(`Created new record sheet: ${newPg.label}`, 'create');
     cm('m-newpage'); renderHome(); showToast('New Record Created Successfully!');
   } catch (err) { appAlert('Error', 'Could not create record.'); }
 }
@@ -3928,8 +4133,8 @@ setTimeout(checkForIncomingShare, 1200);
   <script type="module">
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
@@ -3943,7 +4148,31 @@ setTimeout(checkForIncomingShare, 1200);
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // This script runs as a module, so it has its own scope — the rest of the
+  // app (plain, classic script block) can't see `auth`/`db` directly. Expose
+  // thin wrappers on window instead of the raw SDK objects, so the main
+  // script never needs its own Firestore imports.
+  window.CloudAuth = {
+    signUp: (email, password) => createUserWithEmailAndPassword(auth, email, password),
+    signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
+    signOutUser: () => signOut(auth)
+  };
+  window.CloudDB = {
+    async setDoc(pathSegs, data) { await setDoc(doc(db, ...pathSegs), data); },
+    async getDoc(pathSegs) { const snap = await getDoc(doc(db, ...pathSegs)); return snap.exists() ? snap.data() : null; },
+    onSnapshot(pathSegs, cb) { return onSnapshot(doc(db, ...pathSegs), (snap) => cb(snap.exists() ? snap.data() : null), (err) => console.error('CloudDB snapshot error', err)); }
+  };
+
+  // The main script listens for this instead of calling window.CloudAuth
+  // directly at load time, since this module's execution isn't guaranteed to
+  // land before or after the classic <script> above finishes running.
+  onAuthStateChanged(auth, (user) => {
+    window.dispatchEvent(new CustomEvent('cloud-auth-change', { detail: user }));
+  });
   </script>
 </body>
-</html>>
 </html>
+
