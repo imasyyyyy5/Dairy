@@ -25,31 +25,27 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
 
-<!-- ══════ SEO / DISCOVERABILITY ══════
-     TODO before this goes live: replace https://example.com/ below with the
-     real domain this file will be hosted at. A canonical tag pointing at a
-     placeholder domain is actively harmful (it tells Google the "real" page
-     lives somewhere that isn't actually this site) — leave the placeholder
-     in place rather than guess, and swap it in once you know the real URL. -->
-<title>Milk Dairy Notebook – Daily Milk Record & Dairy Diary App</title>
-<meta name="description" content="Milk Dairy Notebook helps dairy farmers track daily milk records, animals, local customers, and payments — a simple digital diary that works offline."/>
-<link rel="canonical" href="https://example.com/"/>
+<!-- ══════ SEO / DISCOVERABILITY ══════ -->
+<title>Smart Milking – Daily Milk Record & Dairy Diary App</title>
+<meta name="description" content="Smart Milking helps dairy farmers track daily milk records, animals, local customers, and payments — a simple digital diary that works offline."/>
+<link rel="canonical" href="https://imasyyyyy5.github.io/Dairy/app.html"/>
 <meta name="robots" content="index, follow"/>
 <meta name="google-site-verification" content="Tjf1KCSVqw2DIdWFJZ1Li1UtKZGX9LYnZ6MgSZhLXvs" />
 
 <!-- Open Graph — controls how the link looks when shared or surfaced in search/social previews -->
 <meta property="og:type" content="website"/>
-<meta property="og:title" content="Milk Dairy Notebook – Daily Milk Record & Dairy Diary App"/>
+<meta property="og:title" content="Smart Milking – Daily Milk Record & Dairy Diary App"/>
 <meta property="og:description" content="Track daily milk records, animals, local customers, and payments — a simple digital dairy diary that works offline."/>
-<meta property="og:url" content="https://example.com/"/>
-<meta property="og:image" content="https://example.com/icon-192.png"/>
+<meta property="og:url" content="https://imasyyyyy5.github.io/Dairy/app.html"/>
+<meta property="og:image" content="https://imasyyyyy5.github.io/Dairy/icon-192.png"/>
 
 <!-- Structured data — helps Google understand this is a web app, not an article -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  "name": "Milk Dairy Notebook",
+  "name": "Smart Milking",
+  "url": "https://imasyyyyy5.github.io/Dairy/app.html",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Any (installable PWA)",
   "description": "Track daily milk records, animals, local customers, and payments — a simple digital dairy diary that works offline.",
@@ -66,7 +62,7 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="Dairy Notebook"/>
+<meta name="apple-mobile-web-app-title" content="Smart Milking"/>
 <script>
 // Applied synchronously, before CSS paints, so switching themes never flashes
 // the wrong colors on load. Mirrors applyTheme()/resolveTheme() defined later
@@ -505,8 +501,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </head>
 <body>
 <noscript>
-  <h1>Milk Dairy Notebook</h1>
-  <p>Milk Dairy Notebook is a free, installable dairy diary app for tracking daily milk records, animals, local customers, and payments — it works offline once installed. Please enable JavaScript to use the app.</p>
+  <h1>Smart Milking</h1>
+  <p>Smart Milking is a free, installable dairy diary app for tracking daily milk records, animals, local customers, and payments — it works offline once installed. Please enable JavaScript to use the app.</p>
 </noscript>
 <div id="error-screen" class="full-overlay" style="align-items:center; justify-content:center; text-align:center;">
   <div style="font-size:50px; margin-bottom:20px;">⚠️</div>
@@ -523,7 +519,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <div id="onboarding" class="full-overlay">
  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="eico anim-stagger d1" style="font-size:36px; width:80px; height:80px; margin: 0 auto 20px; border-radius:24px;">🥛</div>
-  <h1 class="ptitle tc mb2 anim-stagger d1">Welcome to Dairy</h1>
+  <h1 class="ptitle tc mb2 anim-stagger d1">Welcome to Smart Milking</h1>
   <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Set up your profile and add the animals you milk to automate your daily entry sheets.</p>
   <div class="card mb3 anim-stagger d2" style="border-radius:24px; padding:20px;">
     <div class="slabel">Your Name / Dairy Name</div>
@@ -660,7 +656,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <div class="mbody mb3">Sign in with your email and password.</div>
   <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-si-email" autocomplete="email" placeholder="you@example.com"/></div>
   <div style="margin-bottom:4px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-si-password" autocomplete="current-password" placeholder="Your password"/></div>
-  <div style="margin-top:8px;"><span onclick="cloudForgotPassword()" style="font-size:12px;color:var(--accent,#2f6fed);cursor:pointer;text-decoration:underline;">Forgot password?</span></div>
+  <div style="margin-top:8px;"><span id="cs-forgot-link" onclick="cloudForgotPassword()" style="font-size:12px;color:var(--accent,#2f6fed);cursor:pointer;text-decoration:underline;">Forgot password?</span></div>
   <div id="cs-error-signin" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
   <div class="mact"><button class="btn bg" style="flex:1;" onclick="csShowView('choice')">Back</button><button class="btn bp" style="flex:1;" onclick="cloudSignIn()">Sign In</button></div>
  </div>
@@ -674,6 +670,17 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <div class="mact"><button class="btn bg" style="flex:1;" onclick="csShowView('choice')">Back</button><button class="btn bs" style="flex:1;" onclick="cloudSignUp()">Create Account</button></div>
  </div>
 
+</div></div>
+
+<div class="moverlay" id="m-resetpw" onclick="moi(event,'m-resetpw')"><div class="mbox">
+ <div class="mh"><span class="mt">🔑 Set New Password</span><button class="mx" onclick="cm('m-resetpw')">✕</button></div>
+ <div class="mbody mb3" id="rpw-intro">Verifying your reset link…</div>
+ <div id="rpw-form" style="display:none;">
+  <div style="margin-bottom:9px;"><label class="flabel">New Password</label><input class="inp" type="password" id="rpw-password" autocomplete="new-password" placeholder="At least 6 characters"/></div>
+  <div style="margin-bottom:4px;"><label class="flabel">Confirm New Password</label><input class="inp" type="password" id="rpw-password2" autocomplete="new-password" placeholder="Re-enter password"/></div>
+  <div id="rpw-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
+  <div class="mact"><button class="btn bp" style="width:100%;" onclick="confirmPasswordResetFlow()">Set New Password</button></div>
+ </div>
 </div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
@@ -874,7 +881,7 @@ async function buildBackupPayload(pretty) {
 
   const archive = await compressArchive({ clearedPages: allPages.filter(p=>p.locked), payments, trash, logs, households, expenses });
   return JSON.stringify({
-    app: 'Milk Dairy Notebook', format: BACKUP_FORMAT, version: BACKUP_VERSION,
+    app: 'Smart Milking', format: BACKUP_FORMAT, version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     readable: { profile, activePages: allPages.filter(p=>!p.locked) }, archive
   }, null, pretty ? 2 : 0);
@@ -1184,7 +1191,9 @@ function cloudFriendlyError(e){
     'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
     'auth/configuration-not-found': 'Email/Password sign-in isn\'t enabled for this project yet (Firebase Console → Authentication → Sign-in method).',
     'auth/unauthorized-domain': 'This site\'s domain isn\'t authorized yet (Firebase Console → Authentication → Settings → Authorized domains).',
-    'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'The Firebase API key looks invalid — double-check firebaseConfig.'
+    'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'The Firebase API key looks invalid — double-check firebaseConfig.',
+    'auth/expired-action-code': 'This reset link has expired — request a new one.',
+    'auth/invalid-action-code': 'This reset link is invalid or has already been used — request a new one.'
   };
   const known = map[(e && e.code) || ''];
   if (known) return known;
@@ -1231,12 +1240,80 @@ async function cloudSignUp(){
   }
   catch (e) { cloudShowError(cloudFriendlyError(e), 'signup'); }
 }
+let cloudForgotBusy = false; // true while a request is in flight OR during the post-send cooldown — blocks repeat taps either way
 async function cloudForgotPassword(){
+  if (cloudForgotBusy) return; // already sending, or still in cooldown from the last send — ignore extra taps/spam
+  const link = document.getElementById('cs-forgot-link');
   const email = document.getElementById('cs-si-email').value.trim();
   if (!email) return cloudShowError('Enter your email above, then tap "Forgot password?" again.', 'signin');
   try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection and try again.", 'signin'); }
-  try { await window.CloudAuth.resetPassword(email); showToast('Password reset email sent', true, 'light'); }
-  catch (e) { cloudShowError(cloudFriendlyError(e), 'signin'); }
+  cloudForgotBusy = true;
+  if (link) { link.style.pointerEvents = 'none'; link.style.opacity = '0.5'; link.textContent = 'Sending…'; }
+  try {
+    await window.CloudAuth.resetPassword(email);
+    showToast('Password reset email sent', true, 'light');
+    cloudForgotCooldown(link, 45);
+  }
+  catch (e) {
+    cloudShowError(cloudFriendlyError(e), 'signin');
+    cloudForgotBusy = false;
+    if (link) { link.style.pointerEvents = ''; link.style.opacity = ''; link.textContent = 'Forgot password?'; }
+  }
+}
+function cloudForgotCooldown(link, seconds){
+  if (!link) { cloudForgotBusy = false; return; }
+  let remaining = seconds;
+  const tick = () => {
+    if (remaining <= 0) { cloudForgotBusy = false; link.style.pointerEvents = ''; link.style.opacity = ''; link.textContent = 'Forgot password?'; return; }
+    link.textContent = `Email sent — resend in ${remaining}s`;
+    remaining--; setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PASSWORD RESET LANDING — Firebase's reset email, once the action URL
+//  is set to this site in the Firebase Console (Auth → Templates →
+//  Password reset → customize action URL), links straight back here with
+//  ?mode=resetPassword&oobCode=... in the query string instead of routing
+//  through Firebase's own generic hosted page. This detects that, verifies
+//  the code, and lets the person set a new password with the app's own UI.
+// ══════════════════════════════════════════════════════════════════
+let pendingResetCode = null;
+async function checkForPasswordResetLink(){
+  const params = new URLSearchParams(location.search);
+  if (params.get('mode') !== 'resetPassword' || !params.get('oobCode')) return;
+  const code = params.get('oobCode');
+  history.replaceState(null, '', location.pathname); // strip the one-time code from the visible/shareable URL right away
+  try { await waitForCloudSDK(); } catch (e) { return; }
+  om('m-resetpw');
+  try {
+    const email = await window.CloudAuth.verifyResetCode(code);
+    pendingResetCode = code;
+    document.getElementById('rpw-intro').textContent = `Setting a new password for ${email}.`;
+    document.getElementById('rpw-form').style.display = '';
+  } catch (e) {
+    document.getElementById('rpw-intro').textContent = "This reset link is invalid or has expired. Request a new one from the Sign In screen.";
+  }
+}
+async function confirmPasswordResetFlow(){
+  if (!pendingResetCode) return;
+  const pw = document.getElementById('rpw-password').value;
+  const pw2 = document.getElementById('rpw-password2').value;
+  const err = document.getElementById('rpw-error');
+  err.style.display = 'none';
+  if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
+  if (pw !== pw2) { err.textContent = 'Passwords do not match.'; err.style.display = 'block'; return; }
+  try {
+    await window.CloudAuth.confirmReset(pendingResetCode, pw);
+    pendingResetCode = null;
+    cm('m-resetpw');
+    showToast('Password updated — sign in with your new password', true, 'light');
+    document.getElementById('cs-si-email').value = '';
+    openCloudSyncModal('signin');
+  } catch (e) {
+    err.textContent = cloudFriendlyError(e); err.style.display = 'block';
+  }
 }
 async function cloudSignOut(){
   const agreed = await appConfirm('Sign Out?', 'Cloud sync pauses until you sign in again. Your data stays safely on this device either way.');
@@ -1507,7 +1584,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.14.0-toast-deck';
+const APP_VERSION = 'v1.16.1-seo-split-fix';
 
 const today=()=>{
   const d=new Date();
@@ -1800,20 +1877,20 @@ async function shareBackup() {
         const boldFont = await pdfDoc.embedStandardFont(StandardFonts.HelveticaBold);
         const page = pdfDoc.addPage([595, 842]); const { height } = page.getSize();
         
-        page.drawText('Your Dairy App Backup Data', { x: 50, y: height - 80, size: 24, font: boldFont, color: rgb(0.18, 0.54, 0.31) });
+        page.drawText('Your Smart Milking Backup Data', { x: 50, y: height - 80, size: 24, font: boldFont, color: rgb(0.18, 0.54, 0.31) });
         page.drawText('This file keeps your farm records safe.', { x: 50, y: height - 105, size: 12, font, color: rgb(0.3, 0.3, 0.3) });
         page.drawText('What Is This File?', { x: 50, y: height - 150, size: 16, font: boldFont });
-        page.drawText('This looks like a normal PDF document, but it is much more!\nHidden safely inside this file is a complete backup of your Dairy App data.', { x: 50, y: height - 175, size: 12, font, lineHeight: 18 });
+        page.drawText('This looks like a normal PDF document, but it is much more!\nHidden safely inside this file is a complete backup of your Smart Milking data.', { x: 50, y: height - 175, size: 12, font, lineHeight: 18 });
         page.drawText('How to Import (Restore Your Data)', { x: 50, y: height - 250, size: 16, font: boldFont });
         page.drawText('1. Go to the Profile section\n2. Tap "Import Backup"\n3. Select this PDF file', { x: 50, y: height - 275, size: 12, font, lineHeight: 18 });
 
         const pdfBytes = await pdfDoc.save();
         const hiddenDataWrapper = `\n###DAIRY_BACKUP_BEGIN###\n${payloadStr}\n###DAIRY_BACKUP_END###\n`;
         const finalFile = new Blob([pdfBytes, new TextEncoder().encode(hiddenDataWrapper)], { type: "application/pdf" });
-        const file = new File([finalFile], `Dairy_Backup_${today()}.pdf`, { type: "application/pdf" });
+        const file = new File([finalFile], `SmartMilking_Backup_${today()}.pdf`, { type: "application/pdf" });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            navigator.share({ files: [file], title: 'Dairy App Backup' }).then(() => showToast("Share sheet opened successfully.", true, 'light')).catch(() => fallbackDownload(file));
+            navigator.share({ files: [file], title: 'Smart Milking Backup' }).then(() => showToast("Share sheet opened successfully.", true, 'light')).catch(() => fallbackDownload(file));
         } else { fallbackDownload(file); }
     } catch (err) { appAlert("Error", "Could not generate PDF backup."); }
 }
@@ -1856,7 +1933,7 @@ function importBackup(e) {
             const startMarker = '###DAIRY_BACKUP_BEGIN###'; const endMarker = '###DAIRY_BACKUP_END###';
             const startIndex = rawContent.indexOf(startMarker); const endIndex = rawContent.indexOf(endMarker);
             if (startIndex !== -1 && endIndex !== -1) payloadString = rawContent.substring(startIndex + startMarker.length, endIndex).trim();
-            else return appAlert("Invalid PDF", "This PDF does not contain Dairy App backup data.");
+            else return appAlert("Invalid PDF", "This PDF does not contain Smart Milking backup data.");
         }
         let payload = null; try { payload = JSON.parse(payloadString); } catch (err) { }
         if (payload && payload.format === BACKUP_FORMAT) {
@@ -2411,7 +2488,7 @@ async function drawNotebookPage({heading, subheading, subtitle, columns, rows, f
   }
   if(footNote){ ctx.fillStyle='#777'; ctx.font='italic 13px Georgia, serif'; ctx.fillText(footNote, marginX+14, H-34); }
 
-  // "Made with Dairy Notebook" watermark — bottom-right, right-aligned so it
+  // "Made with Smart Milking" watermark — bottom-right, right-aligned so it
   // never collides with footNote/footerLines (which are left-aligned). Made
   // clickable in the actual PDF by canvasesToPdfFile, which reads
   // canvas._watermark and adds a real link annotation over this same box.
@@ -2423,7 +2500,7 @@ async function drawNotebookPage({heading, subheading, subtitle, columns, rows, f
   if(wmIcon){
     // Mixed text+image can't be right-aligned directly, so measure the two
     // text halves first, then lay out icon-and-text as a block from the right.
-    const preText = 'Made with ', postText = ' Dairy Notebook';
+    const preText = 'Made with ', postText = ' Smart Milking';
     ctx.textAlign = 'left';
     const preWidth = ctx.measureText(preText).width;
     const postWidth = ctx.measureText(postText).width;
@@ -2437,7 +2514,7 @@ async function drawNotebookPage({heading, subheading, subtitle, columns, rows, f
     var wmWidth1 = totalWidth, wmStartX = startX;
   } else {
     ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(70,90,140,0.6)';
-    const wmLine1 = 'Made with 🥛 Dairy Notebook';
+    const wmLine1 = 'Made with 🥛 Smart Milking';
     ctx.fillText(wmLine1, rightEdge, wmY1);
     var wmWidth1 = ctx.measureText(wmLine1).width, wmStartX = rightEdge - wmWidth1;
   }
@@ -2588,7 +2665,7 @@ async function canvasesToPdfFile(canvases, filename, shareData){
     // Hidden data appended after the PDF's own bytes — PDF readers stop at
     // %%EOF and ignore trailing bytes, but this app can find the marker by
     // reading the file as text. Same trick as the full-backup PDF.
-    const payload = { format: SHARE_FORMAT, version: SHARE_VERSION, shareId: uid(), senderName: (DB.profile().name || 'A Dairy Notebook user'), createdAt: new Date().toISOString(), ...shareData };
+    const payload = { format: SHARE_FORMAT, version: SHARE_VERSION, shareId: uid(), senderName: (DB.profile().name || 'A Smart Milking user'), createdAt: new Date().toISOString(), ...shareData };
     const hiddenWrapper = `\n###DAIRY_SHARE_BEGIN###\n${JSON.stringify(payload)}\n###DAIRY_SHARE_END###\n`;
     const finalBlob = new Blob([pdfBytes, new TextEncoder().encode(hiddenWrapper)], { type: 'application/pdf' });
     return new File([finalBlob], filename, { type: 'application/pdf' });
@@ -3850,7 +3927,7 @@ function setMV(v){
 // ══════════════════════════════════════════════════════════════════
 function renderSharedHisaabList(el){
   const list = getSharedHisaabs();
-  let html = `<div class="pc"><div class="card" style="text-align:center;color:var(--muted);font-size:12px;">Hisaabs other Dairy Notebook users share with you show up here — view-only, kept separate from your own records.</div></div>`;
+  let html = `<div class="pc"><div class="card" style="text-align:center;color:var(--muted);font-size:12px;">Hisaabs other Smart Milking users share with you show up here — view-only, kept separate from your own records.</div></div>`;
   if(!list.length){
     html += `<div class="pc"><div class="empty"><div class="esub">Nothing shared with you yet.<br>When someone shares a period or customer hisaab PDF with you, it'll appear here.</div></div></div>`;
   } else {
@@ -4409,11 +4486,12 @@ async function editPageLength(pageId) {
 
 initApp();
 setTimeout(checkForIncomingShare, 1200);
+checkForPasswordResetLink();
 </script>
   <script type="module">
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
+  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
   // Your web app's Firebase configuration
@@ -4439,8 +4517,19 @@ setTimeout(checkForIncomingShare, 1200);
     signUp: (email, password) => createUserWithEmailAndPassword(auth, email, password),
     signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
     signOutUser: () => signOut(auth),
-    resetPassword: (email) => sendPasswordResetEmail(auth, email),
-    sendVerification: () => auth.currentUser ? sendEmailVerification(auth.currentUser) : Promise.resolve()
+    // `url` here is what Firebase's own hosted reset page links to as "Continue".
+    // For the reset email to point straight at THIS app instead of Firebase's
+    // generic page, the action URL must also be customized once in the
+    // Firebase Console (Authentication → Templates → Password reset → pencil
+    // icon → Customize action URL) — that's a one-time Console setting, not
+    // something this client-side call alone can control. It's set here, and
+    // must be set in the Console, to app.html specifically (NOT the bare
+    // /Dairy/ root) — the landing page (index.html) has no idea what an
+    // oobCode is; checkForPasswordResetLink() below only exists in this file.
+    resetPassword: (email) => sendPasswordResetEmail(auth, email, { url: 'https://imasyyyyy5.github.io/Dairy/app.html', handleCodeInApp: false }),
+    sendVerification: () => auth.currentUser ? sendEmailVerification(auth.currentUser) : Promise.resolve(),
+    verifyResetCode: (code) => verifyPasswordResetCode(auth, code),
+    confirmReset: (code, newPassword) => confirmPasswordReset(auth, code, newPassword)
   };
   window.CloudDB = {
     async setDoc(pathSegs, data) { await setDoc(doc(db, ...pathSegs), data); },
