@@ -1,6 +1,6 @@
 {
   "name": "Milk Dairy Notebook",
-  "short_name": "Dairy Notebook",
+  "short_name": "Smart Milking",
   "description": "Offline dairy farm record-keeping notebook for tracking milk yield, animals, and finances.",
   "start_url": "./app.html",
   "scope": "./",
