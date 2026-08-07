@@ -162,11 +162,36 @@ html[data-theme="light"]{
 .trans-fwd  { animation: transForward .26s cubic-bezier(0.16, 1, 0.3, 1); }
 .trans-back { animation: transBack .26s cubic-bezier(0.16, 1, 0.3, 1); }
 
-/* APP-THEMED TOAST SYSTEM */
-#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
-.toast { background-color: var(--bg2); border: 1px solid var(--border2); color: var(--fg); padding: 12px 20px; border-radius: 100px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); font-weight: 600; font-size: 13px; opacity: 0; animation: toastIn 0.3s forwards, toastOut 0.3s forwards 2.7s; display: flex; align-items: center; gap: 8px; }
-@keyframes toastIn { from { opacity: 0; transform: translateY(-20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-20px) scale(0.95); } }
+/* APP-THEMED TOAST SYSTEM — a card deck, not a pushed-down list.
+   Cards stack directly on top of one another (position via JS-set inline
+   transform, based on each card's depth in toastQueue); this CSS just
+   defines the shared card look, the transition curve, and the two small
+   affordances (corner count badge, bottom grabber bar) that hint the deck
+   is swipeable. */
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: min(360px, 90vw); height: 0; pointer-events: none; }
+.toast {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: linear-gradient(165deg, var(--bg2), var(--bg));
+  border: 1px solid var(--border2); color: var(--fg);
+  padding: 13px 18px 16px 16px; border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
+  font-weight: 600; font-size: 13.5px;
+  opacity: 0; transform: translateY(-24px) scale(0.92);
+  transition: transform 0.38s cubic-bezier(.22,.9,.28,1.1), opacity 0.3s ease, box-shadow 0.3s ease;
+  display: flex; align-items: center; gap: 10px;
+  touch-action: none; will-change: transform, opacity;
+}
+.toast .temoji { font-size: 17px; line-height: 1; flex-shrink: 0; filter: none; }
+.toast .ttext { flex: 1; line-height: 1.35; }
+.toast .tgrabber { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 26px; height: 3px; border-radius: 100px; background: var(--border2); opacity: 0; transition: opacity 0.25s ease; }
+.toast.stacked .tgrabber { opacity: 0.55; }
+.toast-count-badge {
+  position: absolute; top: -8px; right: -6px; z-index: 200;
+  background: var(--accent, #2f6fed); color: #fff; font-size: 10px; font-weight: 800;
+  min-width: 18px; height: 18px; border-radius: 100px; padding: 0 5px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4); pointer-events: none;
+}
 
 /* COACHMARK TUTORIAL BUBBLES */
 .coachmark{position:fixed;z-index:5500;max-width:200px;background:rgba(22,22,22,0.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.16);border-radius:14px;padding:11px 13px;font-size:11.5px;line-height:1.45;color:#f2f2f2;box-shadow:0 12px 28px rgba(0,0,0,0.55);opacity:0;transform:translateY(6px);transition:opacity .25s ease,transform .25s ease;pointer-events:auto;}
@@ -1220,6 +1245,16 @@ async function cloudSignOut(){
   try { await window.CloudAuth.signOutUser(); showToast('Signed out', true, 'light'); } catch (e) {}
 }
 
+// Resolves once the FIRST auth-state resolution (and, if signed in, the
+// resulting initial cloud merge) has settled. Used at boot to hold the
+// splash screen until we actually know what the freshest data says — this is
+// what fixes the case where a shift was already logged on another device:
+// without waiting, initApp would decide "open Quick Entry" off stale local
+// data before the cloud pull had a chance to land.
+let authBootResolved = false;
+let resolveAuthBoot;
+const authBootPromise = new Promise(res => { resolveAuthBoot = res; });
+
 // Fires whenever Firebase's own auth state resolves — on load (if a session
 // was already persisted), and after every sign-in/sign-up/sign-out. Wired via
 // a CustomEvent rather than calling window.CloudAuth directly at load time,
@@ -1227,10 +1262,12 @@ async function cloudSignOut(){
 // this (classic, non-module) script's own top-level run order.
 window.addEventListener('cloud-auth-change', (e) => {
   cloudUser = e.detail;
-  if (cloudUser) { cloudInitialMerge(); }
+  let mergeDone = Promise.resolve();
+  if (cloudUser) { mergeDone = cloudInitialMerge(); }
   else { detachCloudListeners(); cloudSyncStatus = 'signed-out'; renderCloudStatus(); }
   if (curTab === 'me') renderMe();
   renderObSetupButton();
+  if (!authBootResolved) { authBootResolved = true; mergeDone.finally(() => resolveAuthBoot()); }
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -1470,7 +1507,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.13.1-onboarding-auth';
+const APP_VERSION = 'v1.14.0-toast-deck';
 
 const today=()=>{
   const d=new Date();
@@ -1506,6 +1543,41 @@ const adjustEndForMonthBoundary=(startDate, naturalEnd, pLen)=>{
   return remaining < pLen / 2 ? monthEnd : naturalEnd;
 };
 
+// ══════════════════════════════════════════════════════════════════
+//  TOAST DECK — cards stack on each other (newest on top) instead of
+//  pushing older ones down a list. Front card is swipeable: sideways
+//  cycles it to the back of the deck to reveal the next one ("read
+//  next"), up dismisses it outright. Each card still auto-dismisses on
+//  its own timer regardless of where it sits in the deck, so the stack
+//  can never grow unbounded even if nobody touches it.
+// ══════════════════════════════════════════════════════════════════
+let toastQueue = []; // front = index 0
+const TOAST_MAX_VISIBLE = 3;   // deeper cards fully hide rather than pile up forever
+const TOAST_MAX_QUEUED = 5;    // hard cap — a burst of actions drops the oldest still-queued toast
+const TOAST_LIFETIME_MS = 3400;
+
+// Farm/dairy-themed emoji picked by what the message is actually about,
+// rather than one fixed icon for every success. Falls back to a plain
+// check/warning if nothing more specific matches.
+function toastEmoji(message, isSuccess) {
+  if (isSuccess === false) return '⚠️';
+  const s = message.toLowerCase();
+  const rules = [
+    [/undo|reverted|restored earlier/, '↩️'],
+    [/delete|remove|trash|clear/, '🗑️'],
+    [/payment|paid|₹|rupee|hisaab/, '💰'],
+    [/sync|cloud|signed in|account created|welcome back/, '☁️'],
+    [/backup|export|share/, '📦'],
+    [/milk|litre|shift/, '🥛'],
+    [/animal|cow|buffalo|goat/, '🐄'],
+    [/customer|household|milkman/, '🧾'],
+    [/edit|updat|renam|chang/, '✏️'],
+    [/lock|clear.*sheet|period/, '📅'],
+  ];
+  for (const [re, emo] of rules) if (re.test(s)) return emo;
+  return '✅';
+}
+
 function showToast(message, isSuccess = true, haptic = null) {
   // `haptic` lets a call site opt into the `light` "toast appears" feel when
   // the toast IS the feedback for its action. Sites whose action already
@@ -1516,12 +1588,100 @@ function showToast(message, isSuccess = true, haptic = null) {
   // errors and blocked actions elsewhere in the app.
   Haptics.fire(haptic || (isSuccess === false ? 'warn' : null));
   const container = document.getElementById('toast-container');
-  if (!container) return; 
-  while (container.childElementCount >= 3) { container.removeChild(container.firstElementChild); }
-  const toast = document.createElement('div'); toast.className = 'toast';
-  toast.innerHTML = `<span style="font-size: 16px; margin-right: 2px; filter: grayscale(1);">${isSuccess ? '📝' : '✕'}</span> ${message}`;
-  container.appendChild(toast);
-  setTimeout(() => { if(container.contains(toast)) container.removeChild(toast); }, 3000);
+  if (!container) return;
+  while (toastQueue.length >= TOAST_MAX_QUEUED) { const dropped = toastQueue.pop(); clearTimeout(dropped.timer); dropped.el.remove(); }
+
+  const el = document.createElement('div'); el.className = 'toast';
+  el.innerHTML = `<span class="temoji">${toastEmoji(message, isSuccess)}</span><span class="ttext">${message}</span><span class="tgrabber"></span>`;
+  container.appendChild(el);
+
+  const entry = { el, message, isSuccess };
+  toastQueue.unshift(entry);
+  entry.timer = setTimeout(() => dismissToast(entry), TOAST_LIFETIME_MS);
+  attachToastSwipe(entry);
+  requestAnimationFrame(renderToastStack);
+}
+
+// Positions every queued card by its depth (0 = front) — translateY/scale
+// step back and fade per layer, plus a slight alternating rotation so it
+// reads as a loose stack of cards rather than a rigid pile. Only the front
+// card is interactive; deeper ones sit inert beneath it until they surface.
+function renderToastStack() {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  toastQueue.forEach((entry, depth) => {
+    const el = entry.el;
+    if (depth >= TOAST_MAX_VISIBLE) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; el.style.zIndex = '0'; return; }
+    el.style.zIndex = String(100 - depth);
+    el.style.pointerEvents = depth === 0 ? 'auto' : 'none';
+    el.style.opacity = String(1 - depth * 0.18);
+    const rot = depth === 0 ? 0 : (depth % 2 ? -3 : 3);
+    el.style.transform = `translateY(${depth * 9}px) scale(${1 - depth * 0.05}) rotate(${rot}deg)`;
+    el.classList.toggle('stacked', depth === 0 && toastQueue.length > 1);
+  });
+  let badge = container.querySelector('.toast-count-badge');
+  if (toastQueue.length > 1) {
+    if (!badge) { badge = document.createElement('div'); badge.className = 'toast-count-badge'; container.appendChild(badge); }
+    badge.textContent = String(toastQueue.length);
+  } else if (badge) { badge.remove(); }
+}
+
+function dismissToast(entry, flungUp) {
+  clearTimeout(entry.timer);
+  const idx = toastQueue.indexOf(entry);
+  if (idx === -1) return;
+  toastQueue.splice(idx, 1);
+  entry.el.style.transition = 'transform 0.32s cubic-bezier(.3,.7,.4,1), opacity 0.28s ease';
+  if (flungUp) entry.el.style.transform = 'translateY(-70px) scale(0.88)';
+  entry.el.style.opacity = '0';
+  setTimeout(() => entry.el.remove(), 320);
+  renderToastStack();
+}
+
+// Sends the front card to the back of the deck instead of removing it —
+// this is the "swipe sideways to read the next one" gesture, non-destructive.
+function cycleToastToBack(entry) {
+  const idx = toastQueue.indexOf(entry);
+  if (idx === -1) return;
+  toastQueue.splice(idx, 1);
+  toastQueue.push(entry);
+  entry.el.style.transition = 'none';
+  requestAnimationFrame(() => { entry.el.style.transition = ''; renderToastStack(); });
+}
+
+function attachToastSwipe(entry) {
+  const el = entry.el;
+  let startX = 0, startY = 0, dragging = false;
+  const UP_THRESHOLD = 50, SIDE_THRESHOLD = 60;
+  el.addEventListener('pointerdown', (e) => {
+    if (toastQueue[0] !== entry) return;
+    dragging = true; startX = e.clientX; startY = e.clientY;
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    el.style.transition = 'none';
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX, dy = Math.min(0, e.clientY - startY);
+    el.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 22}deg)`;
+    el.style.opacity = String(Math.max(0.35, 1 - Math.abs(dy) / 140 - Math.abs(dx) / 420));
+  });
+  function release(e) {
+    if (!dragging) return; dragging = false;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    el.style.transition = 'transform 0.3s cubic-bezier(.22,.9,.28,1.1), opacity 0.28s ease';
+    if (dy < -UP_THRESHOLD && Math.abs(dy) > Math.abs(dx)) {
+      Haptics.fire('tick'); dismissToast(entry, true);
+    } else if (Math.abs(dx) > SIDE_THRESHOLD && Math.abs(dx) >= Math.abs(dy)) {
+      Haptics.fire('tick');
+      el.style.transform = `translate(${dx > 0 ? 420 : -420}px, ${dy}px) rotate(${dx / 10}deg)`;
+      el.style.opacity = '0';
+      setTimeout(() => cycleToastToBack(entry), 220);
+    } else {
+      renderToastStack();
+    }
+  }
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2731,20 +2891,27 @@ const initWatchdog = setTimeout(() => {
 function initApp() {
   try {
   applyTheme(getThemePref());
-  const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
   const minSplashEnd = Date.now() + 800;
   function transitionTo(targetFunction) { const remaining = Math.max(0, minSplashEnd - Date.now()); setTimeout(() => { const splash = document.getElementById('splash'); if (splash) splash.style.opacity = '0'; setTimeout(() => { if (splash) splash.style.display = 'none'; targetFunction(); }, 300); }, remaining); }
-  if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); renderObSetupButton(); } }); return; }
-  
-  const td = today(); const activePage = DB.pages().find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
-  let shiftHasData = false;
-  if(activePage) {
-    const row = activePage.rows.find(r => r.assignedDate === td);
-    if(row) shiftHasData = activePage.cols.filter(c => c.type === (new Date().getHours() >= p.shiftTime ? 'milk_pm' : 'milk_am')).some(c => parseFloat(row[c.id]) > 0);
-  }
-  if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); } 
-  else { document.getElementById('app').style.display = 'none'; transitionTo(() => openQuickEntry()); }
-  appLoaded = true; clearTimeout(initWatchdog);
+
+  // Hold the "which screen?" decision until we know the real auth/sync state
+  // — capped, so an offline device (or one that's never signed in) doesn't
+  // sit on the splash screen waiting for a network call that'll never land.
+  const AUTH_BOOT_TIMEOUT_MS = 3500;
+  Promise.race([authBootPromise, new Promise(res => setTimeout(res, AUTH_BOOT_TIMEOUT_MS))]).then(() => {
+    const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
+    if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); renderObSetupButton(); } }); return; }
+
+    const td = today(); const activePage = DB.pages().find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
+    let shiftHasData = false;
+    if(activePage) {
+      const row = activePage.rows.find(r => r.assignedDate === td);
+      if(row) shiftHasData = activePage.cols.filter(c => c.type === (new Date().getHours() >= p.shiftTime ? 'milk_pm' : 'milk_am')).some(c => parseFloat(row[c.id]) > 0);
+    }
+    if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); } 
+    else { document.getElementById('app').style.display = 'none'; transitionTo(() => openQuickEntry()); }
+    appLoaded = true; clearTimeout(initWatchdog);
+  });
   } catch (error) { console.error('Critical App Failure:', error); initError = error; appLoaded = false; }
 }
 
