@@ -2,7 +2,7 @@
 // Bump CACHE_VERSION on every deploy that changes app.html / index.html /
 // icons / manifest, otherwise users keep getting the old cached version
 // forever.
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = 'mdn-cache-' + CACHE_VERSION;
 
 // Everything needed to open and run the app with zero network.
