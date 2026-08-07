@@ -520,20 +520,23 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; max-width: 500px; margin: 0 auto; width: 100%;">
   <div class="eico anim-stagger d1" style="font-size:36px; width:80px; height:80px; margin: 0 auto 20px; border-radius:24px;">🥛</div>
   <h1 class="ptitle tc mb2 anim-stagger d1">Welcome to Smart Milking</h1>
-  <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Set up your profile. You can start with no animals and enable extra milk types whenever you need them.</p>
+  <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Set up your profile and add the animals you milk to automate your daily entry sheets.</p>
   <div class="card mb3 anim-stagger d2" style="border-radius:24px; padding:20px;">
     <div class="slabel">Your Name / Dairy Name</div>
     <input class="inp" id="ob-dairy-name" placeholder="Enter name..."/>
   </div>
+  <div id="ob-animal-list" class="sp2 mb3 anim-stagger d2"></div>
   <div class="card mb4 anim-stagger d3" style="border-radius:24px; padding:20px;">
-   <div class="row gap2" style="justify-content:space-between;align-items:center;">
-    <div><div class="slabel">Add another milk type</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Optional. Leave off to start with no animals or milk tables.</div></div>
-    <label class="tswitch"><input type="checkbox" id="ob-milktypes-enabled" onchange="toggleObMilkTypes(this.checked)"/><div class="tslider"></div></label>
+   <div class="slabel">Add Animal</div>
+   <input class="inp mb3" id="ob-name" placeholder="e.g., Gori, Buffalo #1"/>
+   <div class="rgrid mb3" id="ob-types">
+    <button class="rpill on" id="ob-cow-btn" onclick="setObType('cow')">🐄 Cow</button>
+    <button class="rpill" id="ob-buffalo-btn" onclick="setObType('buffalo')">🐃 Buffalo</button>
+    <button class="rpill" id="ob-goat-btn" onclick="setObType('goat')">🐐 Goat</button>
+    <button class="rpill" id="ob-other-btn" onclick="setObType('other')">🥛 Other</button>
    </div>
-   <div id="ob-milktypes-panel" style="display:none;margin-top:12px;">
-    <div id="ob-milktype-list" class="sp2 mb3"></div>
-    <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObMilkType()">+ Create Milk Type</button>
-   </div>
+   <input class="inp mb3" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="ob-rate" placeholder="Milk Rate (₹ per Litre)"/>
+   <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObAnimal()">+ Add This Animal</button>
   </div>
   <div class="anim-stagger d3">
       <div class="row gap2 mb3"><button class="btn bg" style="flex:1; color:var(--text);" onclick="openCloudSyncModal('signup')">Sign Up</button><button class="btn bg" style="flex:1; color:var(--text);" onclick="openCloudSyncModal('signin')">Sign In</button></div>
@@ -952,7 +955,7 @@ const AutoBackup = {
 };
 
 const DB={
-  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[], milkTypesEnabled:false, milkTypes:[], ratePerEntry:false, recordFat:false, onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
+  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
   saveProfile:(p,opts)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); cloudTouch('profile', opts&&opts.immediate); },
   pages:()=>{
     const p = Store.get('mdn_pages')||[];
@@ -1581,7 +1584,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = '2026.08.07-milk-types';
+const APP_VERSION = 'v1.16.1-seo-split-fix';
 
 const today=()=>{
   const d=new Date();
@@ -2148,32 +2151,41 @@ function pickThemedSelect(value){
   container.addEventListener('touchcancel', endDrag, {passive: true});
 })();
 
-function getMilkTypes(profile){
-  if(!profile.milkTypesEnabled) return [];
-  let types = Array.isArray(profile.milkTypes) ? profile.milkTypes.filter(t=>t && t.enabled!==false) : [];
-  if(!types.length) types = [{id:'milk_type_1', name:'Milk Type 1', rate:0, type:'milk'}];
-  return types;
-}
 function defaultColumns(profile){
   const cols=[ {id:'date',name:'Date',type:'date',locked:true} ];
-  const milkTypes=getMilkTypes(profile);
-  milkTypes.forEach((m, idx)=>{
-    const id = m.id || ('milk_type_'+(idx+1)); const nm = m.name || ('Milk Type '+(idx+1));
-    cols.push({id:'m_'+id+'_am',name:nm+' AM (L)',type:'milk_am',animal:id, animalType:'milk', animalRate:m.rate||0});
-    if(profile.ratePerEntry!==false) cols.push({id:'m_'+id+'_rate_am', name:nm+' AM Rate (₹/L'+(profile.recordFat?' & Fat %':'')+')', type:'rate_fat_am', animal:id, animalType:'milk'});
-    cols.push({id:'m_'+id+'_pm',name:nm+' PM (L)',type:'milk_pm',animal:id, animalType:'milk', animalRate:m.rate||0});
-    if(profile.ratePerEntry!==false) cols.push({id:'m_'+id+'_rate_pm', name:nm+' PM Rate (₹/L'+(profile.recordFat?' & Fat %':'')+')', type:'rate_fat_pm', animal:id, animalType:'milk'});
-  });
+  const milkA=(profile.animals||[]).filter(a=>a.milks!==false);
+  if(!milkA.length){
+    cols.push({id:'cow_am',name:'Cow AM (L)',type:'milk_am',animal:'cow', animalType:'cow'});
+    cols.push({id:'cow_pm',name:'Cow PM (L)',type:'milk_pm',animal:'cow', animalType:'cow'});
+  } else {
+    milkA.forEach(a=>{
+      cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate});
+      cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate});
+      if(profile.ratePerEntry!==false) cols.push({id:'a_'+a.id+'_rate', name:a.name+' Rate', type:'rate_per_animal', animal:a.id, animalType:a.type});
+    });
+  }
+  if(profile.ratePerEntry!==false && milkA.length===0) cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
   cols.push({id:'total',name:'Total (₹)',type:'total',locked:true});
   return cols;
 }
-function parseRateFat(v){ const str=String(v||'').trim(); const m=str.match(/^([0-9.]+)\s*(?:\(([^)]+)\))?/); return {rate:m?(parseFloat(m[1])||0):0, fat:m&&m[2]!==undefined?(parseFloat(m[2])||0):0}; }
+
 function computeRowTotal(row,cols,profile){
   const milkCols=cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
   if(profile.role==='farmer' && profile.ratePerEntry===false){
-    return parseFloat(milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0)*(c.animalRate||0),0).toFixed(2));
+    const animalTotals={};
+    milkCols.forEach(c=>{ const key=c.animal||'def'; if(!animalTotals[key])animalTotals[key]={qty:0,rate:c.animalRate||0}; animalTotals[key].qty+=parseFloat(row[c.id])||0; });
+    return parseFloat(Object.values(animalTotals).reduce((s,g)=>s+g.qty*g.rate,0).toFixed(2));
   }
-  return parseFloat(milkCols.reduce((s,c)=>{ const rt=cols.find(col=>col.animal===c.animal && col.type===(c.type==='milk_pm'?'rate_fat_pm':'rate_fat_am')) || cols.find(col=>col.type==='rate_per_animal' && col.animal===c.animal) || cols.find(col=>col.type==='rate'); return s+(parseFloat(row[c.id])||0)*parseRateFat(rt?row[rt.id]:'').rate; },0).toFixed(2));
+  const perAnimalRateCols = cols.filter(c=>c.type==='rate_per_animal');
+  if (perAnimalRateCols.length > 0) {
+      const animalTotals={};
+      milkCols.forEach(c=>{ const key=c.animal||'def'; if(!animalTotals[key])animalTotals[key]={qty:0, rate:0}; animalTotals[key].qty+=parseFloat(row[c.id])||0; });
+      perAnimalRateCols.forEach(c=>{ const key=c.animal; if(animalTotals[key]) animalTotals[key].rate = parseFloat(row[c.id])||0; });
+      return parseFloat(Object.values(animalTotals).reduce((s,g)=>s+(g.qty*g.rate),0).toFixed(2));
+  }
+  const rateCol=cols.find(c=>c.type==='rate'); const totalMilk=milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0),0);
+  const rate=rateCol?(parseFloat(row[rateCol.id])||0):0;
+  return parseFloat((totalMilk*rate).toFixed(2));
 }
 
 function pageSummary(p){
@@ -2993,16 +3005,22 @@ function goTab(id,btn){
   navPush('tab', {from: prevTab});
 }
 
-let obTempMilkTypes = [];
-function toggleObMilkTypes(on){ document.getElementById('ob-milktypes-panel').style.display=on?'block':'none'; if(on && !obTempMilkTypes.length){ obTempMilkTypes=[{id:uid(), name:'Milk Type 1', rate:0}, {id:uid(), name:'Milk Type 2', rate:0}]; renderObMilkTypes(); } }
-function addObMilkType(){ obTempMilkTypes.push({id:uid(), name:'Milk Type '+(obTempMilkTypes.length+1), rate:0}); renderObMilkTypes(); }
-function renameObMilkType(id,val){ const m=obTempMilkTypes.find(x=>x.id===id); if(m) m.name=(val||'').trim()||m.name; }
-function renderObMilkTypes(){ const list=document.getElementById('ob-milktype-list'); if(!list) return; list.innerHTML=obTempMilkTypes.map((m,i)=>`<div class="card2"><label class="flabel">Milk Type ${i+1}</label><input class="inp" value="${escAttr(m.name)}" onchange="renameObMilkType('${m.id}',this.value)"/></div>`).join(''); }
+let obTempAnimals = []; let obType = 'cow';
+function setObType(t) { Haptics.fire('tick'); obType = t; document.querySelectorAll('#ob-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ob-'+t+'-btn').classList.add('on'); }
+function addObAnimal() {
+  const name = document.getElementById('ob-name').value.trim(); const rate = parseFloat(document.getElementById('ob-rate').value) || 0;
+  if(!name) return appAlert('Notice', 'Please enter an animal name or ID to continue.');
+  obTempAnimals.push({id: uid(), name, type: obType, rate, milks: true}); document.getElementById('ob-name').value = ''; document.getElementById('ob-rate').value = ''; renderObAnimals();
+}
+function renderObAnimals() {
+  const list = document.getElementById('ob-animal-list'); if(!obTempAnimals.length) { list.innerHTML = ``; return; }
+  list.innerHTML = obTempAnimals.map(a => `<div class="card2 row gap2" style="margin-bottom:8px; border-radius:16px;"><span style="font-size:24px;">${aIcon[a.type]||'🥛'}</span><div class="f1"><div style="font-weight:800; font-size:15px;">${a.name}</div><div style="font-size:11px;color:var(--muted);">Rate: ₹${a.rate}/L</div></div></div>`).join('');
+}
 function finishOnboarding() {
   const dairyName = document.getElementById('ob-dairy-name').value.trim();
   if(!dairyName) return appAlert('Required Info', 'Please provide your Name or your Dairy Name before continuing.');
-  const enabled = !!document.getElementById('ob-milktypes-enabled')?.checked;
-  const p = DB.profile(); p.name = dairyName; p.onboarded = true; p.ratePerEntry = false; p.recordFat = false; p.animals = []; p.milkTypesEnabled = enabled; p.milkTypes = enabled ? obTempMilkTypes : []; DB.saveProfile(p); DB.log(`Completed setup${enabled ? ' with milk types enabled' : ' with no milk types'}.`, 'create');
+  if(obTempAnimals.length === 0) return appAlert('Required Info', 'Please add at least one milking animal to begin.');
+  const p = DB.profile(); p.name = dairyName; p.onboarded = true; p.ratePerEntry = false; p.animals = obTempAnimals; DB.saveProfile(p); DB.log(`Completed setup with ${obTempAnimals.length} animal(s).`, 'create');
   justOnboarded = true; document.getElementById('onboarding').classList.remove('active'); document.getElementById('onboarding').style.display = 'none'; openQuickEntry();
 }
 
@@ -3058,11 +3076,11 @@ function openQuickEntry(targetDate, forceIsPM) {
     targetCols.forEach(c => {
       if (row[c.id]) hasData = true; const inputId = `qe-input-${c.id}`; if (!firstInputId) firstInputId = inputId;
       const animalInfo = DB.profile().animals?.find(a => a.id === c.animal); const icon = animalInfo ? (aIcon[animalInfo.type]||'🥛') : '🥛';
-      const animalName = animalInfo ? animalInfo.name : c.name.replace(/ AM.*$/,'').replace(/ PM.*$/,'');
+      const animalName = animalInfo ? animalInfo.name : c.name.replace(' AM','').replace(' PM','');
       let rateHtml = '';
       if (DB.profile().ratePerEntry !== false) {
-         const rateCol = page.cols.find(col => col.animal === c.animal && col.type === (c.type==='milk_pm'?'rate_fat_pm':'rate_fat_am')) || page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
-         if (rateCol) { const rf=parseRateFat(row[rateCol.id] || (animalInfo ? animalInfo.rate : (c.animalRate||''))); const fatBox=DB.profile().recordFat ? `<div class="row gap1"><span style="color:var(--muted); font-size:12px; font-weight:800;">Fat</span><input type="text" id="qe-fat-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0" value="${rf.fat||''}" onclick="setNumpadTarget('qe-fat-${rateCol.id}')"/></div>` : ''; rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Rate (₹/L${DB.profile().recordFat?' & Fat %':''})</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${rf.rate||''}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/>${fatBox}</div></div>`; }
+         const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
+         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || (animalInfo ? animalInfo.rate : '')}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/></div></div>`;
       }
       html += `<div class="qe-card"><div class="row gap3 w-100" style="justify-content:space-between;"><div class="row gap2"><span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span><div><div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${row[c.id] || ''}" onclick="setNumpadTarget('${inputId}')"/></div>${rateHtml}</div>`;
     });
@@ -3090,14 +3108,14 @@ function saveQuickEntry() {
     if (valStr) {
       shiftMilkAdded = true;
       const animalInfo = DB.profile().animals?.find(a => a.id === c.animal);
-      const animalName = animalInfo ? animalInfo.name : c.name.replace(/ AM.*$/,'').replace(/ PM.*$/,'');
+      const animalName = animalInfo ? animalInfo.name : c.name.replace(' AM','').replace(' PM','');
       animalAmounts.push(`${animalName} ${valStr}L`);
     }
     if((row[c.id]||'') !== valStr) cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:c.id, from:row[c.id]||'', to:valStr});
     row[c.id] = valStr;
     if (DB.profile().ratePerEntry !== false) {
-       const rateCol = page.cols.find(col => col.animal === c.animal && col.type === (c.type==='milk_pm'?'rate_fat_pm':'rate_fat_am')) || page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
-       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); const fatInput = document.getElementById(`qe-fat-${rateCol.id}`); if (rateInput && rateInput.value !== '') { const rateVal = DB.profile().recordFat && fatInput?.value ? `${rateInput.value}(${fatInput.value})` : rateInput.value; if((row[rateCol.id]||'') !== rateVal) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateVal}); row[rateCol.id] = rateVal; } } }
+       const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
+       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
@@ -3175,7 +3193,7 @@ function renderDetailView(el){
 
   el.innerHTML=`
    <div class="ph">
-    <div class="row gap2 mb3" style="flex-wrap:nowrap;overflow-x:auto;"><button class="btn bg bsm" onclick="closeDetail()">×</button><div class="f1"></div><button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button><button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Length</button><button class="btn bg bsm" onclick="shareHisaabForPage('${page.id}')">📤 Share</button><button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button><button class="btn bg bsm" onclick="openTableSettings('${page.id}')">⚙️ Settings</button></div>
+    <div class="row gap2 mb3" style="flex-wrap:nowrap;overflow-x:auto;"><button class="btn bg bsm" onclick="closeDetail()">×</button><div class="f1"></div><button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')">🗑</button><button class="btn bg bsm" onclick="editPageLength('${page.id}')">✂️ Length</button><button class="btn bg bsm" onclick="shareHisaabForPage('${page.id}')">📤 Share</button><button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'🔓 Unlock':'🔒 Lock'}</button></div>
     <div class="eyebrow">${page.rows.length}-Day Period</div><div class="ptitle" style="font-size:17px;">${page.label}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:4px;">${detailPageIdx===0?'Each row unlocks on its assigned date.':'Milk sold to local customers — swipe right to go back.'}</div>
    </div>
@@ -3244,11 +3262,7 @@ function renderHouseholdsPageHTML(page){
 function openFilterSheetModal(pageId) {
   const profile = DB.profile();
   let listHtml = `<button class="filter-opt-btn ${currentTableFilter==='all'?'active':''}" onclick="applyThemedFilter('${pageId}','all')">Show All Columns ${currentTableFilter==='all'?'✓':''}</button><button class="filter-opt-btn ${currentTableFilter==='totals'?'active':''}" onclick="applyThemedFilter('${pageId}','totals')">Totals Only ${currentTableFilter==='totals'?'✓':''}</button>`;
-  const milkTypes = getMilkTypes(profile);
-  if(milkTypes.length > 0) {
-      listHtml += `<div class="filter-group-header">By Milk Type</div>`;
-      milkTypes.forEach((m,i) => { const key = `anim_${m.id}`; listHtml += `<button class="filter-opt-btn ${currentTableFilter===key?'active':''}" onclick="applyThemedFilter('${pageId}','${key}')">🥛 ${m.name||('Milk Type '+(i+1))} ${currentTableFilter===key?'✓':''}</button>`; });
-  } else if(profile.role === 'farmer' && profile.animals?.length > 0) {
+  if(profile.role === 'farmer' && profile.animals?.length > 0) {
       listHtml += `<div class="filter-group-header">By Category</div>`;
       [...new Set(profile.animals.map(a => a.type))].forEach(c => { const key = `cat_${c}`; listHtml += `<button class="filter-opt-btn ${currentTableFilter===key?'active':''}" onclick="applyThemedFilter('${pageId}','${key}')">Only ${c.charAt(0).toUpperCase()+c.slice(1)}s ${currentTableFilter===key?'✓':''}</button>`; });
       listHtml += `<div class="filter-group-header">By Animal Name</div>`;
@@ -3281,7 +3295,7 @@ function buildCompactTable(page,profile,todayStr, filter){
   head1 += sys2.map(c => `<th rowspan="2" class="th-sys" style="text-align:right;">${c.name}</th>`).join('');
 
   let head2 = '';
-  animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => { let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':''; if(c.type==='rate_fat_am') sub = 'Rate (₹/L)'; else if(c.type==='rate_fat_pm') sub = 'Rate (₹/L)'; else if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4); head2 += `<th class="${(cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : ''}">${sub}</th>`; }); });
+  animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => { let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':''; if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4); head2 += `<th class="${(cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : ''}">${sub}</th>`; }); });
   const thead = `<thead><tr>${head1}</tr><tr>${head2}</tr></thead>`;
 
   let totalMilk = 0, totalRev = 0;
@@ -3876,13 +3890,12 @@ function renderMe(){
   html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
   html+=cloudSyncCardHtml();
 
-  html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;align-items:center;"><span style="font-size:13px;font-weight:700;">Milk Types</span><label class="tswitch"><input type="checkbox" ${profile.milkTypesEnabled?'checked':''} onchange="setMilkTypesEnabled(this.checked)"/><div class="tslider"></div></label></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Add another milk type creates separate AM/PM tables. Start with none if you do not need milk tracking.</div><div class="sp2">`;
-  if(!profile.milkTypesEnabled) html+=`<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No milk types enabled</div>`;
-  else getMilkTypes(profile).forEach((m,i)=>{ html+=`<div class="card2 row gap2"><span style="font-size:18px;">🥛</span><div class="f1"><div style="font-weight:700;font-size:13px;">${m.name||('Milk Type '+(i+1))}</div><div style="font-size:10px;color:var(--muted);">Separate milk table</div></div></div>`; });
-  if(profile.milkTypesEnabled) html+=`<button class="btn bs bsm w-100" onclick="addMilkTypeProfile()">+ Create Milk Type</button>`;
+  html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;"><span style="font-size:13px;font-weight:700;">My Animals</span><button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div><div class="sp2">`;
+  if(!(profile.animals||[]).length) html+=`<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No animals yet</div>`;
+  else profile.animals.forEach(a=>{ html+=`<div class="card2 row gap2"><span style="font-size:18px;">${aIcon[a.type]||'🥛'}</span><div class="f1"><div style="font-weight:700;font-size:13px;">${a.name}</div><div style="font-size:10px;color:var(--muted);">${a.type} · ${a.milks?'Milking · ₹'+(a.rate||'?')+'/L':'Not milking'}</div></div><button class="bic" style="width:26px;height:26px;font-size:11px;" onclick="openAnimalModal('${a.id}')">✎</button><button class="bic" style="width:26px;height:26px;font-size:13px;color:var(--danger);" onclick="removeAnimal('${a.id}')">×</button></div>`; });
   html+=`</div></div>
    <div class="card"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Settings</div>
-    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Individual rate preference</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Adds separate AM/PM rate columns under each milk type</div></div><label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label></div>
+    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div><label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label></div>
     ${Haptics.supported() ? `<div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Haptic Feedback</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Vibration on taps, saves, and alerts</div></div><label class="tswitch"><input type="checkbox" ${profile.hapticsEnabled!==false?'checked':''} onchange="setHapticsPref(this.checked)"/><div class="tslider"></div></label></div>` : ''}
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
@@ -3968,11 +3981,7 @@ function openSharedHisaabViewer(shareId){
 }
 function closeSharedHisaabViewer(){ cm('m-shared-view'); }
 function editName(){ const p=DB.profile(); appPrompt('Dairy name:', p.name).then(n => { if(!n?.trim()) return; p.name=n.trim(); DB.saveProfile(p); DB.log(`Changed dairy name to ${p.name}`, 'info'); renderMe(); }); }
-async function setRatePref(v){ const p=DB.profile(); p.ratePerEntry=v; if(v) p.recordFat = await appConfirm('Record Fat Too?', 'Add fat percentage with each rate? It will be saved as Rate(Fat), e.g. 60(7).'); DB.saveProfile(p); applyRatePreferenceToUnlockedPages(p); showToast('Preference saved.', true, 'light'); renderMe(); renderHome(); }
-function setMilkTypesEnabled(v){ const p=DB.profile(); p.milkTypesEnabled=v; if(v && !(p.milkTypes||[]).length) p.milkTypes=[{id:'milk_type_1',name:'Milk Type 1',rate:0},{id:'milk_type_2',name:'Milk Type 2',rate:0}]; DB.saveProfile(p); applyRatePreferenceToUnlockedPages(p); showToast('Milk type preference saved.', true, 'light'); renderMe(); renderHome(); }
-function addMilkTypeProfile(){ const p=DB.profile(); p.milkTypesEnabled=true; if(!p.milkTypes) p.milkTypes=[]; p.milkTypes.push({id:uid(),name:'Milk Type '+(p.milkTypes.length+1),rate:0}); DB.saveProfile(p); applyRatePreferenceToUnlockedPages(p); renderMe(); renderHome(); }
-function applyRatePreferenceToUnlockedPages(profile){ const pages=DB.pages(); let changed=false; pages.forEach(pg=>{ if(pg.locked||pg.trashed) return; const oldRows=pg.rows||[]; pg.cols=defaultColumns(profile); pg.rows=oldRows.map(r=>{ const nr={...r}; pg.cols.forEach(c=>{ if(!['sr','date','total'].includes(c.type) && nr[c.id]===undefined) nr[c.id]=''; }); nr.total=computeRowTotal(nr,pg.cols,profile); return nr; }); changed=true; }); if(changed) DB.savePages(pages,{immediate:true}); }
-async function openTableSettings(pageId){ const pg=DB.pages().find(x=>x.id===pageId); if(pg?.locked) return appAlert('Locked', 'Unlock the record before changing table settings.'); const p=DB.profile(); const rate=await appConfirm('Table Settings', 'Turn ON individual AM/PM rate columns for this unlocked table? Choose Cancel to turn them off.'); p.ratePerEntry=rate; if(rate) p.recordFat=await appConfirm('Record Fat Too?', 'Save fat in brackets behind rate, e.g. 60(7)?'); DB.saveProfile(p); applyRatePreferenceToUnlockedPages(p); renderHome(); }
+function setRatePref(v){ const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p); showToast('Preference saved.', true, 'light'); }
 function setHapticsPref(v){ const p=DB.profile(); p.hapticsEnabled=v; DB.saveProfile(p); if(v) Haptics.fire('medium'); showToast(v?'Haptic feedback on.':'Haptic feedback off.'); }
 function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.', true, 'light'); renderMe(); }
 function openShiftTimePicker(current){
