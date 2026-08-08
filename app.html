@@ -125,7 +125,7 @@ html[data-theme="light"]{
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-cloudsync { z-index: 2000 !important; }
+#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
@@ -703,7 +703,14 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
  <div class="row gap2 mb3" style="align-items:center;">
   <div class="f1"><div style="font-size:13px;font-weight:700;">This animal gives milk?</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Will auto-add AM/PM columns</div></div>
-  <label class="tswitch"><input type="checkbox" id="ma-milks" checked onchange="document.getElementById('ma-rate-row').style.display=this.checked?'block':'none'"/><div class="tslider"></div></label>
+  <label class="tswitch"><input type="checkbox" id="ma-milks" checked onchange="document.getElementById('ma-rate-row').style.display=this.checked?'block':'none';document.getElementById('ma-ratemethod-row').style.display=this.checked?'block':'none';"/><div class="tslider"></div></label>
+ </div>
+ <div id="ma-ratemethod-row" class="mb3">
+  <label class="flabel">Rate Method</label>
+  <div class="rgrid mb2" id="ma-ratemethods">
+   <button class="rpill on" id="ma-rm-fixed-btn" onclick="setRM('fixed')">Fixed Rate</button><button class="rpill" id="ma-rm-fat-btn" onclick="setRM('fat')">Fat Based</button>
+  </div>
+  <div style="font-size:11px;color:var(--muted);">Fixed: one rate/L set below. Fat Based: rate & fat entered each shift in Quick Entry instead.</div>
  </div>
  <div id="ma-rate-row" class="mb3"><label class="flabel">Default Rate per Litre (₹)</label><input class="inp" type="number" id="ma-rate" placeholder="e.g. 55"/></div>
  <div style="margin-top:15px; border-top: 1px solid var(--border); padding-top: 15px;">
@@ -766,6 +773,18 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div class="mact"><button class="btn bs" onclick="cm('m-hh-exception')">Cancel</button><button class="btn bp" onclick="saveHHException()">Save Change</button></div>
 </div></div>
 <input type="hidden" id="hh-correction-date-holder"/>
+
+<div class="moverlay" id="m-milkmen-payment" onclick="moi(event,'m-milkmen-payment')"><div class="mbox">
+ <div class="mh"><span class="mt">Add Milkmen Payment</span><button class="mx" onclick="cm('m-milkmen-payment')">✕</button></div>
+ <div style="margin-bottom:9px;"><label class="flabel">Amount Received (₹)</label><input class="inp" type="number" id="mp-amount" placeholder="0.0"/></div>
+ <div style="margin-bottom:9px;">
+  <label class="flabel">Date of Payment</label>
+  <button type="button" class="btn bd-trigger w-100" id="mp-date-trigger" onclick="openThemedCalendar('mp-date')">Today</button>
+  <input type="hidden" id="mp-date"/>
+ </div>
+ <div style="margin-bottom:15px;"><label class="flabel">Remark</label><input class="inp" type="text" id="mp-note" placeholder="e.g. Cash, GPay, part payment..."/></div>
+ <div class="mact"><button class="btn bs" onclick="cm('m-milkmen-payment')">Cancel</button><button class="btn bp" onclick="saveMilkmenPayment()">Save Payment</button></div>
+</div></div>
 
 <div class="moverlay" id="m-customer-payment" onclick="moi(event,'m-customer-payment')"><div class="mbox">
  <div class="mh"><span class="mt" id="cp-title">Log Payment Received</span><button class="mx" onclick="cm('m-customer-payment')">✕</button></div>
@@ -955,7 +974,7 @@ const AutoBackup = {
 };
 
 const DB={
-  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[],ratePerEntry:true, onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
+  profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[], onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
   saveProfile:(p,opts)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); cloudTouch('profile', opts&&opts.immediate); },
   pages:()=>{
     const p = Store.get('mdn_pages')||[];
@@ -1535,8 +1554,14 @@ const AnalyticsEngine = {
                    const at = (c.animalType || (aMeta ? aMeta.type : '') || c.animal || 'other').toLowerCase();
                    const name = c.name.replace(/( AM| PM| Rate).*/, '');
                    let rate = 0;
-                   const rCol = p.cols.find(col => (col.type === 'rate_per_animal' && col.animal === c.animal) || col.type === 'rate');
-                   if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
+                   const shift = c.type==='milk_am' ? 'am' : 'pm';
+                   const rfCol = p.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
+                   if(rfCol){ const raw=(r[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); rate = isNaN(parsed)?0:parsed; }
+                   else {
+                     const rCol = p.cols.find(col => (col.type === 'rate_per_animal' && col.animal === c.animal) || col.type === 'rate');
+                     if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
+                     else rate = c.animalRate || (aMeta ? aMeta.rate : 0) || 0;
+                   }
                    const rev = v * rate;
                    cache.daily[r.date].total += v;
                    cache.daily[r.date].rev += rev;
@@ -2157,35 +2182,94 @@ function defaultColumns(profile){
   if(!milkA.length){
     cols.push({id:'cow_am',name:'Cow AM (L)',type:'milk_am',animal:'cow', animalType:'cow'});
     cols.push({id:'cow_pm',name:'Cow PM (L)',type:'milk_pm',animal:'cow', animalType:'cow'});
+    cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
   } else {
     milkA.forEach(a=>{
-      cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate});
-      cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate});
-      if(profile.ratePerEntry!==false) cols.push({id:'a_'+a.id+'_rate', name:a.name+' Rate', type:'rate_per_animal', animal:a.id, animalType:a.type});
+      const isFat = a.rateMethod==='fat';
+      cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate, rateMethod:a.rateMethod});
+      if(isFat) cols.push({id:'a_'+a.id+'_am_rf', name:a.name+' AM Rate/Fat', type:'ratefat', animal:a.id, animalType:a.type, shift:'am'});
+      cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate, rateMethod:a.rateMethod});
+      if(isFat) cols.push({id:'a_'+a.id+'_pm_rf', name:a.name+' PM Rate/Fat', type:'ratefat', animal:a.id, animalType:a.type, shift:'pm'});
     });
   }
-  if(profile.ratePerEntry!==false && milkA.length===0) cols.push({id:'rate',name:'Rate (₹/L)',type:'rate'});
   cols.push({id:'total',name:'Total (₹)',type:'total',locked:true});
   return cols;
 }
 
+// Rate/Fat cells store a combined "rate/fat" string (e.g. "52/4.2") so a
+// fat-based animal only needs one extra column per shift instead of two.
 function computeRowTotal(row,cols,profile){
   const milkCols=cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
-  if(profile.role==='farmer' && profile.ratePerEntry===false){
-    const animalTotals={};
-    milkCols.forEach(c=>{ const key=c.animal||'def'; if(!animalTotals[key])animalTotals[key]={qty:0,rate:c.animalRate||0}; animalTotals[key].qty+=parseFloat(row[c.id])||0; });
-    return parseFloat(Object.values(animalTotals).reduce((s,g)=>s+g.qty*g.rate,0).toFixed(2));
+  const legacyPerAnimalRateCols = cols.filter(c=>c.type==='rate_per_animal');
+  const hasRateFat = cols.some(c=>c.type==='ratefat');
+  if(!hasRateFat && legacyPerAnimalRateCols.length===0){
+    const flatRateCol = cols.find(c=>c.type==='rate');
+    if(flatRateCol){
+      const totalMilk=milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0),0);
+      const rate=parseFloat(row[flatRateCol.id])||0;
+      return parseFloat((totalMilk*rate).toFixed(2));
+    }
   }
-  const perAnimalRateCols = cols.filter(c=>c.type==='rate_per_animal');
-  if (perAnimalRateCols.length > 0) {
-      const animalTotals={};
-      milkCols.forEach(c=>{ const key=c.animal||'def'; if(!animalTotals[key])animalTotals[key]={qty:0, rate:0}; animalTotals[key].qty+=parseFloat(row[c.id])||0; });
-      perAnimalRateCols.forEach(c=>{ const key=c.animal; if(animalTotals[key]) animalTotals[key].rate = parseFloat(row[c.id])||0; });
-      return parseFloat(Object.values(animalTotals).reduce((s,g)=>s+(g.qty*g.rate),0).toFixed(2));
-  }
-  const rateCol=cols.find(c=>c.type==='rate'); const totalMilk=milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0),0);
-  const rate=rateCol?(parseFloat(row[rateCol.id])||0):0;
-  return parseFloat((totalMilk*rate).toFixed(2));
+  let total=0;
+  milkCols.forEach(c=>{
+    const qty=parseFloat(row[c.id])||0; if(!qty) return;
+    let rate=c.animalRate||0;
+    const shift = c.type==='milk_am' ? 'am' : 'pm';
+    const rfCol = cols.find(rc=>rc.type==='ratefat' && rc.animal===c.animal && rc.shift===shift);
+    if(rfCol){
+      const raw=(row[rfCol.id]||'').toString();
+      const parsed=parseFloat((raw.split('/')[0]||'').trim());
+      rate = isNaN(parsed) ? 0 : parsed;
+    } else {
+      const legacyCol = legacyPerAnimalRateCols.find(rc=>rc.animal===c.animal);
+      if(legacyCol){ const entered=row[legacyCol.id]; if(entered!=='' && entered!=null) rate=parseFloat(entered)||0; }
+    }
+    total += qty*rate;
+  });
+  return parseFloat(total.toFixed(2));
+}
+
+// Existing (unlocked) periods snapshot their columns at creation time via
+// createPage() -> defaultColumns(). Two profile changes can happen mid-period
+// that this snapshot never sees: adding a new animal, or changing an
+// animal's rate method (Fixed <-> Fat Based). Without this, the current
+// period silently keeps its old columns — looking like the feature is
+// broken — until the *next* period is created. Call this after either
+// change to backfill/rebuild the affected columns on every in-progress period.
+function syncActivePageColumns(){
+  const profile = DB.profile(); const pages = DB.pages(); let anyChanged=false;
+  pages.forEach(page => {
+    if (page.locked || page.trashed) return;
+    let changed = false;
+    const milkA = (profile.animals||[]).filter(a=>a.milks!==false);
+    milkA.forEach(a=>{
+      const isFat = a.rateMethod==='fat';
+      const amId='a_'+a.id+'_am', pmId='a_'+a.id+'_pm', amRfId='a_'+a.id+'_am_rf', pmRfId='a_'+a.id+'_pm_rf';
+      const insertAt = () => Math.max(page.cols.length-1, 0);
+      let amCol = page.cols.find(c=>c.id===amId);
+      if(!amCol){
+        amCol = {id:amId,name:a.name+' AM',type:'milk_am',animal:a.id,animalType:a.type,animalRate:a.rate,rateMethod:a.rateMethod};
+        page.cols.splice(insertAt(),0,amCol);
+        page.rows.forEach(r=>{ if(r[amId]===undefined) r[amId]=''; }); changed=true;
+      } else { amCol.rateMethod = a.rateMethod; amCol.animalRate = a.rate; }
+      if(isFat && !page.cols.find(c=>c.id===amRfId)){
+        page.cols.splice(page.cols.indexOf(amCol)+1,0,{id:amRfId,name:a.name+' AM Rate/Fat',type:'ratefat',animal:a.id,animalType:a.type,shift:'am'});
+        page.rows.forEach(r=>{ if(r[amRfId]===undefined) r[amRfId]=''; }); changed=true;
+      }
+      let pmCol = page.cols.find(c=>c.id===pmId);
+      if(!pmCol){
+        pmCol = {id:pmId,name:a.name+' PM',type:'milk_pm',animal:a.id,animalType:a.type,animalRate:a.rate,rateMethod:a.rateMethod};
+        page.cols.splice(insertAt(),0,pmCol);
+        page.rows.forEach(r=>{ if(r[pmId]===undefined) r[pmId]=''; }); changed=true;
+      } else { pmCol.rateMethod = a.rateMethod; pmCol.animalRate = a.rate; }
+      if(isFat && !page.cols.find(c=>c.id===pmRfId)){
+        page.cols.splice(page.cols.indexOf(pmCol)+1,0,{id:pmRfId,name:a.name+' PM Rate/Fat',type:'ratefat',animal:a.id,animalType:a.type,shift:'pm'});
+        page.rows.forEach(r=>{ if(r[pmRfId]===undefined) r[pmRfId]=''; }); changed=true;
+      }
+    });
+    if(changed){ page.rows.forEach(r=>r.total=computeRowTotal(r,page.cols,profile)); anyChanged=true; }
+  });
+  if(anyChanged) DB.savePages(pages);
 }
 
 function pageSummary(p){
@@ -2307,13 +2391,15 @@ function householdFullLedger(h){
 // Resolves the ₹/L rate that applies to one animal's column on one row,
 // following the same priority computeRowTotal uses: fixed auto-rate mode →
 // per-record rate entered for that animal → single page-wide rate column.
-function resolveAnimalRateForRow(row, page, profile, animalId, fallbackRate){
-  if(profile.role==='farmer' && profile.ratePerEntry===false) return fallbackRate||0;
-  const perAnimalRateCol = page.cols.find(c=>c.type==='rate_per_animal' && c.animal===animalId);
-  if(perAnimalRateCol) return parseFloat(row[perAnimalRateCol.id])||0;
+function resolveAnimalRateForRow(row, page, profile, col){
+  const shift = col.type==='milk_am' ? 'am' : 'pm';
+  const rfCol = page.cols.find(c=>c.type==='ratefat' && c.animal===col.animal && c.shift===shift);
+  if(rfCol){ const raw=(row[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); return isNaN(parsed)?0:parsed; }
+  const perAnimalRateCol = page.cols.find(c=>c.type==='rate_per_animal' && c.animal===col.animal);
+  if(perAnimalRateCol){ const entered=row[perAnimalRateCol.id]; if(entered!=='' && entered!=null) return parseFloat(entered)||0; }
   const rateCol = page.cols.find(c=>c.type==='rate');
   if(rateCol) return parseFloat(row[rateCol.id])||0;
-  return fallbackRate||0;
+  return col.animalRate||0;
 }
 
 // Per-day milk & amount for a milkmen record sheet (period page). Keeps AM
@@ -2330,7 +2416,7 @@ function pageDailyLedger(page){
     page.cols.forEach(c=>{
       if(c.type!=='milk_am' && c.type!=='milk_pm') return;
       const qty = parseFloat(r[c.id])||0; if(!qty) return;
-      const rate = resolveAnimalRateForRow(r, page, profile, c.animal, c.animalRate);
+      const rate = resolveAnimalRateForRow(r, page, profile, c);
       const key = rate.toFixed(2);
       const groups = c.type==='milk_am' ? amGroups : pmGroups;
       if(!groups[key]) groups[key] = { rate, qty:0 };
@@ -2750,9 +2836,9 @@ const LOG_TYPE_FILTERS = [
   {id:'delete', label:'🗑 Deleted'},
   {id:'info', label:'ℹ️ Info'}
 ];
-let editAnimalId=null,animalType='cow';
+let editAnimalId=null,animalType='cow',animalRateMethod='fixed';
 let detailPageIdx=0; 
-let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null;
+let editHouseholdId=null, hhExceptionTargetId=null, hhExpandedId=null, hhHistoryExpandedId=null, calcHHExpandedId=null, calcMilkmenPayExpanded=false;
 let touchStartX = 0, touchStartY = 0, touchEndX = 0, touchEndY = 0, swipeBlocked = false; const TAB_ORDER = ['home', 'graphs', 'calc', 'me'];
 // Exact-match lookup for a bottom-nav button by tab id. A substring match like
 // `[onclick*="me"]` is unsafe here because 'home' contains 'me' as a substring
@@ -2977,6 +3063,7 @@ function initApp() {
   const AUTH_BOOT_TIMEOUT_MS = 3500;
   Promise.race([authBootPromise, new Promise(res => setTimeout(res, AUTH_BOOT_TIMEOUT_MS))]).then(() => {
     const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
+    runAutoLockSweep();
     if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); renderObSetupButton(); } }); return; }
 
     const td = today(); const activePage = DB.pages().find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
@@ -3010,7 +3097,7 @@ function setObType(t) { Haptics.fire('tick'); obType = t; document.querySelector
 function addObAnimal() {
   const name = document.getElementById('ob-name').value.trim(); const rate = parseFloat(document.getElementById('ob-rate').value) || 0;
   if(!name) return appAlert('Notice', 'Please enter an animal name or ID to continue.');
-  obTempAnimals.push({id: uid(), name, type: obType, rate, milks: true}); document.getElementById('ob-name').value = ''; document.getElementById('ob-rate').value = ''; renderObAnimals();
+  obTempAnimals.push({id: uid(), name, type: obType, rate, rateMethod:'fixed', milks: true}); document.getElementById('ob-name').value = ''; document.getElementById('ob-rate').value = ''; renderObAnimals();
 }
 function renderObAnimals() {
   const list = document.getElementById('ob-animal-list'); if(!obTempAnimals.length) { list.innerHTML = ``; return; }
@@ -3020,7 +3107,7 @@ function finishOnboarding() {
   const dairyName = document.getElementById('ob-dairy-name').value.trim();
   if(!dairyName) return appAlert('Required Info', 'Please provide your Name or your Dairy Name before continuing.');
   if(obTempAnimals.length === 0) return appAlert('Required Info', 'Please add at least one milking animal to begin.');
-  const p = DB.profile(); p.name = dairyName; p.onboarded = true; p.ratePerEntry = false; p.animals = obTempAnimals; DB.saveProfile(p); DB.log(`Completed setup with ${obTempAnimals.length} animal(s).`, 'create');
+  const p = DB.profile(); p.name = dairyName; p.onboarded = true; p.animals = obTempAnimals; DB.saveProfile(p); DB.log(`Completed setup with ${obTempAnimals.length} animal(s).`, 'create');
   justOnboarded = true; document.getElementById('onboarding').classList.remove('active'); document.getElementById('onboarding').style.display = 'none'; openQuickEntry();
 }
 
@@ -3078,9 +3165,17 @@ function openQuickEntry(targetDate, forceIsPM) {
       const animalInfo = DB.profile().animals?.find(a => a.id === c.animal); const icon = animalInfo ? (aIcon[animalInfo.type]||'🥛') : '🥛';
       const animalName = animalInfo ? animalInfo.name : c.name.replace(' AM','').replace(' PM','');
       let rateHtml = '';
-      if (DB.profile().ratePerEntry !== false) {
-         const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
-         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || (animalInfo ? animalInfo.rate : '')}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/></div></div>`;
+      const shift = c.type==='milk_am' ? 'am' : 'pm';
+      if (c.rateMethod === 'fat') {
+         const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
+         if (rfCol) {
+           const stored = (row[rfCol.id]||'').split('/'); const storedRate = stored[0]||''; const storedFat = stored[1]||'';
+           rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rfCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${storedRate}" onclick="setNumpadTarget('qe-rate-${rfCol.id}')"/></div></div><div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px;"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Fat %</div><div class="row gap1"><input type="text" id="qe-fat-${rfCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${storedFat}" onclick="setNumpadTarget('qe-fat-${rfCol.id}')"/></div></div>`;
+         }
+      } else if (!animalInfo) {
+         // Legacy no-animals-configured fallback: a single flat rate column.
+         const rateCol = page.cols.find(col => col.type === 'rate');
+         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || ''}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/></div></div>`;
       }
       html += `<div class="qe-card"><div class="row gap3 w-100" style="justify-content:space-between;"><div class="row gap2"><span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span><div><div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${row[c.id] || ''}" onclick="setNumpadTarget('${inputId}')"/></div>${rateHtml}</div>`;
     });
@@ -3113,14 +3208,23 @@ function saveQuickEntry() {
     }
     if((row[c.id]||'') !== valStr) cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:c.id, from:row[c.id]||'', to:valStr});
     row[c.id] = valStr;
-    if (DB.profile().ratePerEntry !== false) {
-       const rateCol = page.cols.find(col => col.type === 'rate_per_animal' && col.animal === c.animal) || page.cols.find(col => col.type === 'rate');
+    const shift = c.type==='milk_am' ? 'am' : 'pm';
+    if (c.rateMethod === 'fat') {
+       const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
+       if (rfCol) {
+         const rateInput = document.getElementById(`qe-rate-${rfCol.id}`); const fatInput = document.getElementById(`qe-fat-${rfCol.id}`);
+         const rateVal = rateInput ? rateInput.value : ''; const fatVal = fatInput ? fatInput.value : '';
+         const combined = (rateVal !== '' || fatVal !== '') ? `${rateVal}/${fatVal}` : '';
+         if ((row[rfCol.id]||'') !== combined) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rfCol.id, from:row[rfCol.id]||'', to:combined}); row[rfCol.id] = combined; }
+       }
+    } else if (!DB.profile().animals?.find(a => a.id === c.animal)) {
+       const rateCol = page.cols.find(col => col.type === 'rate');
        if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
   DB.savePages(pages, {immediate:true});
-  if (rowIdx === page.rows.length - 1) maybeAutoCreateNextPage(page.id); 
+  if (rowIdx === page.rows.length - 1) { maybeAutoCreateNextPage(page.id); autoLockIfDue(page.id); }
   if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} milk for ${fmtDS(row.date)}: ${animalAmounts.join(', ')}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update', cellOps.length ? {kind:'multi', ops:cellOps} : null, 'light');
 
   const pTog = document.getElementById('qe-payment-toggle');
@@ -3139,6 +3243,7 @@ function openFullApp() {
 }
 
 function renderHome(){
+  runAutoLockSweep();
   const profile=DB.profile(); const el=document.getElementById('p-home');
   if(curDetailId) renderDetailView(el); else renderHomeContent(el);
 }
@@ -3295,7 +3400,7 @@ function buildCompactTable(page,profile,todayStr, filter){
   head1 += sys2.map(c => `<th rowspan="2" class="th-sys" style="text-align:right;">${c.name}</th>`).join('');
 
   let head2 = '';
-  animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => { let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':''; if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4); head2 += `<th class="${(cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : ''}">${sub}</th>`; }); });
+  animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => { let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.type==='ratefat'?(c.shift==='am'?'AM R/F':'PM R/F'):''; if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4); head2 += `<th class="${(cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : ''}">${sub}</th>`; }); });
   const thead = `<thead><tr>${head1}</tr><tr>${head2}</tr></thead>`;
 
   let totalMilk = 0, totalRev = 0;
@@ -3338,6 +3443,45 @@ function maybeAutoCreateNextPage(pageId){
   showToast(`New record started: ${newPg.label}`, true, 'light');
 }
 
+// A period is "complete" once its last day's final shift (PM, or AM if the
+// sheet has no PM columns) has something entered — not necessarily >0, since
+// an explicit 0 still means the shift was accounted for.
+function isPeriodComplete(page){
+  if(!page.rows.length) return false;
+  const lastRow = page.rows[page.rows.length-1];
+  if(lastRow.assignedDate !== page.endDate) return false;
+  const pmCols = page.cols.filter(c=>c.type==='milk_pm');
+  const amCols = page.cols.filter(c=>c.type==='milk_am');
+  const finalShiftCols = pmCols.length ? pmCols : amCols;
+  if(!finalShiftCols.length) return false;
+  return finalShiftCols.some(c => (lastRow[c.id]||'') !== '');
+}
+// Periods lock automatically so the milkmen ledger's "due" figure always
+// reflects settled, unchanging data:
+//  - the moment the period's last shift is filled in, it locks right away
+//  - otherwise it force-locks once a full day has passed since the *next*
+//    period started, so an incomplete period can't sit open indefinitely
+// Never touches an already-locked page, and never discards any entered data
+// — locking only flips the locked flag, rows/cols/totals are untouched.
+function autoLockIfDue(pageId){
+  const pages = DB.pages();
+  const page = pages.find(p=>p.id===pageId && !p.trashed);
+  if(!page || page.locked) return false;
+  const td = today();
+  let shouldLock=false, complete=false;
+  if(isPeriodComplete(page)){ shouldLock=true; complete=true; }
+  else if(td >= addDays(page.endDate, 2)){ shouldLock=true; }
+  if(!shouldLock) return false;
+  page.locked = true; page.clearedAt = new Date().toISOString(); page.autoLocked = true;
+  DB.savePages(pages, {immediate:true});
+  DB.log(complete ? `Auto-locked sheet (all entries complete): ${page.label}` : `Auto-locked sheet (grace period ended — entries may be incomplete): ${page.label}`, 'info');
+  return true;
+}
+function runAutoLockSweep(){
+  let any=false; DB.pages().filter(p=>!p.trashed && !p.locked).forEach(p=>{ if(autoLockIfDue(p.id)) any=true; });
+  return any;
+}
+
 function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0||pages[pi].locked)return;
   const ri=pages[pi].rows.findIndex(r=>r.id===rowId); if(ri<0)return;
@@ -3347,8 +3491,9 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile()); DB.savePages(pages, {immediate:isNewRecord});
   const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
   if((old||'0') !== (value||'0')) DB.log(`Changed ${colName} from ${old||'0'}${unit} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update', {kind:'cell', pageId, rowId, colId, from:old||'', to:value||''});
-  if (ri === pages[pi].rows.length - 1) maybeAutoCreateNextPage(pageId);
-  document.getElementById('table-container').innerHTML = buildCompactTable(pages[pi], DB.profile(), today(), currentTableFilter);
+  if (ri === pages[pi].rows.length - 1) { maybeAutoCreateNextPage(pageId); autoLockIfDue(pageId); }
+  const freshPage = DB.pages().find(p=>p.id===pageId) || pages[pi];
+  document.getElementById('table-container').innerHTML = buildCompactTable(freshPage, DB.profile(), today(), currentTableFilter);
 }
 
 function renderGraphs(){
@@ -3652,12 +3797,19 @@ function renderCalc(){
     if(milkRows.length >= 2){ const last = milkRows[milkRows.length-1].milk, prev = milkRows[milkRows.length-2].milk; if(last > prev * 1.05) { trendText = "Increasing ↗"; trendColor = "var(--success)"; } else if(last < prev * 0.95) { trendText = "Decreasing ↘"; trendColor = "var(--danger)"; } }
   }
 
-  // ── MILKMEN LEDGER ──
-  let milkmenEarned = 0, milkmenReceived = 0;
-  pages.forEach(p => { milkmenEarned += pageSummary(p).rev; });
-  DB.payments().forEach(p => { if(p.type==='received') milkmenReceived += parseFloat(p.amount)||0; });
+  // ── MILKMEN LEDGER ── Dues are calculated from LOCKED (cleared/completed)
+  // periods only — an ongoing/unlocked period can still change, so it's
+  // never counted as "due" until it locks.
+  const lockedPages = pages.filter(p=>p.locked), unlockedPages = pages.filter(p=>!p.locked);
+  let milkmenEarned = 0, milkmenPending = 0, milkmenReceived = 0;
+  lockedPages.forEach(p => { milkmenEarned += pageSummary(p).rev; });
+  unlockedPages.forEach(p => { milkmenPending += pageSummary(p).rev; });
+  const milkmenPayments = DB.payments().filter(p=>p.type==='received');
+  milkmenPayments.forEach(p => { milkmenReceived += parseFloat(p.amount)||0; });
   const exps = Store.get('mdn_expenses') || []; let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
   const milkmenNetBal = milkmenEarned - milkmenReceived - totalExp;
+  const milkmenPayExpanded = calcMilkmenPayExpanded;
+  const milkmenPaymentListHtml = !milkmenPayments.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : milkmenPayments.slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')">✕</button></div>`).join('');
 
   // ── CUSTOMERS LEDGER ──
   const hhSummary = householdAllTimeSummary(); const households = DB.households();
@@ -3696,12 +3848,23 @@ function renderCalc(){
 
    <div class="card mb4">
     <div class="slabel mb3">Main Dairy Ledger (Milkmen)</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">From your main record sheets. Payments logged via Quick Entry apply here.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">Dues below are calculated from <strong>locked (cleared) periods only</strong> — an ongoing period isn't counted as due until it locks.</div>
     <div class="sp2">
-     <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Billed (All Time)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(milkmenEarned)}</span></div>
+     <div class="payrow"><span style="font-size:18px;">⏳</span><div class="f1"><div style="font-weight:700;">Total Billed (Locked Periods)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(milkmenEarned)}</span></div>
+     ${milkmenPending > 0 ? `<div class="payrow"><span style="font-size:18px;">🕓</span><div class="f1"><div style="font-weight:700;">Ongoing (Not Yet Due)</div><div style="font-size:10px;color:var(--muted);">From unlocked period(s) — excluded above</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenPending)}</span></div>` : ''}
      <div class="payrow"><span style="font-size:18px;">💵</span><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenReceived)}</span></div>
      <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
      <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
+    </div>
+    <div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px; margin-top:10px;">
+     <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcMilkmenPayExpand()">
+      <div class="f1"><div style="font-weight:700;font-size:13px;">Payment History</div><div style="font-size:10px;color:var(--muted);">${milkmenPayments.length} payment(s) logged</div></div>
+      <span style="font-size:10px;color:var(--sub);margin-left:8px;">${milkmenPayExpanded?'▲':'▼'}</span>
+     </div>
+     ${milkmenPayExpanded ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+      ${milkmenPaymentListHtml}
+      <button class="btn bp bsm w-100" style="margin-top:8px;justify-content:center;" onclick="event.stopPropagation();openMilkmenPaymentModal()">💸 Add Payment</button>
+     </div>` : ''}
     </div>
    </div>
 
@@ -3740,6 +3903,7 @@ function renderCalc(){
 }
 
 function toggleCalcHHExpand(id){ calcHHExpandedId = (calcHHExpandedId===id) ? null : id; renderCalc(); }
+function toggleCalcMilkmenPayExpand(){ calcMilkmenPayExpanded = !calcMilkmenPayExpanded; renderCalc(); }
 function updCalc(){ const q=parseFloat(document.getElementById('cqty')?.value)||0; const r=parseFloat(document.getElementById('crate')?.value)||0; const el=document.getElementById('cresult'); if(el) el.textContent='₹'+(q*r).toFixed(2); }
 
 function openLogFromPicker(){
@@ -3892,10 +4056,9 @@ function renderMe(){
 
   html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;"><span style="font-size:13px;font-weight:700;">My Animals</span><button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div><div class="sp2">`;
   if(!(profile.animals||[]).length) html+=`<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No animals yet</div>`;
-  else profile.animals.forEach(a=>{ html+=`<div class="card2 row gap2"><span style="font-size:18px;">${aIcon[a.type]||'🥛'}</span><div class="f1"><div style="font-weight:700;font-size:13px;">${a.name}</div><div style="font-size:10px;color:var(--muted);">${a.type} · ${a.milks?'Milking · ₹'+(a.rate||'?')+'/L':'Not milking'}</div></div><button class="bic" style="width:26px;height:26px;font-size:11px;" onclick="openAnimalModal('${a.id}')">✎</button><button class="bic" style="width:26px;height:26px;font-size:13px;color:var(--danger);" onclick="removeAnimal('${a.id}')">×</button></div>`; });
+  else profile.animals.forEach(a=>{ html+=`<div class="card2 row gap2"><span style="font-size:18px;">${aIcon[a.type]||'🥛'}</span><div class="f1"><div style="font-weight:700;font-size:13px;">${a.name}</div><div style="font-size:10px;color:var(--muted);">${a.type} · ${a.milks?(a.rateMethod==='fat'?'Milking · Fat Based':'Milking · ₹'+(a.rate||'?')+'/L'):'Not milking'}</div></div><button class="bic" style="width:26px;height:26px;font-size:11px;" onclick="openAnimalModal('${a.id}')">✎</button><button class="bic" style="width:26px;height:26px;font-size:13px;color:var(--danger);" onclick="removeAnimal('${a.id}')">×</button></div>`; });
   html+=`</div></div>
    <div class="card"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Settings</div>
-    <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Enter rate per record</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">OFF = animal's saved rate used automatically</div></div><label class="tswitch"><input type="checkbox" ${profile.ratePerEntry!==false?'checked':''} onchange="setRatePref(this.checked)"/><div class="tslider"></div></label></div>
     ${Haptics.supported() ? `<div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Haptic Feedback</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Vibration on taps, saves, and alerts</div></div><label class="tswitch"><input type="checkbox" ${profile.hapticsEnabled!==false?'checked':''} onchange="setHapticsPref(this.checked)"/><div class="tslider"></div></label></div>` : ''}
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
@@ -3981,7 +4144,6 @@ function openSharedHisaabViewer(shareId){
 }
 function closeSharedHisaabViewer(){ cm('m-shared-view'); }
 function editName(){ const p=DB.profile(); appPrompt('Dairy name:', p.name).then(n => { if(!n?.trim()) return; p.name=n.trim(); DB.saveProfile(p); DB.log(`Changed dairy name to ${p.name}`, 'info'); renderMe(); }); }
-function setRatePref(v){ const p=DB.profile();p.ratePerEntry=v;DB.saveProfile(p); showToast('Preference saved.', true, 'light'); }
 function setHapticsPref(v){ const p=DB.profile(); p.hapticsEnabled=v; DB.saveProfile(p); if(v) Haptics.fire('medium'); showToast(v?'Haptic feedback on.':'Haptic feedback off.'); }
 function setShiftTime(v){ const p=DB.profile(); p.shiftTime=parseInt(v); DB.saveProfile(p); showToast('Shift time updated.', true, 'light'); renderMe(); }
 function openShiftTimePicker(current){
@@ -4024,37 +4186,41 @@ function openAnimalModal(id){
   if(!isNew){
     const a=profile.animals?.find(x=>x.id===id); if(a){
       document.getElementById('ma-name').value=a.name; setAT(a.type); document.getElementById('ma-milks').checked=a.milks!==false;
-      document.getElementById('ma-rate').value=a.rate||''; document.getElementById('ma-rate-row').style.display=a.milks!==false?'block':'none';
+      setRM(a.rateMethod==='fat'?'fat':'fixed');
+      document.getElementById('ma-rate').value=a.rate||''; document.getElementById('ma-rate-row').style.display=(a.milks!==false && animalRateMethod!=='fat')?'block':'none';
+      document.getElementById('ma-ratemethod-row').style.display=a.milks!==false?'block':'none';
       document.getElementById('ma-vax-date').value=a.vaxDate||''; document.getElementById('ma-vax-date-trigger').textContent = a.vaxDate ? fmtD(a.vaxDate) : 'Not Set';
       document.getElementById('ma-calving-date').value=a.calvingDate||''; document.getElementById('ma-calving-date-trigger').textContent = a.calvingDate ? fmtD(a.calvingDate) : 'Not Set';
       document.getElementById('ma-illness').value=a.illness||'';
     }
   } else {
-    document.getElementById('ma-name').value=''; setAT('cow'); document.getElementById('ma-milks').checked=true;
-    document.getElementById('ma-rate').value=''; document.getElementById('ma-rate-row').style.display='block';
+    document.getElementById('ma-name').value=''; setAT('cow'); document.getElementById('ma-milks').checked=true; setRM('fixed');
+    document.getElementById('ma-rate').value=''; document.getElementById('ma-rate-row').style.display='block'; document.getElementById('ma-ratemethod-row').style.display='block';
     document.getElementById('ma-vax-date').value=''; document.getElementById('ma-vax-date-trigger').textContent = 'Not Set';
     document.getElementById('ma-calving-date').value=''; document.getElementById('ma-calving-date-trigger').textContent = 'Not Set'; document.getElementById('ma-illness').value='';
   }
   om('m-animal');
 }
 function setAT(t){ Haptics.fire('tick'); animalType=t; document.querySelectorAll('#ma-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ma-'+t+'-btn').classList.add('on'); }
+function setRM(t){ Haptics.fire('tick'); animalRateMethod=t; document.querySelectorAll('#ma-ratemethods .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ma-rm-'+t+'-btn').classList.add('on'); document.getElementById('ma-rate-row').style.display=(document.getElementById('ma-milks').checked && t!=='fat')?'block':'none'; }
 async function doSaveAnimal() {
   const name = document.getElementById('ma-name').value.trim(); if (!name) { appAlert('Missing Field', 'Please enter an animal name.'); return; }
-  const milks = document.getElementById('ma-milks').checked; const rate = milks ? (parseFloat(document.getElementById('ma-rate').value) || 0) : 0;
+  const milks = document.getElementById('ma-milks').checked; const rateMethod = milks ? animalRateMethod : 'fixed';
+  const rate = (milks && rateMethod==='fixed') ? (parseFloat(document.getElementById('ma-rate').value) || 0) : 0;
   const vaxDate = document.getElementById('ma-vax-date')?.value || ''; const calvingDate = document.getElementById('ma-calving-date')?.value || ''; const illness = document.getElementById('ma-illness')?.value.trim() || '';
   const profile = DB.profile(); if (!profile.animals) profile.animals = []; const isNew = editAnimalId === 'new';
-  let oldRate = 0; if (!isNew) { const existing = profile.animals.find(a => a.id === editAnimalId); if (existing) oldRate = existing.rate || 0; }
-  const entry = { id: isNew ? uid() : editAnimalId, name, type: animalType, milks, rate, vaxDate, calvingDate, illness };
+  let oldRate = 0, oldRateMethod = 'fixed'; if (!isNew) { const existing = profile.animals.find(a => a.id === editAnimalId); if (existing) { oldRate = existing.rate || 0; oldRateMethod = existing.rateMethod==='fat'?'fat':'fixed'; } }
+  const entry = { id: isNew ? uid() : editAnimalId, name, type: animalType, milks, rate, rateMethod, vaxDate, calvingDate, illness };
   if (isNew) profile.animals.push(entry); else { const i = profile.animals.findIndex(a => a.id === editAnimalId); if (i >= 0) profile.animals[i] = entry; }
   DB.saveProfile(profile, {immediate:true}); DB.log(isNew ? `Added new animal: ${name}` : `Updated animal details for: ${name}`, 'create'); cm('m-animal');
-  if (!isNew && rate !== oldRate) {
+  syncActivePageColumns();
+  if (!isNew && rateMethod==='fixed' && oldRateMethod==='fixed' && rate !== oldRate) {
     const pages = DB.pages(); const activePage = pages.find(p => !p.locked && !p.trashed);
     if (activePage) {
        const doUpdate = await appConfirm('Update Current Period?', `You changed the rate from ₹${oldRate} to ₹${rate}. Apply this new rate to your ongoing active sheet?`);
        if (doUpdate) {
            activePage.cols.forEach(c => { if ((c.type === 'milk_am' || c.type === 'milk_pm') && c.animal === editAnimalId) c.animalRate = rate; });
-           const rateCol = activePage.cols.find(c => c.type === 'rate_per_animal' && c.animal === editAnimalId);
-           activePage.rows.forEach(r => { if (rateCol) { r[rateCol.id] = rate; } r.total = computeRowTotal(r, activePage.cols, profile); });
+           activePage.rows.forEach(r => { r.total = computeRowTotal(r, activePage.cols, profile); });
            DB.savePages(pages); showToast('Active period updated with the new rate.', true, 'light'); if (curDetailId === activePage.id) renderHome();
        }
     }
@@ -4196,6 +4362,29 @@ async function deleteHousehold(){
 }
 
 // ── CUSTOMER PAYMENTS LOGIC ──
+function openMilkmenPaymentModal() {
+  document.getElementById('mp-amount').value = '';
+  document.getElementById('mp-note').value = '';
+  document.getElementById('mp-date').value = today(); document.getElementById('mp-date-trigger').textContent = fmtD(today());
+  om('m-milkmen-payment');
+}
+function saveMilkmenPayment() {
+  const amount = parseFloat(document.getElementById('mp-amount').value) || 0;
+  if(amount <= 0) return appAlert('Error', 'Please enter a valid amount.');
+  const date = document.getElementById('mp-date').value || today();
+  const note = document.getElementById('mp-note').value.trim();
+  const payment = { id: uid(), type: 'received', amount, date, note: note || undefined };
+  const payments = DB.payments(); payments.unshift(payment); DB.savePayments(payments, {immediate:true});
+  DB.log(`Logged milkmen payment: ₹${amount}${note ? ' ('+note+')' : ''} for ${fmtDS(date)}`, 'payment', {kind:'payment', payment});
+  cm('m-milkmen-payment'); renderCalc();
+}
+async function deleteMilkmenPayment(pId) {
+  const agreed = await appConfirm('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the milkmen balance due.');
+  if(!agreed) return;
+  const payments = DB.payments().filter(p => p.id !== pId);
+  DB.savePayments(payments); DB.log('Removed milkmen payment record', 'delete'); renderCalc();
+}
+
 function openCustomerPaymentModal(hId) {
   const h = DB.households().find(x=>x.id===hId); if(!h) return;
   const stats = getCustomerStats(h);
