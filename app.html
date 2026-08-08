@@ -125,7 +125,7 @@ html[data-theme="light"]{
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync { z-index: 2000 !important; }
+#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
@@ -1992,13 +1992,13 @@ function importBackup(e) {
 // ══════════════════════════════════════════════════════════════════
 async function checkForIncomingShare(){
   const params = new URLSearchParams(location.search);
-  if (params.get('shared') !== '1') return;
+  if (params.get('shared') !== '1') return false;
   history.replaceState({}, '', location.pathname);
   try {
-    if (!('caches' in window)) return;
+    if (!('caches' in window)) return false;
     const cache = await caches.open('mdn-shared-incoming');
     const res = await cache.match('shared-file');
-    if (!res) return;
+    if (!res) return false;
     await cache.delete('shared-file');
     const text = await res.text();
 
@@ -2009,11 +2009,11 @@ async function checkForIncomingShare(){
       let shareObj = null; try { shareObj = JSON.parse(text.substring(sIdx + shareStart.length, eIdx).trim()); } catch(err) {}
       if (shareObj && shareObj.format === SHARE_FORMAT) {
         const rec = saveSharedHisaab(shareObj);
-        if (!DB.profile().onboarded) { showToast(`Saved a hisaab shared by ${rec.senderName} — finish setup to view it.`); return; }
+        if (!DB.profile().onboarded) { showToast(`Saved a hisaab shared by ${rec.senderName} — finish setup to view it.`); return true; }
         showToast(`Received hisaab from ${rec.senderName}.`);
         setMV('shared'); { const btn = tabBtn('me'); if(btn) goTab('me', btn); }
         openSharedHisaabViewer(rec.shareId);
-        return;
+        return true;
       }
     }
 
@@ -2025,13 +2025,14 @@ async function checkForIncomingShare(){
       if (payload && payload.format === BACKUP_FORMAT) {
         const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
         if (confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading...", true, 'light'); setTimeout(() => location.reload(), 1500); }
-        return;
+        return true;
       }
     }
     // Neither a shared-hisaab payload nor a full backup payload was found —
     // this is just some other PDF the person shared to the app by mistake.
     appAlert("No Data Found", "This PDF contains no data.");
-  } catch (err) { console.warn('Incoming share handling failed:', err); }
+    return true;
+  } catch (err) { console.warn('Incoming share handling failed:', err); return false; }
 }
 
 let currentTableFilter = 'all';
@@ -3077,10 +3078,15 @@ function initApp() {
   // — capped, so an offline device (or one that's never signed in) doesn't
   // sit on the splash screen waiting for a network call that'll never land.
   const AUTH_BOOT_TIMEOUT_MS = 3500;
-  Promise.race([authBootPromise, new Promise(res => setTimeout(res, AUTH_BOOT_TIMEOUT_MS))]).then(() => {
+  Promise.race([authBootPromise, new Promise(res => setTimeout(res, AUTH_BOOT_TIMEOUT_MS))]).then(async () => {
     const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
     runAutoLockSweep();
     if (!p.onboarded) { document.getElementById('app').style.display = 'none'; transitionTo(() => { const ob = document.getElementById('onboarding'); if (ob) { ob.classList.add('active'); setTimeout(() => ob.classList.add('start-anim'), 10); renderObSetupButton(); } }); return; }
+
+    // Resolve this BEFORE deciding whether to auto-open Quick Entry — a
+    // shared hisaab that just came in via the OS share sheet should show
+    // its own viewer, not get buried under the daily Quick Entry prompt.
+    const sharedHandled = await checkForIncomingShare();
 
     const td = today(); const activePage = DB.pages().find(pg => !pg.locked && td >= pg.startDate && td <= pg.endDate);
     let shiftHasData = false;
@@ -3088,7 +3094,8 @@ function initApp() {
       const row = activePage.rows.find(r => r.assignedDate === td);
       if(row) shiftHasData = activePage.cols.filter(c => c.type === (new Date().getHours() >= p.shiftTime ? 'milk_pm' : 'milk_am')).some(c => parseFloat(row[c.id]) > 0);
     }
-    if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); } 
+    if (sharedHandled) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); }
+    else if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); } 
     else { document.getElementById('app').style.display = 'none'; transitionTo(() => openQuickEntry()); }
     appLoaded = true; clearTimeout(initWatchdog);
   });
@@ -4023,10 +4030,9 @@ function renderMe(){
     if(typeof focusInfo.start==='number' && r.setSelectionRange){ try{ r.setSelectionRange(focusInfo.start, focusInfo.end); }catch(e){} }
   };
   const sharedCount = getSharedHisaabs().length;
-  const meBackBtn = meView!=='profile' ? `<button class="btn bg bsm" style="margin-right:8px;padding:6px 10px;" onclick="setMV('profile')" aria-label="Back to Profile">← Back</button>` : '';
-  const meTitle = meView==='logs' ? 'Activity Logs' : meView==='shared' ? 'Shared With You' : 'Profile';
-  let html=`<div class="ph row" style="justify-content:space-between;"><div class="row gap2" style="align-items:center;">${meBackBtn}<div><div class="eyebrow">Account</div><div class="ptitle">${meTitle}</div></div></div><div class="row gap2" style="flex-wrap:wrap;justify-content:flex-end;"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button><button class="btn ${meView==='shared'?'bp':'bg'} bsm" onclick="setMV('shared')">📥 Shared${sharedCount?' ('+sharedCount+')':''}</button></div></div>`;
-  if(meView==='shared'){ renderSharedHisaabList(el); return; }
+  const meTitle = meView==='logs' ? 'Logs' : meView==='shared' ? 'Shared' : 'Profile';
+  let html=`<div class="ph row" style="justify-content:space-between;"><div class="row gap2" style="align-items:center;min-width:0;overflow:hidden;flex-shrink:1;"><div style="min-width:0;overflow:hidden;"><div class="eyebrow">Account</div><div class="ptitle" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${meTitle}</div></div></div><div class="row gap2" style="flex-wrap:nowrap;flex-shrink:0;justify-content:flex-end;"><button class="btn ${meView==='profile'?'bp':'bg'} bsm" onclick="setMV('profile')">Profile</button><button class="btn ${meView==='logs'?'bp':'bg'} bsm" onclick="setMV('logs')">📋 Logs</button><button class="btn ${meView==='shared'?'bp':'bg'} bsm" onclick="setMV('shared')">📥 Shared${sharedCount?' ('+sharedCount+')':''}</button></div></div>`;
+  if(meView==='shared'){ renderSharedHisaabList(el, html); return; }
   if(meView==='logs'){
     const allLogs=DB.logs();
     let logs = allLogs;
@@ -4115,15 +4121,16 @@ function setMV(v){
 //  other people. Kept entirely separate from the user's own pages /
 //  households; nothing here is ever merged into their own records.
 // ══════════════════════════════════════════════════════════════════
-function renderSharedHisaabList(el){
+function renderSharedHisaabList(el, headerHtml=''){
   const list = getSharedHisaabs();
-  let html = `<div class="pc"><div class="card" style="text-align:center;color:var(--muted);font-size:12px;">Hisaabs other Smart Milking users share with you show up here — view-only, kept separate from your own records.</div></div>`;
+  let html = headerHtml;
+  html += `<div class="pc"><div class="card" style="text-align:center;color:var(--muted);font-size:12px;">Hisaabs other Smart Milking users share with you show up here — view-only, kept separate from your own records.</div></div>`;
   if(!list.length){
     html += `<div class="pc"><div class="empty"><div class="esub">Nothing shared with you yet.<br>When someone shares a period or customer hisaab PDF with you, it'll appear here.</div></div></div>`;
   } else {
     html += `<div class="pc sp2">` + list.map(r=>{
       const icon = r.kind==='household' ? '👤' : '📄';
-      return `<button class="card2 row gap2" style="width:100%;text-align:left;cursor:pointer;" onclick="openSharedHisaabViewer('${r.shareId}')">
+      return `<div class="card2 row gap2" style="width:100%;text-align:left;cursor:pointer;" role="button" tabindex="0" onclick="openSharedHisaabViewer('${r.shareId}')" onkeydown="if(event.key==='Enter'||event.key===' ')openSharedHisaabViewer('${r.shareId}')">
         <span style="font-size:20px;">${icon}</span>
         <div class="f1">
           <div style="font-weight:700;font-size:13px;">${r.title||'Shared Hisaab'}</div>
@@ -4131,7 +4138,7 @@ function renderSharedHisaabList(el){
           <div style="margin-top:5px;"><span class="badge" style="color:var(--success);border-color:var(--success);">🟢 Shared by ${r.senderName||'Unknown'}</span></div>
         </div>
         <button class="bic" style="width:26px;height:26px;font-size:13px;color:var(--danger);flex-shrink:0;" onclick="event.stopPropagation();confirmDeleteSharedHisaab('${r.shareId}')">×</button>
-      </button>`;
+      </div>`;
     }).join('') + `</div>`;
   }
   el.innerHTML = html;
@@ -4701,7 +4708,6 @@ async function editPageLength(pageId) {
 })();
 
 initApp();
-setTimeout(checkForIncomingShare, 1200);
 checkForPasswordResetLink();
 </script>
   <script type="module">
