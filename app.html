@@ -929,11 +929,11 @@ function saveSharedHisaab(shareObj){
   const existingIdx = list.findIndex(x=>x.shareId===shareObj.shareId);
   const record = Object.assign({}, shareObj, { receivedAt: new Date().toISOString() });
   if(existingIdx !== -1) list[existingIdx] = record; else list.unshift(record);
-  Store.set('mdn_shared_hisaabs', list);
+  Store.set('mdn_shared_hisaabs', list); cloudTouch('sharedHisaabs', true);
   return record;
 }
 function deleteSharedHisaab(shareId){
-  Store.set('mdn_shared_hisaabs', getSharedHisaabs().filter(x=>x.shareId!==shareId));
+  Store.set('mdn_shared_hisaabs', getSharedHisaabs().filter(x=>x.shareId!==shareId)); cloudTouch('sharedHisaabs', true);
 }
 
 const AutoBackup = {
@@ -1024,7 +1024,7 @@ const DB={
     const entry = {id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()};
     if(undoOp) entry.undoOp = undoOp;
     l.unshift(entry);
-    if(l.length>3000)l.splice(3000); Store.set('mdn_logs',l); AutoBackup.trigger();
+    if(l.length>3000)l.splice(3000); Store.set('mdn_logs',l); AutoBackup.trigger(); cloudTouch('logs');
     // Covers most save-confirmation haptics for free, keyed off the log type
     // almost every meaningful action already passes in. A call site can
     // still override the tier (e.g. Quick Entry's save is `light`, lighter
@@ -1036,11 +1036,10 @@ const DB={
 
 // ══════════════════════════════════════════════════════════════════
 //  CLOUD SYNC
-//  Whole-collection last-write-wins, decided per collection. Each of the 6
-//  collections below syncs as ONE Firestore document (users/{uid}/state/{key})
-//  rather than per-row — far simpler than a granular outbox, and plenty for
-//  one farmer's data across a couple of personal devices. Activity Logs stay
-//  device-local by design (large, low-value to sync, keeps doc size small).
+//  Whole-collection last-write-wins, decided per collection. Each synced
+//  collection is ONE Firestore document (users/{uid}/state/{key}) rather
+//  than per-row — far simpler than a granular outbox, and plenty for one
+//  farmer's data across a couple of personal devices.
 //
 //  Scope/limitation to be upfront about: this is last-write-wins at the
 //  collection level, decided on login + live listener updates — it does NOT
@@ -1050,11 +1049,17 @@ const DB={
 // ══════════════════════════════════════════════════════════════════
 let cloudUser = null;
 let cloudSyncStatus = 'signed-out'; // 'signed-out' | 'syncing' | 'synced' | 'error'
+let cloudMergeInFlight = false; // true from sign-in until cloudInitialMerge resolves — guards the onboarding finish button against racing ahead of the merge
 let cloudPushTimers = {};
 let cloudListeners = [];
 let cloudApplyingRemote = false; // true while writing data that just arrived FROM the cloud, so it doesn't loop back into another push
 
-const CLOUD_COLLECTIONS = { profile:'mdn_profile', pages:'mdn_pages', payments:'mdn_payments', trash:'mdn_trash', households:'mdn_households', expenses:'mdn_expenses' };
+const CLOUD_COLLECTIONS = { profile:'mdn_profile', pages:'mdn_pages', payments:'mdn_payments', trash:'mdn_trash', households:'mdn_households', expenses:'mdn_expenses', logs:'mdn_logs', sharedHisaabs:'mdn_shared_hisaabs', theme:'mdn_theme' };
+// mdn_analytics_cache and mdn_cloud_meta are deliberately excluded: the
+// former is a derived cache rebuilt from the collections above (syncing it
+// would just ship a stale blob that gets overwritten anyway), and the
+// latter is this device's own sync bookkeeping — syncing it would corrupt
+// the very mechanism that decides what to sync.
 
 function cloudLocalMeta(){ const m = Store.get('mdn_cloud_meta') || {}; if(!m.localUpdatedAt) m.localUpdatedAt = {}; return m; }
 function cloudMarkLocalTs(key, ts){ const m = cloudLocalMeta(); m.localUpdatedAt[key] = ts; Store.set('mdn_cloud_meta', m); }
@@ -1103,45 +1108,51 @@ async function cloudPushOne(key){
 // a device that's been used offline pushes its changes up.
 async function cloudInitialMerge(){
   if (!cloudUser || !window.CloudDB) return;
-  // If this device last synced to a DIFFERENT account (or was used offline
-  // under one), and still has real records sitting in local storage, merging
-  // blind could silently overwrite either side — this account's cloud data
-  // with stale leftovers from another account, or vice versa. Confirm first.
-  const meta0 = cloudLocalMeta();
-  if (meta0.lastUid && meta0.lastUid !== cloudUser.uid && cloudHasLocalData()) {
-    const proceed = await appConfirm(
-      'Overwrite existing data?',
-      `This device has local records that weren't synced to ${cloudUser.email}. Continuing will merge them in — whichever copy is newer, on this device or in the cloud, will overwrite the other for each type of record. Cancel to sign back out without changing anything.`
-    );
-    if (!proceed) {
-      try { await window.CloudAuth.signOutUser(); } catch (e) {}
-      return;
-    }
-  }
-  cloudSyncStatus = 'syncing'; renderCloudStatus();
-  const localMeta = cloudLocalMeta().localUpdatedAt;
-  let pulledAny = false;
+  cloudMergeInFlight = true; renderObSetupButton();
   try {
-    for (const key in CLOUD_COLLECTIONS) {
-      const remote = await window.CloudDB.getDoc(['users', cloudUser.uid, 'state', key]);
-      const localTs = localMeta[key] || 0;
-      if (remote && (remote.updatedAt || 0) > localTs) {
-        cloudApplyingRemote = true;
-        Store.set(CLOUD_COLLECTIONS[key], remote.data);
-        cloudApplyingRemote = false;
-        cloudMarkLocalTs(key, remote.updatedAt);
-        pulledAny = true;
-      } else {
-        await cloudPushOne(key);
+    // If this device last synced to a DIFFERENT account (or was used offline
+    // under one), and still has real records sitting in local storage, merging
+    // blind could silently overwrite either side — this account's cloud data
+    // with stale leftovers from another account, or vice versa. Confirm first.
+    const meta0 = cloudLocalMeta();
+    if (meta0.lastUid && meta0.lastUid !== cloudUser.uid && cloudHasLocalData()) {
+      const proceed = await appConfirm(
+        'Overwrite existing data?',
+        `This device has local records that weren't synced to ${cloudUser.email}. Continuing will merge them in — whichever copy is newer, on this device or in the cloud, will overwrite the other for each type of record. Cancel to sign back out without changing anything.`
+      );
+      if (!proceed) {
+        try { await window.CloudAuth.signOutUser(); } catch (e) {}
+        return;
       }
     }
-    if (pulledAny) { AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); showToast('Synced from cloud', true, 'light'); }
-    cloudSyncStatus = 'synced';
-    cloudSetLastUid(cloudUser.uid);
-    maybeSkipOnboardingAfterSync();
-  } catch (e) { cloudSyncStatus = 'error'; }
-  attachCloudListeners();
-  renderCloudStatus();
+    cloudSyncStatus = 'syncing'; renderCloudStatus();
+    const localMeta = cloudLocalMeta().localUpdatedAt;
+    let pulledAny = false;
+    try {
+      for (const key in CLOUD_COLLECTIONS) {
+        const remote = await window.CloudDB.getDoc(['users', cloudUser.uid, 'state', key]);
+        const localTs = localMeta[key] || 0;
+        if (remote && (remote.updatedAt || 0) > localTs) {
+          cloudApplyingRemote = true;
+          Store.set(CLOUD_COLLECTIONS[key], remote.data);
+          cloudApplyingRemote = false;
+          cloudMarkLocalTs(key, remote.updatedAt);
+          if (key === 'theme') themeMemory = null;
+          pulledAny = true;
+        } else {
+          await cloudPushOne(key);
+        }
+      }
+      if (pulledAny) { applyTheme(getThemePref()); AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe(); showToast('Synced from cloud', true, 'light'); }
+      cloudSyncStatus = 'synced';
+      cloudSetLastUid(cloudUser.uid);
+      maybeSkipOnboardingAfterSync();
+    } catch (e) { cloudSyncStatus = 'error'; }
+    attachCloudListeners();
+    renderCloudStatus();
+  } finally {
+    cloudMergeInFlight = false; renderObSetupButton();
+  }
 }
 
 // Live updates from another device, once merge has run once for this session.
@@ -1157,7 +1168,8 @@ function attachCloudListeners(){
       Store.set(CLOUD_COLLECTIONS[key], remote.data);
       cloudApplyingRemote = false;
       cloudMarkLocalTs(key, remote.updatedAt);
-      AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc();
+      if (key === 'theme') { themeMemory = null; applyTheme(getThemePref()); }
+      AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe();
       showToast('Updated from another device', true, 'light');
     });
     cloudListeners.push(unsub);
@@ -2013,8 +2025,12 @@ async function checkForIncomingShare(){
       if (payload && payload.format === BACKUP_FORMAT) {
         const confirmed = await appConfirm("Import Data?", "This will OVERWRITE your current app data entirely. Continue?");
         if (confirmed) { await restoreBackupPayload(payload); showToast("Import successful! Reloading...", true, 'light'); setTimeout(() => location.reload(), 1500); }
+        return;
       }
     }
+    // Neither a shared-hisaab payload nor a full backup payload was found —
+    // this is just some other PDF the person shared to the app by mistake.
+    appAlert("No Data Found", "This PDF contains no data.");
   } catch (err) { console.warn('Incoming share handling failed:', err); }
 }
 
@@ -3104,21 +3120,32 @@ function renderObAnimals() {
   list.innerHTML = obTempAnimals.map(a => `<div class="card2 row gap2" style="margin-bottom:8px; border-radius:16px;"><span style="font-size:24px;">${aIcon[a.type]||'🥛'}</span><div class="f1"><div style="font-weight:800; font-size:15px;">${a.name}</div><div style="font-size:11px;color:var(--muted);">Rate: ₹${a.rate}/L</div></div></div>`).join('');
 }
 function finishOnboarding() {
+  // Defense-in-depth: if we're signed in and the account turns out to
+  // already be a real, previously-onboarded profile (merge landed between
+  // the button re-enabling and this tap), don't overwrite it with the
+  // wizard's local state — just complete the skip-to-app transition.
+  if (cloudUser && DB.profile().onboarded) { maybeSkipOnboardingAfterSync(); return; }
   const dairyName = document.getElementById('ob-dairy-name').value.trim();
   if(!dairyName) return appAlert('Required Info', 'Please provide your Name or your Dairy Name before continuing.');
   if(obTempAnimals.length === 0) return appAlert('Required Info', 'Please add at least one milking animal to begin.');
-  const p = DB.profile(); p.name = dairyName; p.onboarded = true; p.animals = obTempAnimals; DB.saveProfile(p); DB.log(`Completed setup with ${obTempAnimals.length} animal(s).`, 'create');
+  const p = DB.profile(); p.name = dairyName; p.onboarded = true; p.animals = obTempAnimals; DB.saveProfile(p, {immediate:true}); DB.log(`Completed setup with ${obTempAnimals.length} animal(s).`, 'create');
   justOnboarded = true; document.getElementById('onboarding').classList.remove('active'); document.getElementById('onboarding').style.display = 'none'; openQuickEntry();
 }
 
 let justOnboarded = false; let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null, date: null, isBackfill: false };
-// Onboarding's finish button reads differently depending on whether the
-// person has signed in mid-setup: signed in, their data belongs to a real
-// account (so it just says "Continue"); otherwise it's explicit that
-// skipping sign-in means the records stay local-only on this device.
+// Onboarding's finish button reflects sign-in state — but signing in kicks
+// off an async cloud merge (checking whether this is actually a returning
+// account with real data) that takes a moment. If the button just flipped
+// straight to a tappable "Continue" the instant sign-in succeeded, a quick
+// tap could race ahead of that merge and finishOnboarding() would overwrite
+// a real account's saved animals with the (empty) local wizard state. So the
+// button shows a disabled "Signing in…" state for that in-between window,
+// and only becomes tappable once the merge has actually resolved.
 function renderObSetupButton(){
   const btn = document.getElementById('ob-finish-btn');
   if (!btn) return;
+  if (cloudUser && cloudMergeInFlight) { btn.textContent = 'Signing in…'; btn.disabled = true; return; }
+  btn.disabled = false;
   btn.textContent = cloudUser ? 'Continue ›' : 'Continue as Guest ›';
 }
 // If sign-in during onboarding pulls down an ALREADY-onboarded profile (i.e.
@@ -4171,7 +4198,7 @@ function applyTheme(pref){
   const themeColor = resolved === 'light' ? '#f4f4f2' : '#000000';
   document.querySelectorAll('meta[name="theme-color"], meta[name="background-color"]').forEach(m => m.setAttribute('content', themeColor));
 }
-function setThemePref(pref){ themeMemory = pref; Store.set('mdn_theme', pref); applyTheme(pref); showToast(`Theme set to ${THEME_LABELS[pref]}.`, true, 'light'); renderMe(); }
+function setThemePref(pref){ themeMemory = pref; Store.set('mdn_theme', pref); cloudTouch('theme', true); applyTheme(pref); showToast(`Theme set to ${THEME_LABELS[pref]}.`, true, 'light'); renderMe(); }
 function openThemePicker(){
   const opts = Object.keys(THEME_LABELS).map(k => ({ value: k, label: THEME_LABELS[k] }));
   openThemedSelect('Appearance', opts, getThemePref(), (value) => setThemePref(value));

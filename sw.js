@@ -2,7 +2,7 @@
 // Bump CACHE_VERSION on every deploy that changes app.html / index.html /
 // icons / manifest, otherwise users keep getting the old cached version
 // forever.
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = 'mdn-cache-' + CACHE_VERSION;
 
 // Everything needed to open and run the app with zero network.
@@ -31,7 +31,7 @@ async function handleShareTarget(event) {
   } catch (err) {
     console.warn('[SW] share target handling failed:', err);
   }
-  return Response.redirect('./index.html?shared=1', 303);
+  return Response.redirect('./app.html?shared=1', 303);
 }
 
 self.addEventListener('install', (event) => {
