@@ -337,7 +337,6 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
    simpler full-screen views) would otherwise fight this and double-scroll. */
 #m-period-preview{overflow:hidden !important;}
 #m-period-preview .preview-table-wrap{overflow:visible;}
-.preview-mtable thead{position:sticky;top:0;z-index:2;}
 .preview-mtable thead th{background:var(--bg1);}
 
 .preview-table-wrap table{font-size:14px;}
@@ -620,7 +619,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
       </div>
       <button class="mx" onclick="closePeriodPreview()">✕</button>
     </div>
-    <div id="preview-body" class="ptheme-classic" style="flex:1;min-height:0;overflow:auto;padding:14px 18px 18px;"></div>
+    <div id="preview-body" class="ptheme-classic" style="flex:1;min-height:0;overflow:hidden;padding:14px 18px 18px;"></div>
   </div>
 </div>
 
@@ -3662,13 +3661,35 @@ function buildMergedPreviewTable(page, todayStr){
 }
 function buildPeriodPreviewContent(page, profile, todayStr){
   const rotateHint = `<div class="preview-rotate-hint">🔄 Rotate your device sideways for the best view</div>`;
-  return `${rotateHint}<div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div>`;
+  return `${rotateHint}<div id="preview-scale-wrap"><div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div></div>`;
+}
+// No scrolling in the preview — instead the whole table (header through the
+// Period Grand Total row) is measured at its natural size, then uniformly
+// scaled down (never up) to exactly fit the space left in #preview-body, so
+// every row is visible on screen at once regardless of period length.
+function fitPreviewTableToScreen(){
+  const container = document.getElementById('preview-body');
+  const wrap = document.getElementById('preview-scale-wrap');
+  if(!container || !wrap) return;
+  wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = '';
+  const hintEl = container.querySelector('.preview-rotate-hint');
+  const hintH = hintEl ? hintEl.offsetHeight + 14 : 0;
+  const availH = container.clientHeight - hintH;
+  const availW = container.clientWidth;
+  const naturalH = wrap.scrollHeight, naturalW = wrap.scrollWidth;
+  if(naturalH<=0 || naturalW<=0 || availH<=0 || availW<=0) return;
+  const scale = Math.min(availH/naturalH, availW/naturalW, 1);
+  wrap.style.transformOrigin = 'top left';
+  wrap.style.transform = `scale(${scale})`;
+  wrap.style.width = naturalW + 'px';
+  wrap.style.height = (naturalH*scale) + 'px';
 }
 let previewTheme = Store.get('mdn_preview_theme') || 'classic';
 function setPreviewTheme(t){
   previewTheme = t; Haptics.fire('tick'); Store.set('mdn_preview_theme', t);
   const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
   document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
+  requestAnimationFrame(fitPreviewTableToScreen);
 }
 function openPeriodPreview(pageId){
   const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
@@ -3678,6 +3699,7 @@ function openPeriodPreview(pageId){
   document.getElementById('preview-body').className = 'ptheme-' + previewTheme;
   document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
   document.getElementById('m-period-preview').classList.add('active');
+  requestAnimationFrame(fitPreviewTableToScreen);
   // Best-effort only: fullscreen + a landscape nudge, both of which silently
   // no-op on browsers/contexts that don't support them (e.g. plain Safari).
   try { document.getElementById('m-period-preview').requestFullscreen?.().catch(()=>{}); } catch(e){}
@@ -3688,6 +3710,7 @@ function closePeriodPreview(){
   try { screen.orientation?.unlock?.(); } catch(e){}
   try { if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{}); } catch(e){}
 }
+window.addEventListener('resize', () => { if(document.getElementById('m-period-preview')?.classList.contains('active')) requestAnimationFrame(fitPreviewTableToScreen); });
 
 let currentAnimalSlideIdx = 0;
 function buildCompactTable(page,profile,todayStr, filter){
@@ -4566,9 +4589,33 @@ async function doSaveAnimal() {
   }
   renderMe();
 }
+// Drops an animal's columns from unlocked periods, but ONLY where nothing
+// was ever entered for it — a period with real data for that animal keeps
+// its columns untouched, since removing the animal from the profile
+// shouldn't erase history that's already been recorded. Locked periods are
+// never touched at all.
+function removeEmptyAnimalColumnsFromUnlockedPages(animalId){
+  const pages = DB.pages(); let changed = false;
+  pages.forEach(page=>{
+    if(page.locked || page.trashed) return;
+    const animalCols = page.cols.filter(c=>c.animal===animalId);
+    if(!animalCols.length) return;
+    const hasAnyData = page.rows.some(r=>animalCols.some(c=>{
+      const v = r[c.id]; return v!==undefined && v!==null && String(v).trim()!=='';
+    }));
+    if(hasAnyData) return;
+    const colIds = new Set(animalCols.map(c=>c.id));
+    page.cols = page.cols.filter(c=>!colIds.has(c.id));
+    page.rows.forEach(r=>{ colIds.forEach(id=>{ delete r[id]; }); r.total = computeRowTotal(r, page.cols, DB.profile()); });
+    changed = true;
+  });
+  if(changed) DB.savePages(pages, {immediate:true});
+}
 async function removeAnimal(id){
   const p=DB.profile(); const a=p.animals?.find(x=>x.id===id); const agreed = await appConfirm('Remove Animal?', 'Remove '+a?.name+'?'); if(!agreed) return;
-  p.animals=p.animals.filter(x=>x.id!==id); DB.saveProfile(p); DB.log(`Removed animal: ${a?.name}`, 'delete'); renderMe();
+  p.animals=p.animals.filter(x=>x.id!==id); DB.saveProfile(p); DB.log(`Removed animal: ${a?.name}`, 'delete');
+  removeEmptyAnimalColumnsFromUnlockedPages(id);
+  renderMe();
 }
 
 // ══════════════════════════════════════════════════════════════════
