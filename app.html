@@ -348,10 +348,12 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 /* YouTube-style overlay chrome: hidden by default, fades in on tap, and
    auto-hides again — so the table itself can use the full screen edge to
    edge instead of a permanent header bar eating into it. */
-.preview-controls{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;z-index:5;}
+.preview-controls{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .12s;z-index:5;}
 .preview-controls.visible{opacity:1;pointer-events:auto;}
-.preview-controls-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);}
-.preview-controls-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;background:linear-gradient(to top, rgba(0,0,0,0.7), transparent);}
+.preview-controls-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px 25px;gap:10px;flex-wrap:wrap;background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(to bottom, #000 55%, transparent);mask-image:linear-gradient(to bottom, #000 55%, transparent);}
+.preview-controls-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;background:linear-gradient(to top, rgba(0,0,0,0.55), transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(to top, #000 55%, transparent);mask-image:linear-gradient(to top, #000 55%, transparent);}
+.preview-controls-group{display:flex;gap:6px;flex-wrap:wrap;}
+.preview-controls-label{font-size:9px;font-weight:800;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.05em;width:100%;margin-bottom:2px;}
 
 .ptheme-tab{padding:6px 13px;border-radius:999px;border:1px solid rgba(255,255,255,0.3);font-size:11px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;}
 .ptheme-tab.active{background:#fff;color:#000;border-color:#fff;}
@@ -624,10 +626,25 @@ svg.chart{display:block;width:100%;overflow:visible;}
         <button class="mx" onclick="closePeriodPreview()">✕</button>
       </div>
       <div class="preview-controls-bottom" onclick="event.stopPropagation()">
-        <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
-        <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
-        <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
-        <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
+        <div style="width:100%;display:flex;flex-direction:column;gap:6px;">
+          <div>
+            <div class="preview-controls-label">Fit</div>
+            <div class="preview-controls-group">
+              <div class="ptheme-tab active" data-aspect="stretch" onclick="setPreviewAspect('stretch')">Stretch</div>
+              <div class="ptheme-tab" data-aspect="fit" onclick="setPreviewAspect('fit')">Fit</div>
+              <div class="ptheme-tab" data-aspect="adaptive" onclick="setPreviewAspect('adaptive')">Adaptive</div>
+            </div>
+          </div>
+          <div>
+            <div class="preview-controls-label">Theme</div>
+            <div class="preview-controls-group">
+              <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
+              <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
+              <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
+              <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -3673,10 +3690,15 @@ function buildPeriodPreviewContent(page, profile, todayStr){
   return `<div id="preview-scale-wrap"><div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div></div>`;
 }
 // No scrolling in the preview — instead the whole table (header through the
-// Period Grand Total row) is measured at its natural size, then STRETCHED
-// (scaled independently on each axis, not aspect-preserving) to exactly
-// fill #preview-content edge to edge, so it reaches all 4 corners of the
-// screen regardless of period length or column count.
+// Period Grand Total row) is measured at its natural size, then scaled to
+// fill #preview-content per the chosen aspect mode:
+//  - stretch:  scale X and Y independently — always fills all 4 corners,
+//              may distort row height vs column width if the ratios differ a lot
+//  - fit:      one uniform scale (the smaller of the two) — preserves the
+//              table's natural proportions, may letterbox with empty space
+//  - adaptive: stretch, but only when the two axes are already close enough
+//              (within 30%) that it won't look distorted — otherwise falls
+//              back to fit, like a "smart" middle ground between the two
 function fitPreviewTableToScreen(){
   const container = document.getElementById('preview-content');
   const wrap = document.getElementById('preview-scale-wrap');
@@ -3685,17 +3707,30 @@ function fitPreviewTableToScreen(){
   const availH = container.clientHeight, availW = container.clientWidth;
   const naturalH = wrap.scrollHeight, naturalW = wrap.scrollWidth;
   if(naturalH<=0 || naturalW<=0 || availH<=0 || availW<=0) return;
-  const scaleX = availW / naturalW, scaleY = availH / naturalH;
+  let scaleX = availW / naturalW, scaleY = availH / naturalH;
+  if(previewAspect === 'fit'){
+    scaleX = scaleY = Math.min(scaleX, scaleY);
+  } else if(previewAspect === 'adaptive'){
+    const ratio = scaleX > scaleY ? scaleX/scaleY : scaleY/scaleX;
+    if(ratio > 1.3){ scaleX = scaleY = Math.min(scaleX, scaleY); }
+  }
   wrap.style.transformOrigin = 'top left';
   wrap.style.transform = `scale(${scaleX}, ${scaleY})`;
   wrap.style.width = naturalW + 'px';
   wrap.style.height = naturalH + 'px';
 }
 let previewTheme = Store.get('mdn_preview_theme') || 'classic';
+let previewAspect = Store.get('mdn_preview_aspect') || 'stretch';
 function setPreviewTheme(t){
   previewTheme = t; Haptics.fire('tick'); Store.set('mdn_preview_theme', t);
   const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
-  document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
+  document.querySelectorAll('.ptheme-tab[data-theme]').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
+  requestAnimationFrame(fitPreviewTableToScreen);
+  showPreviewControls();
+}
+function setPreviewAspect(a){
+  previewAspect = a; Haptics.fire('tick'); Store.set('mdn_preview_aspect', a);
+  document.querySelectorAll('.ptheme-tab[data-aspect]').forEach(el=>el.classList.toggle('active', el.dataset.aspect===a));
   requestAnimationFrame(fitPreviewTableToScreen);
   showPreviewControls();
 }
@@ -3721,7 +3756,8 @@ function openPeriodPreview(pageId){
   document.getElementById('preview-title').textContent = `${fmtD(page.startDate)} – ${fmtD(page.endDate)}${page.locked?' 🔒 Locked':''}`;
   document.getElementById('preview-content').innerHTML = buildPeriodPreviewContent(page, profile, today());
   document.getElementById('preview-body').className = 'ptheme-' + previewTheme;
-  document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
+  document.querySelectorAll('.ptheme-tab[data-theme]').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
+  document.querySelectorAll('.ptheme-tab[data-aspect]').forEach(el=>el.classList.toggle('active', el.dataset.aspect===previewAspect));
   document.getElementById('m-period-preview').classList.add('active');
   showPreviewControls();
   requestAnimationFrame(fitPreviewTableToScreen);
@@ -4446,6 +4482,7 @@ function renderMe(){
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Full-Screen Preview Theme</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Default color style when previewing a period</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openPreviewThemePicker()">${PREVIEW_THEME_LABELS[previewTheme]}</button></div>
+    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Full-Screen Preview Fit</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">How the table scales to the screen</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openPreviewAspectPicker()">${PREVIEW_ASPECT_LABELS[previewAspect]}</button></div>
    </div>
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
@@ -4564,6 +4601,11 @@ const PREVIEW_THEME_LABELS = { classic:'Classic', color:'Colorful', contrast:'Co
 function openPreviewThemePicker(){
   const opts = Object.keys(PREVIEW_THEME_LABELS).map(k => ({ value: k, label: PREVIEW_THEME_LABELS[k] }));
   openThemedSelect('Full-Screen Preview Theme', opts, previewTheme, (value) => { setPreviewTheme(value); renderMe(); });
+}
+const PREVIEW_ASPECT_LABELS = { stretch:'Stretch', fit:'Fit', adaptive:'Adaptive' };
+function openPreviewAspectPicker(){
+  const opts = Object.keys(PREVIEW_ASPECT_LABELS).map(k => ({ value: k, label: PREVIEW_ASPECT_LABELS[k] }));
+  openThemedSelect('Full-Screen Preview Fit', opts, previewAspect, (value) => { setPreviewAspect(value); renderMe(); });
 }
 if (window.matchMedia) {
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (getThemePref() === 'system') applyTheme('system'); });
