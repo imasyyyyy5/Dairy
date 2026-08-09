@@ -345,11 +345,16 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .preview-table-wrap tfoot td{font-size:14px;padding:11px 7px;}
 .preview-mtable th.th-group{background:var(--bg2);}
 
-.ptheme-tab{padding:6px 13px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;}
-.ptheme-tab.active{background:var(--fg);color:var(--bg);border-color:var(--fg);}
+/* YouTube-style overlay chrome: hidden by default, fades in on tap, and
+   auto-hides again — so the table itself can use the full screen edge to
+   edge instead of a permanent header bar eating into it. */
+.preview-controls{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;z-index:5;}
+.preview-controls.visible{opacity:1;pointer-events:auto;}
+.preview-controls-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);}
+.preview-controls-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;background:linear-gradient(to top, rgba(0,0,0,0.7), transparent);}
 
-.preview-rotate-hint{display:none;align-items:center;gap:8px;background:rgba(232,184,0,0.12);color:#e8b800;padding:9px 13px;border-radius:10px;font-size:12px;font-weight:700;margin-bottom:14px;}
-@media (orientation: portrait) { .preview-rotate-hint{display:flex;} }
+.ptheme-tab{padding:6px 13px;border-radius:999px;border:1px solid rgba(255,255,255,0.3);font-size:11px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;}
+.ptheme-tab.active{background:#fff;color:#000;border-color:#fff;}
 
 /* Colorful theme: shaded animal-group headers + alternating row bands */
 #preview-body.ptheme-color .preview-mtable th.th-group{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;}
@@ -359,18 +364,20 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 /* Contrast and Sepia force a specific page background — so unlike Colorful
    (which just layers onto the app's existing dark/light theme), these two
    must ALSO override every dark-tuned class the base table CSS uses
-   (row banding, .tsr, .ttot/.ttote, th.th-group) or that text stays styled
-   for a dark background and becomes unreadable against the new one. */
+   (row banding, .tsr, .ttot/.ttote, th.th-group, and the tfoot ROW itself —
+   tfoot tr has its own explicit dark background separate from its td text
+   color, which is what left the Grand Total row unreadable) or that text
+   stays styled for a dark background and becomes unreadable against the new one. */
 #preview-body.ptheme-contrast{background:#fff;}
 #preview-body.ptheme-contrast .preview-mtable{color:#000 !important;}
 #preview-body.ptheme-contrast .preview-mtable th, #preview-body.ptheme-contrast .preview-mtable td{color:#000 !important;border:1px solid #000 !important;}
 #preview-body.ptheme-contrast .preview-mtable th{background:#000 !important;color:#fff !important;}
 #preview-body.ptheme-contrast .preview-mtable tbody tr:nth-child(even){background:#f0f0f0 !important;}
 #preview-body.ptheme-contrast .preview-mtable tbody tr:nth-child(odd){background:#fff !important;}
+#preview-body.ptheme-contrast .preview-mtable tfoot tr{background:#e0e0e0 !important;}
 #preview-body.ptheme-contrast .preview-mtable .tsr{color:#000 !important;}
 #preview-body.ptheme-contrast .preview-mtable .ttot{color:#000 !important;}
 #preview-body.ptheme-contrast .preview-mtable .ttote{color:#888 !important;}
-#preview-body.ptheme-contrast .preview-rotate-hint{background:#fff3cd;color:#664d03;}
 
 #preview-body.ptheme-sepia{background:#f4ecd8;}
 #preview-body.ptheme-sepia .preview-mtable{color:#5b4636 !important;}
@@ -378,6 +385,7 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 #preview-body.ptheme-sepia .preview-mtable th{background:#e8dcc0 !important;}
 #preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(even){background:rgba(201,184,150,0.22) !important;}
 #preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(odd){background:#f4ecd8 !important;}
+#preview-body.ptheme-sepia .preview-mtable tfoot tr{background:#dcc9a3 !important;}
 #preview-body.ptheme-sepia .preview-mtable .tsr{color:#5b4636 !important;}
 #preview-body.ptheme-sepia .preview-mtable .ttot{color:#5b4636 !important;}
 #preview-body.ptheme-sepia .preview-mtable .ttote{color:#a8927a !important;}
@@ -605,21 +613,23 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </div>
 
 <div id="m-period-preview" class="full-overlay" style="padding:0;">
-  <div style="display:flex;flex-direction:column;height:100%;">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;flex-wrap:wrap;">
-      <div>
-        <div class="eyebrow">Full-Screen Preview</div>
-        <div class="ptitle" id="preview-title" style="font-size:16px;">Period</div>
+  <div id="preview-body" class="ptheme-classic" style="position:relative;width:100%;height:100%;overflow:hidden;" onclick="togglePreviewControls()">
+    <div id="preview-content" style="position:absolute;inset:0;padding:4px;overflow:hidden;"></div>
+    <div id="preview-controls" class="preview-controls visible">
+      <div class="preview-controls-top" onclick="event.stopPropagation()">
+        <div>
+          <div class="eyebrow" style="color:#fff;">Full-Screen Preview</div>
+          <div class="ptitle" id="preview-title" style="font-size:16px;color:#fff;">Period</div>
+        </div>
+        <button class="mx" onclick="closePeriodPreview()">✕</button>
       </div>
-      <div class="row gap2" style="flex-wrap:wrap;">
+      <div class="preview-controls-bottom" onclick="event.stopPropagation()">
         <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
         <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
         <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
         <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
       </div>
-      <button class="mx" onclick="closePeriodPreview()">✕</button>
     </div>
-    <div id="preview-body" class="ptheme-classic" style="flex:1;min-height:0;overflow:hidden;padding:14px 18px 18px;"></div>
   </div>
 </div>
 
@@ -3660,29 +3670,26 @@ function buildMergedPreviewTable(page, todayStr){
   return `<table class="preview-mtable"><thead><tr>${row1}</tr><tr>${row2}</tr><tr>${row3}</tr></thead><tbody>${bodyRows}</tbody><tfoot><tr>${foot}</tr></tfoot></table>`;
 }
 function buildPeriodPreviewContent(page, profile, todayStr){
-  const rotateHint = `<div class="preview-rotate-hint">🔄 Rotate your device sideways for the best view</div>`;
-  return `${rotateHint}<div id="preview-scale-wrap"><div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div></div>`;
+  return `<div id="preview-scale-wrap"><div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div></div>`;
 }
 // No scrolling in the preview — instead the whole table (header through the
-// Period Grand Total row) is measured at its natural size, then uniformly
-// scaled down (never up) to exactly fit the space left in #preview-body, so
-// every row is visible on screen at once regardless of period length.
+// Period Grand Total row) is measured at its natural size, then STRETCHED
+// (scaled independently on each axis, not aspect-preserving) to exactly
+// fill #preview-content edge to edge, so it reaches all 4 corners of the
+// screen regardless of period length or column count.
 function fitPreviewTableToScreen(){
-  const container = document.getElementById('preview-body');
+  const container = document.getElementById('preview-content');
   const wrap = document.getElementById('preview-scale-wrap');
   if(!container || !wrap) return;
   wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = '';
-  const hintEl = container.querySelector('.preview-rotate-hint');
-  const hintH = hintEl ? hintEl.offsetHeight + 14 : 0;
-  const availH = container.clientHeight - hintH;
-  const availW = container.clientWidth;
+  const availH = container.clientHeight, availW = container.clientWidth;
   const naturalH = wrap.scrollHeight, naturalW = wrap.scrollWidth;
   if(naturalH<=0 || naturalW<=0 || availH<=0 || availW<=0) return;
-  const scale = Math.min(availH/naturalH, availW/naturalW, 1);
+  const scaleX = availW / naturalW, scaleY = availH / naturalH;
   wrap.style.transformOrigin = 'top left';
-  wrap.style.transform = `scale(${scale})`;
+  wrap.style.transform = `scale(${scaleX}, ${scaleY})`;
   wrap.style.width = naturalW + 'px';
-  wrap.style.height = (naturalH*scale) + 'px';
+  wrap.style.height = naturalH + 'px';
 }
 let previewTheme = Store.get('mdn_preview_theme') || 'classic';
 function setPreviewTheme(t){
@@ -3690,16 +3697,35 @@ function setPreviewTheme(t){
   const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
   document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
   requestAnimationFrame(fitPreviewTableToScreen);
+  showPreviewControls();
+}
+// YouTube-style chrome: visible when the preview opens, tap anywhere to
+// toggle, and auto-hides itself after a few seconds so the table gets the
+// full screen. Tapping a control inside it (theme pill, close) stops the
+// tap from propagating to the toggle handler and just resets the timer.
+let previewControlsTimer = null;
+function showPreviewControls(){
+  const el = document.getElementById('preview-controls'); if(!el) return;
+  el.classList.add('visible');
+  clearTimeout(previewControlsTimer);
+  previewControlsTimer = setTimeout(()=>{ el.classList.remove('visible'); }, 3000);
+}
+function togglePreviewControls(){
+  const el = document.getElementById('preview-controls'); if(!el) return;
+  if(el.classList.contains('visible')){ el.classList.remove('visible'); clearTimeout(previewControlsTimer); }
+  else showPreviewControls();
 }
 function openPeriodPreview(pageId){
   const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
   const profile = DB.profile();
   document.getElementById('preview-title').textContent = `${fmtD(page.startDate)} – ${fmtD(page.endDate)}${page.locked?' 🔒 Locked':''}`;
-  document.getElementById('preview-body').innerHTML = buildPeriodPreviewContent(page, profile, today());
+  document.getElementById('preview-content').innerHTML = buildPeriodPreviewContent(page, profile, today());
   document.getElementById('preview-body').className = 'ptheme-' + previewTheme;
   document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
   document.getElementById('m-period-preview').classList.add('active');
+  showPreviewControls();
   requestAnimationFrame(fitPreviewTableToScreen);
+  if (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) showToast('Rotate your device sideways for the best view', true, 'light');
   // Best-effort only: fullscreen + a landscape nudge, both of which silently
   // no-op on browsers/contexts that don't support them (e.g. plain Safari).
   try { document.getElementById('m-period-preview').requestFullscreen?.().catch(()=>{}); } catch(e){}
@@ -3707,6 +3733,7 @@ function openPeriodPreview(pageId){
 }
 function closePeriodPreview(){
   document.getElementById('m-period-preview').classList.remove('active');
+  clearTimeout(previewControlsTimer);
   try { screen.orientation?.unlock?.(); } catch(e){}
   try { if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{}); } catch(e){}
 }
