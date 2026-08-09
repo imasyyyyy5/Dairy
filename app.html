@@ -124,7 +124,7 @@ html[data-theme="light"]{
 /* Z-INDEX HIERARCHY */
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
-#onboarding, #quick-entry { z-index: 1000 !important; }
+#onboarding, #quick-entry, #m-period-preview { z-index: 1000 !important; }
 #m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
@@ -322,6 +322,45 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 }
 .finp:focus{background:var(--bg2); border-color:var(--fg);}
 .finp:disabled{opacity:.35;cursor:not-allowed;}
+.finp-narrow{max-width:32px; font-size:10px; padding:8px 1px;}
+
+.animal-tabs{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;}
+.animal-tabs::-webkit-scrollbar{display:none;}
+.animal-tab{flex-shrink:0;padding:6px 13px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;transition:.15s;}
+.animal-tab.active{background:var(--fg);color:var(--bg);border-color:var(--fg);}
+.animal-carousel{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:10px;}
+.animal-carousel::-webkit-scrollbar{display:none;}
+.animal-slide{flex:0 0 100%;scroll-snap-align:start;transition:opacity .2s;}
+
+.preview-table-wrap{overflow-x:auto;}
+.preview-table-wrap table{font-size:14px;}
+.preview-table-wrap th{font-size:11px;padding:9px 7px;}
+.preview-table-wrap td{padding:9px 7px;font-size:14px;}
+.preview-table-wrap tfoot td{font-size:14px;padding:11px 7px;}
+.preview-mtable th.th-group{background:var(--bg2);}
+
+.ptheme-tab{padding:6px 13px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;}
+.ptheme-tab.active{background:var(--fg);color:var(--bg);border-color:var(--fg);}
+
+.preview-rotate-hint{display:none;align-items:center;gap:8px;background:rgba(232,184,0,0.12);color:#e8b800;padding:9px 13px;border-radius:10px;font-size:12px;font-weight:700;margin-bottom:14px;}
+@media (orientation: portrait) { .preview-rotate-hint{display:flex;} }
+
+/* Colorful theme: shaded animal-group headers + alternating row bands */
+#preview-body.ptheme-color .preview-mtable th.th-group{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;}
+#preview-body.ptheme-color .preview-mtable tbody tr:nth-child(even){background:rgba(99,102,241,0.08);}
+#preview-body.ptheme-color .preview-mtable .ttot{color:#22c55e;}
+
+/* Contrast theme: pure black/white, thick borders, for bright outdoor light */
+#preview-body.ptheme-contrast{background:#fff;}
+#preview-body.ptheme-contrast .preview-mtable, #preview-body.ptheme-contrast .preview-mtable th, #preview-body.ptheme-contrast .preview-mtable td{color:#000 !important;border:1.5px solid #000 !important;}
+#preview-body.ptheme-contrast .preview-mtable th{background:#000 !important;color:#fff !important;}
+#preview-body.ptheme-contrast .preview-rotate-hint{background:#fff3cd;color:#664d03;}
+
+/* Sepia theme: warm paper tones, closer to a printed ledger */
+#preview-body.ptheme-sepia{background:#f4ecd8;}
+#preview-body.ptheme-sepia .preview-mtable, #preview-body.ptheme-sepia .preview-mtable td{color:#5b4636 !important;border-color:#c9b896 !important;}
+#preview-body.ptheme-sepia .preview-mtable th{background:#e8dcc0 !important;color:#5b4636 !important;border-color:#c9b896 !important;}
+#preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(even){background:rgba(201,184,150,0.18);}
 
 .mbox{background:var(--bg1);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;width:100%;max-width:500px;margin:0 auto;padding:20px;transform:translateY(16px);transition:transform .25s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto;}
 .moverlay.open .mbox{transform:translateY(0);}
@@ -543,6 +582,25 @@ svg.chart{display:block;width:100%;overflow:visible;}
       <button class="btn bp" id="ob-finish-btn" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()">Continue as Guest ›</button>
   </div>
  </div>
+</div>
+
+<div id="m-period-preview" class="full-overlay" style="padding:0;">
+  <div style="display:flex;flex-direction:column;height:100%;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;flex-wrap:wrap;">
+      <div>
+        <div class="eyebrow">Full-Screen Preview</div>
+        <div class="ptitle" id="preview-title" style="font-size:16px;">Period</div>
+      </div>
+      <div class="row gap2" style="flex-wrap:wrap;">
+        <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
+        <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
+        <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
+        <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
+      </div>
+      <button class="mx" onclick="closePeriodPreview()">✕</button>
+    </div>
+    <div id="preview-body" class="ptheme-classic" style="flex:1;overflow:auto;padding:18px;"></div>
+  </div>
 </div>
 
 <div id="quick-entry" class="full-overlay">
@@ -1567,8 +1625,10 @@ const AnalyticsEngine = {
                    const name = c.name.replace(/( AM| PM| Rate).*/, '');
                    let rate = 0;
                    const shift = c.type==='milk_am' ? 'am' : 'pm';
+                   const rateCol = p.cols.find(col => col.type === 'rate_shift' && col.animal === c.animal && col.shift === shift);
                    const rfCol = p.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
-                   if(rfCol){ const raw=(r[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); rate = isNaN(parsed)?0:parsed; }
+                   if(rateCol){ const v2 = parseFloat(r[rateCol.id]); rate = isNaN(v2) ? 0 : v2; }
+                   else if(rfCol){ const raw=(r[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); rate = isNaN(parsed)?0:parsed; }
                    else {
                      const rCol = p.cols.find(col => (col.type === 'rate_per_animal' && col.animal === c.animal) || col.type === 'rate');
                      if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
@@ -2204,22 +2264,32 @@ function defaultColumns(profile){
     milkA.forEach(a=>{
       const isFat = a.rateMethod==='fat';
       cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate, rateMethod:a.rateMethod});
-      if(isFat) cols.push({id:'a_'+a.id+'_am_rf', name:a.name+' AM Rate/Fat', type:'ratefat', animal:a.id, animalType:a.type, shift:'am'});
+      if(isFat){
+        cols.push({id:'a_'+a.id+'_am_rate', name:a.name+' AM Rate', type:'rate_shift', animal:a.id, animalType:a.type, shift:'am'});
+        cols.push({id:'a_'+a.id+'_am_fat', name:a.name+' AM Fat', type:'fat_shift', animal:a.id, animalType:a.type, shift:'am'});
+      }
       cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate, rateMethod:a.rateMethod});
-      if(isFat) cols.push({id:'a_'+a.id+'_pm_rf', name:a.name+' PM Rate/Fat', type:'ratefat', animal:a.id, animalType:a.type, shift:'pm'});
+      if(isFat){
+        cols.push({id:'a_'+a.id+'_pm_rate', name:a.name+' PM Rate', type:'rate_shift', animal:a.id, animalType:a.type, shift:'pm'});
+        cols.push({id:'a_'+a.id+'_pm_fat', name:a.name+' PM Fat', type:'fat_shift', animal:a.id, animalType:a.type, shift:'pm'});
+      }
     });
   }
   cols.push({id:'total',name:'Total (₹)',type:'total',locked:true});
   return cols;
 }
 
-// Rate/Fat cells store a combined "rate/fat" string (e.g. "52/4.2") so a
-// fat-based animal only needs one extra column per shift instead of two.
+// Rate and Fat are two separate narrow columns per shift (not a combined
+// "rate/fat" cell) — older pages created before this change may still carry
+// the old combined 'ratefat' column or the even older 'rate_per_animal'
+// column; both are still read here so historical periods keep totalling
+// correctly without needing a data migration.
 function computeRowTotal(row,cols,profile){
   const milkCols=cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
   const legacyPerAnimalRateCols = cols.filter(c=>c.type==='rate_per_animal');
-  const hasRateFat = cols.some(c=>c.type==='ratefat');
-  if(!hasRateFat && legacyPerAnimalRateCols.length===0){
+  const legacyRateFatCols = cols.filter(c=>c.type==='ratefat');
+  const hasShiftRate = cols.some(c=>c.type==='rate_shift');
+  if(!hasShiftRate && legacyRateFatCols.length===0 && legacyPerAnimalRateCols.length===0){
     const flatRateCol = cols.find(c=>c.type==='rate');
     if(flatRateCol){
       const totalMilk=milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0),0);
@@ -2232,14 +2302,19 @@ function computeRowTotal(row,cols,profile){
     const qty=parseFloat(row[c.id])||0; if(!qty) return;
     let rate=c.animalRate||0;
     const shift = c.type==='milk_am' ? 'am' : 'pm';
-    const rfCol = cols.find(rc=>rc.type==='ratefat' && rc.animal===c.animal && rc.shift===shift);
-    if(rfCol){
-      const raw=(row[rfCol.id]||'').toString();
-      const parsed=parseFloat((raw.split('/')[0]||'').trim());
-      rate = isNaN(parsed) ? 0 : parsed;
+    const rateCol = cols.find(rc=>rc.type==='rate_shift' && rc.animal===c.animal && rc.shift===shift);
+    if(rateCol){
+      const v = parseFloat(row[rateCol.id]); if(!isNaN(v)) rate = v;
     } else {
-      const legacyCol = legacyPerAnimalRateCols.find(rc=>rc.animal===c.animal);
-      if(legacyCol){ const entered=row[legacyCol.id]; if(entered!=='' && entered!=null) rate=parseFloat(entered)||0; }
+      const rfCol = legacyRateFatCols.find(rc=>rc.animal===c.animal && rc.shift===shift);
+      if(rfCol){
+        const raw=(row[rfCol.id]||'').toString();
+        const parsed=parseFloat((raw.split('/')[0]||'').trim());
+        rate = isNaN(parsed) ? 0 : parsed;
+      } else {
+        const legacyCol = legacyPerAnimalRateCols.find(rc=>rc.animal===c.animal);
+        if(legacyCol){ const entered=row[legacyCol.id]; if(entered!=='' && entered!=null) rate=parseFloat(entered)||0; }
+      }
     }
     total += qty*rate;
   });
@@ -2261,7 +2336,8 @@ function syncActivePageColumns(){
     const milkA = (profile.animals||[]).filter(a=>a.milks!==false);
     milkA.forEach(a=>{
       const isFat = a.rateMethod==='fat';
-      const amId='a_'+a.id+'_am', pmId='a_'+a.id+'_pm', amRfId='a_'+a.id+'_am_rf', pmRfId='a_'+a.id+'_pm_rf';
+      const amId='a_'+a.id+'_am', pmId='a_'+a.id+'_pm';
+      const amRateId='a_'+a.id+'_am_rate', amFatId='a_'+a.id+'_am_fat', pmRateId='a_'+a.id+'_pm_rate', pmFatId='a_'+a.id+'_pm_fat';
       const insertAt = () => Math.max(page.cols.length-1, 0);
       let amCol = page.cols.find(c=>c.id===amId);
       if(!amCol){
@@ -2269,9 +2345,9 @@ function syncActivePageColumns(){
         page.cols.splice(insertAt(),0,amCol);
         page.rows.forEach(r=>{ if(r[amId]===undefined) r[amId]=''; }); changed=true;
       } else { amCol.rateMethod = a.rateMethod; amCol.animalRate = a.rate; }
-      if(isFat && !page.cols.find(c=>c.id===amRfId)){
-        page.cols.splice(page.cols.indexOf(amCol)+1,0,{id:amRfId,name:a.name+' AM Rate/Fat',type:'ratefat',animal:a.id,animalType:a.type,shift:'am'});
-        page.rows.forEach(r=>{ if(r[amRfId]===undefined) r[amRfId]=''; }); changed=true;
+      if(isFat){
+        if(!page.cols.find(c=>c.id===amRateId)){ page.cols.splice(page.cols.indexOf(amCol)+1,0,{id:amRateId,name:a.name+' AM Rate',type:'rate_shift',animal:a.id,animalType:a.type,shift:'am'}); page.rows.forEach(r=>{ if(r[amRateId]===undefined) r[amRateId]=''; }); changed=true; }
+        if(!page.cols.find(c=>c.id===amFatId)){ page.cols.splice(page.cols.indexOf(page.cols.find(c=>c.id===amRateId))+1,0,{id:amFatId,name:a.name+' AM Fat',type:'fat_shift',animal:a.id,animalType:a.type,shift:'am'}); page.rows.forEach(r=>{ if(r[amFatId]===undefined) r[amFatId]=''; }); changed=true; }
       }
       let pmCol = page.cols.find(c=>c.id===pmId);
       if(!pmCol){
@@ -2279,9 +2355,9 @@ function syncActivePageColumns(){
         page.cols.splice(insertAt(),0,pmCol);
         page.rows.forEach(r=>{ if(r[pmId]===undefined) r[pmId]=''; }); changed=true;
       } else { pmCol.rateMethod = a.rateMethod; pmCol.animalRate = a.rate; }
-      if(isFat && !page.cols.find(c=>c.id===pmRfId)){
-        page.cols.splice(page.cols.indexOf(pmCol)+1,0,{id:pmRfId,name:a.name+' PM Rate/Fat',type:'ratefat',animal:a.id,animalType:a.type,shift:'pm'});
-        page.rows.forEach(r=>{ if(r[pmRfId]===undefined) r[pmRfId]=''; }); changed=true;
+      if(isFat){
+        if(!page.cols.find(c=>c.id===pmRateId)){ page.cols.splice(page.cols.indexOf(pmCol)+1,0,{id:pmRateId,name:a.name+' PM Rate',type:'rate_shift',animal:a.id,animalType:a.type,shift:'pm'}); page.rows.forEach(r=>{ if(r[pmRateId]===undefined) r[pmRateId]=''; }); changed=true; }
+        if(!page.cols.find(c=>c.id===pmFatId)){ page.cols.splice(page.cols.indexOf(page.cols.find(c=>c.id===pmRateId))+1,0,{id:pmFatId,name:a.name+' PM Fat',type:'fat_shift',animal:a.id,animalType:a.type,shift:'pm'}); page.rows.forEach(r=>{ if(r[pmFatId]===undefined) r[pmFatId]=''; }); changed=true; }
       }
     });
     if(changed){ page.rows.forEach(r=>r.total=computeRowTotal(r,page.cols,profile)); anyChanged=true; }
@@ -2410,12 +2486,14 @@ function householdFullLedger(h){
 // per-record rate entered for that animal → single page-wide rate column.
 function resolveAnimalRateForRow(row, page, profile, col){
   const shift = col.type==='milk_am' ? 'am' : 'pm';
+  const rateCol = page.cols.find(c=>c.type==='rate_shift' && c.animal===col.animal && c.shift===shift);
+  if(rateCol){ const v=parseFloat(row[rateCol.id]); if(!isNaN(v)) return v; }
   const rfCol = page.cols.find(c=>c.type==='ratefat' && c.animal===col.animal && c.shift===shift);
   if(rfCol){ const raw=(row[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); return isNaN(parsed)?0:parsed; }
   const perAnimalRateCol = page.cols.find(c=>c.type==='rate_per_animal' && c.animal===col.animal);
   if(perAnimalRateCol){ const entered=row[perAnimalRateCol.id]; if(entered!=='' && entered!=null) return parseFloat(entered)||0; }
-  const rateCol = page.cols.find(c=>c.type==='rate');
-  if(rateCol) return parseFloat(row[rateCol.id])||0;
+  const flatRateCol = page.cols.find(c=>c.type==='rate');
+  if(flatRateCol) return parseFloat(row[flatRateCol.id])||0;
   return col.animalRate||0;
 }
 
@@ -3003,7 +3081,7 @@ function isActuallyScrollable(el){
   // A `.twrap`/`.hscroll` container that fits its content (no overflow) should NOT block swipe.
   let node = el;
   while (node && node !== document.body) {
-    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll') || node.classList.contains('gtab-scroll') || node.classList.contains('gh-scroll'))) {
+    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll') || node.classList.contains('gtab-scroll') || node.classList.contains('gh-scroll') || node.classList.contains('animal-carousel'))) {
       if (node.scrollWidth > node.clientWidth + 1) return true; // genuinely scrollable
     }
     node = node.parentElement;
@@ -3201,15 +3279,15 @@ function openQuickEntry(targetDate, forceIsPM) {
       let rateHtml = '';
       const shift = c.type==='milk_am' ? 'am' : 'pm';
       if (c.rateMethod === 'fat') {
-         const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
-         if (rfCol) {
-           const stored = (row[rfCol.id]||'').split('/'); const storedRate = stored[0]||''; const storedFat = stored[1]||'';
-           rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rfCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${storedRate}" onclick="setNumpadTarget('qe-rate-${rfCol.id}')"/></div></div><div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px;"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Fat %</div><div class="row gap1"><input type="text" id="qe-fat-${rfCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${storedFat}" onclick="setNumpadTarget('qe-fat-${rfCol.id}')"/></div></div>`;
+         const rateCol = page.cols.find(col => col.type === 'rate_shift' && col.animal === c.animal && col.shift === shift);
+         const fatCol = page.cols.find(col => col.type === 'fat_shift' && col.animal === c.animal && col.shift === shift);
+         if (rateCol && fatCol) {
+           rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-input-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id]||''}" onclick="setNumpadTarget('qe-input-${rateCol.id}')"/></div></div><div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px;"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Fat %</div><div class="row gap1"><input type="text" id="qe-input-${fatCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[fatCol.id]||''}" onclick="setNumpadTarget('qe-input-${fatCol.id}')"/></div></div>`;
          }
       } else if (!animalInfo) {
          // Legacy no-animals-configured fallback: a single flat rate column.
          const rateCol = page.cols.find(col => col.type === 'rate');
-         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || ''}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/></div></div>`;
+         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-input-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || ''}" onclick="setNumpadTarget('qe-input-${rateCol.id}')"/></div></div>`;
       }
       html += `<div class="qe-card"><div class="row gap3 w-100" style="justify-content:space-between;"><div class="row gap2"><span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span><div><div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${row[c.id] || ''}" onclick="setNumpadTarget('${inputId}')"/></div>${rateHtml}</div>`;
     });
@@ -3244,16 +3322,13 @@ function saveQuickEntry() {
     row[c.id] = valStr;
     const shift = c.type==='milk_am' ? 'am' : 'pm';
     if (c.rateMethod === 'fat') {
-       const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
-       if (rfCol) {
-         const rateInput = document.getElementById(`qe-rate-${rfCol.id}`); const fatInput = document.getElementById(`qe-fat-${rfCol.id}`);
-         const rateVal = rateInput ? rateInput.value : ''; const fatVal = fatInput ? fatInput.value : '';
-         const combined = (rateVal !== '' || fatVal !== '') ? `${rateVal}/${fatVal}` : '';
-         if ((row[rfCol.id]||'') !== combined) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rfCol.id, from:row[rfCol.id]||'', to:combined}); row[rfCol.id] = combined; }
-       }
+       const rateCol = page.cols.find(col => col.type === 'rate_shift' && col.animal === c.animal && col.shift === shift);
+       const fatCol = page.cols.find(col => col.type === 'fat_shift' && col.animal === c.animal && col.shift === shift);
+       if (rateCol) { const v = document.getElementById(`qe-input-${rateCol.id}`)?.value || ''; if ((row[rateCol.id]||'') !== v) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:v}); row[rateCol.id] = v; } }
+       if (fatCol) { const v = document.getElementById(`qe-input-${fatCol.id}`)?.value || ''; if ((row[fatCol.id]||'') !== v) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:fatCol.id, from:row[fatCol.id]||'', to:v}); row[fatCol.id] = v; } }
     } else if (!DB.profile().animals?.find(a => a.id === c.animal)) {
        const rateCol = page.cols.find(col => col.type === 'rate');
-       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
+       if (rateCol) { const rateInput = document.getElementById(`qe-input-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
@@ -3308,7 +3383,7 @@ function renderHomeContent(el){
   el.innerHTML=html+`</div>`;
 }
 
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward'); navPush('detail', {});}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; currentAnimalSlideIdx = 0; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward'); navPush('detail', {});}
 
 function renderDetailView(el){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===curDetailId);
@@ -3322,11 +3397,14 @@ function renderDetailView(el){
   if (detailPageIdx === 0) {
     bodyHtml = `
    <div class="row gap2 mb3" style="padding:0 15px;">
-      <button class="btn bs w-100" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:var(--fg);">
-        <span style="font-size:13px; font-weight:700;">🔍 Filter: ${printLabel}</span><span style="font-size:10px; color:var(--sub);">▼</span>
+      <button class="btn bs" id="filter-btn" onclick="openFilterSheetModal('${page.id}')" style="flex:0 0 70%; justify-content:space-between; padding:11px 8px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:var(--fg); overflow:hidden;">
+        <span style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🔍 ${printLabel}</span>
+      </button>
+      <button class="btn bp" onclick="openPeriodPreview('${page.id}')" style="flex:1; justify-content:center; gap:6px; padding:11px 14px;">
+        <span style="font-size:13px; font-weight:700;">⛶ Full-Screen Preview</span>
       </button>
    </div>
-   <div style="padding:0 15px;margin-bottom:12px;"><div class="twrap" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div></div>
+   <div style="padding:0 15px;margin-bottom:12px;" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div>
    <div style="padding:0 15px 90px;"><div class="lbar${page.locked?' on':''}" onclick="reqLock('${page.id}')"><div class="cring${page.locked?' on':''}">${page.locked?'✓':''}</div><div class="f1"><div style="font-weight:700;font-size:13px;">Account Cleared</div>${page.locked&&page.clearedAt?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">Locked ${fmtD(page.clearedAt)}</div>`:''}</div><span style="font-size:14px;color:var(--muted);">${page.locked?'🔒':'🔓'}</span></div></div>`;
   } else { bodyHtml = `<div style="padding:0 15px 90px;">${renderHouseholdsPageHTML(page)}</div>`; }
 
@@ -3411,47 +3489,246 @@ function openFilterSheetModal(pageId) {
 }
 
 function applyThemedFilter(pageId, targetFilterValue) {
-   Haptics.fire('tick'); cm('m-filter-sheet'); currentTableFilter = targetFilterValue;
-   document.getElementById('table-container').innerHTML = buildCompactTable(DB.pages().find(p=>p.id===pageId), DB.profile(), today(), currentTableFilter);
+   Haptics.fire('tick'); cm('m-filter-sheet'); currentTableFilter = targetFilterValue; currentAnimalSlideIdx = 0;
+   const profile = DB.profile();
+   let printLabel = "Show All Columns";
+   if(currentTableFilter === 'totals') printLabel = "Totals Only";
+   else if(currentTableFilter.startsWith('cat_')) printLabel = "Only " + currentTableFilter.replace('cat_','').toUpperCase() + "s";
+   else if(currentTableFilter.startsWith('anim_')) { const targetAnim = profile.animals?.find(a=>a.id === currentTableFilter.replace('anim_','')); if(targetAnim) printLabel = targetAnim.name; }
+   const btnLabel = document.querySelector('#filter-btn span'); if(btnLabel) btnLabel.textContent = `🔍 ${printLabel}`;
+   document.getElementById('table-container').innerHTML = buildCompactTable(DB.pages().find(p=>p.id===pageId), profile, today(), currentTableFilter);
 }
 
-function buildCompactTable(page,profile,todayStr, filter){
-  let sys1 = [], animals = {}, sys2 = [];
-  page.cols.forEach(c => {
-    if(c.type === 'expense') return; 
-    if(c.type === 'date' || c.type === 'sr') sys1.push(c); else if(c.type === 'total') { if(filter === 'totals' || filter === 'all') sys2.push(c); }
-    else {
-      const key = c.animal || 'global';
-      if(filter !== 'all') { if(filter === 'totals') return; if(filter.startsWith('cat_') && c.animalType !== filter.replace('cat_','')) return; if(filter.startsWith('anim_') && c.animal !== filter.replace('anim_','')) return; }
-      if(!animals[key]) { let n = c.name.replace(/( AM| PM| Rate).*/, ''); if(n === 'Rate (₹/L)') n = 'Global Rate'; animals[key] = {name: n, cols: []}; }
-      animals[key].cols.push(c);
-    }
+// This animal's own total for one row: qty(AM)*rate(AM) + qty(PM)*rate(PM),
+// using that shift's own Rate column when the animal is Fat Based, or the
+// animal's fixed animalRate otherwise. Mirrors the same logic as
+// computeRowTotal() but scoped to a single animal instead of the whole row.
+function computeAnimalRowRev(r, animalCols){
+  let rev = 0;
+  const amCol = animalCols.find(c=>c.type==='milk_am'), pmCol = animalCols.find(c=>c.type==='milk_pm');
+  [amCol, pmCol].forEach(mc=>{
+    if(!mc) return;
+    const qty = parseFloat(r[mc.id])||0; if(!qty) return;
+    let rate = mc.animalRate||0;
+    const shift = mc.type==='milk_am' ? 'am' : 'pm';
+    const rateCol = animalCols.find(c=>c.type==='rate_shift' && c.shift===shift);
+    if(rateCol){ const v=parseFloat(r[rateCol.id]); if(!isNaN(v)) rate=v; }
+    rev += qty*rate;
+  });
+  return rev;
+}
+
+// One animal's own mini-table: Date, AM (+ Rate/Fat if Fat Based), PM (+
+// Rate/Fat), and that animal's own Total — scoped to just this animal so
+// "Rate"/"Fat" need no AM/PM prefix to be unambiguous.
+// Fixed-rate animals get a plain single-row header (Date | AM | PM | Total).
+// Fat Based animals get AM/PM as group headers over Qty/Rate/Fat sub-columns,
+// since each shift needs all three for that animal.
+function buildShiftHeaderRows(animalCols){
+  const isFat = animalCols.some(c=>c.type==='rate_shift');
+  if(!isFat){
+    const flat = animalCols.map(c=>`<th style="width:1%;white-space:nowrap;">${c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.name.substring(0,6)}</th>`).join('');
+    return `<tr><th style="width:1%;white-space:nowrap;">Date</th>${flat}<th style="text-align:right;">Total</th></tr>`;
+  }
+  const shiftGroups = [];
+  animalCols.forEach(c=>{
+    const shift = c.type==='milk_am' ? 'am' : c.type==='milk_pm' ? 'pm' : c.shift;
+    let g = shiftGroups.find(g=>g.shift===shift);
+    if(!g){ g = {shift, cols:[]}; shiftGroups.push(g); }
+    g.cols.push(c);
+  });
+  const row1 = shiftGroups.map(g=>`<th colspan="${g.cols.length}" class="th-group">${g.shift==='am'?'AM':'PM'}</th>`).join('');
+  const row2 = shiftGroups.flatMap(g=>g.cols.map(c=>{
+    const label = c.type==='rate_shift' ? 'Rate' : c.type==='fat_shift' ? 'Fat' : 'Qty';
+    return `<th style="width:1%;white-space:nowrap;">${label}</th>`;
+  })).join('');
+  return `<tr><th rowspan="2" style="width:1%;white-space:nowrap;">Date</th>${row1}<th rowspan="2" style="text-align:right;">Total</th></tr><tr>${row2}</tr>`;
+}
+function renderAnimalMiniTable(page, profile, todayStr, animalCols){
+  const n = animalCols.length;
+  let totalRev = 0;
+  const rows = page.rows.map((r,ri)=>{
+    const isFuture = r.assignedDate > todayStr, isRowLocked = page.locked || isFuture;
+    const rowRev = computeAnimalRowRev(r, animalCols); totalRev += rowRev;
+    let cells = `<td class="tsr" style="width:1%;white-space:nowrap;">${fmtDS(r.date || r.assignedDate)}</td>`;
+    animalCols.forEach(c=>{
+      const isNarrow = c.type==='rate_shift' || c.type==='fat_shift';
+      if(isRowLocked) cells += `<td style="width:1%;white-space:nowrap;color:${isFuture?'var(--border)':'var(--sub)'};font-family:monospace;font-size:${isNarrow?'10px':'11px'};">${r[c.id]||'—'}</td>`;
+      else cells += `<td style="width:1%;white-space:nowrap;"><input class="finp${isNarrow?' finp-narrow':''}" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
+    });
+    cells += `<td class="${rowRev>0?'ttot':'ttote'}" style="text-align:right;">${rowRev>0?'₹'+fmt(rowRev):'—'}</td>`;
+    return `<tr class="${isFuture?'future-row':''}">${cells}</tr>`;
+  }).join('');
+  return `<table><thead>${buildShiftHeaderRows(animalCols)}</thead><tbody>${rows}</tbody><tfoot><tr><td colspan="${n+1}" style="text-align:center;font-weight:900;">Total:</td><td style="text-align:right;font-weight:900;">₹${fmt(totalRev)}</td></tr></tfoot></table>`;
+}
+
+// The "main table": one column per animal showing THAT animal's ₹ total for
+// each day, a Day Total column on the right, and a Period Total row at the
+// bottom — both per animal and overall. This is also what "Totals Only"
+// resolves to, since it already IS the totals breakdown.
+function renderPivotSummaryTable(page, todayStr, animalMetas){
+  const head = `<th style="width:1%;white-space:nowrap;">Date</th>` + animalMetas.map(a=>`<th>${a.name}</th>`).join('') + `<th style="text-align:right;">Day Total</th>`;
+  const perAnimalTotal = {}; animalMetas.forEach(a=>perAnimalTotal[a.key]=0);
+  let grandTotal = 0;
+  const rows = page.rows.map(r=>{
+    const isFuture = r.assignedDate > todayStr;
+    let dayTotal = 0;
+    let cells = `<td class="tsr" style="width:1%;white-space:nowrap;">${fmtDS(r.date || r.assignedDate)}</td>`;
+    animalMetas.forEach(a=>{
+      const rev = computeAnimalRowRev(r, a.cols);
+      dayTotal += rev; perAnimalTotal[a.key] += rev;
+      cells += `<td style="color:${isFuture?'var(--border)':'var(--fg)'};font-weight:700;">${rev>0?'₹'+fmt(rev):'—'}</td>`;
+    });
+    grandTotal += dayTotal;
+    cells += `<td style="text-align:right;font-weight:900;">${dayTotal>0?'₹'+fmt(dayTotal):'—'}</td>`;
+    return `<tr class="${isFuture?'future-row':''}">${cells}</tr>`;
+  }).join('');
+  const foot = `<td style="text-align:center;font-weight:900;">Period Total:</td>` + animalMetas.map(a=>`<td style="font-weight:900;">₹${fmt(perAnimalTotal[a.key])}</td>`).join('') + `<td style="text-align:right;font-weight:900;">₹${fmt(grandTotal)}</td>`;
+  return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr>${foot}</tr></tfoot></table>`;
+}
+
+// One merged table with every animal's columns side by side, grouped under
+// a 3-level header (animal name -> AM/PM -> Qty/Rate/Fat) — read-only, for
+// reading/comparing the whole period at a glance rather than editing.
+function buildMergedPreviewTable(page, todayStr){
+  let animals = {}, order = [];
+  page.cols.forEach(c=>{
+    if(['expense','date','sr','total'].includes(c.type)) return;
+    const key = c.animal || 'global';
+    if(!animals[key]){ let n = c.name.replace(/( AM| PM| Rate| Fat).*/, ''); if(n==='Rate (₹/L)') n='Global Rate'; animals[key] = {name:n, cols:[]}; order.push(key); }
+    animals[key].cols.push(c);
   });
 
-  const animalKeys = Object.keys(animals);
-  let head1 = sys1.map(c => `<th rowspan="2" class="th-sys">${c.name}</th>`).join(''), colCount = 0;
-  animalKeys.forEach((k, idx) => { const g = animals[k]; colCount += g.cols.length; head1 += `<th colspan="${g.cols.length}" class="th-group ${(idx < animalKeys.length - 1 || sys2.length > 0) ? 'v-sep' : ''}">${g.name}</th>`; });
-  head1 += sys2.map(c => `<th rowspan="2" class="th-sys" style="text-align:right;">${c.name}</th>`).join('');
+  let row1 = `<th rowspan="3" style="width:1%;white-space:nowrap;">Date</th>`, row2 = '', row3 = '';
+  order.forEach(k=>{
+    const cols = animals[k].cols; const isFat = cols.some(c=>c.type==='rate_shift');
+    row1 += `<th colspan="${cols.length}" class="th-group">${animals[k].name}</th>`;
+    if(!isFat){
+      cols.forEach(c=> row2 += `<th rowspan="2" style="width:1%;white-space:nowrap;">${c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.name.substring(0,6)}</th>`);
+    } else {
+      const shiftGroups = [];
+      cols.forEach(c=>{
+        const shift = c.type==='milk_am' ? 'am' : c.type==='milk_pm' ? 'pm' : c.shift;
+        let g = shiftGroups.find(g=>g.shift===shift); if(!g){ g={shift,cols:[]}; shiftGroups.push(g); } g.cols.push(c);
+      });
+      shiftGroups.forEach(g=>{
+        row2 += `<th colspan="${g.cols.length}">${g.shift==='am'?'AM':'PM'}</th>`;
+        g.cols.forEach(c=>{ const label = c.type==='rate_shift'?'Rate':c.type==='fat_shift'?'Fat':'Qty'; row3 += `<th style="width:1%;white-space:nowrap;">${label}</th>`; });
+      });
+    }
+  });
+  row1 += `<th rowspan="3" style="text-align:right;">Day Total</th>`;
 
-  let head2 = '';
-  animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => { let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.type==='ratefat'?(c.shift==='am'?'AM R/F':'PM R/F'):''; if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4); head2 += `<th class="${(cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : ''}">${sub}</th>`; }); });
-  const thead = `<thead><tr>${head1}</tr><tr>${head2}</tr></thead>`;
-
-  let totalMilk = 0, totalRev = 0;
-  const rows = page.rows.map((r,ri)=>{
-    const isFuture = r.assignedDate > todayStr, isRowLocked = page.locked || isFuture; let cells = '';
-    sys1.forEach(c => { if(c.type==='date' || c.type==='sr') cells += `<td class="tsr">${fmtDS(r.date || r.assignedDate)}</td>`; });
-    animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => {
-         if (c.type === 'milk_am' || c.type === 'milk_pm') totalMilk += parseFloat(r[c.id]) || 0;
-         const sepClass = (cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
-         if(isRowLocked) cells += `<td class="${sepClass}" style="color:${isFuture?'var(--border)':'var(--sub)'}; font-family:monospace; font-size:11px;">${r[c.id]||'—'}</td>`;
-         else cells += `<td class="${sepClass}"><input class="finp" type="text" inputmode="${c.type==='text'?'text':'decimal'}" autocomplete="off" data-lpignore="true" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
-    });});
-    sys2.forEach(c => { totalRev += parseFloat(r.total) || 0; cells += `<td class="${r.total>0?'ttot':'ttote'}" style="text-align:right;">${r.total>0?'₹'+fmt(r.total):'—'}</td>`; });
-    return `<tr class="${isFuture ? 'future-row' : ''}">${cells}</tr>`;
+  let grandTotal = 0;
+  const bodyRows = page.rows.map(r=>{
+    const isFuture = r.assignedDate > todayStr;
+    let dayTotal = 0;
+    let cells = `<td class="tsr">${fmtDS(r.date || r.assignedDate)}</td>`;
+    order.forEach(k=>{
+      const cols = animals[k].cols;
+      dayTotal += computeAnimalRowRev(r, cols);
+      cols.forEach(c=>{ cells += `<td style="color:${isFuture?'var(--border)':'var(--fg)'};">${r[c.id]||'—'}</td>`; });
+    });
+    grandTotal += dayTotal;
+    cells += `<td style="text-align:right;font-weight:900;">${dayTotal>0?'₹'+fmt(dayTotal):'—'}</td>`;
+    return `<tr class="${isFuture?'future-row':''}">${cells}</tr>`;
   }).join('');
 
-  return `<table>${thead}<tbody>${rows}</tbody><tfoot><tr style="height: 44px; background: var(--bg2); border-top: 2px solid var(--border2);"><td colspan="${sys1.length}" style="text-align:center; font-weight:900; font-size:14px; color:var(--fg);">Total:</td><td colspan="${colCount}" style="text-align:center; font-weight:900; font-size:14px; color:var(--fg);">${fmt(totalMilk)} L</td><td colspan="${sys2.length}" style="text-align:right; font-weight:900; font-size:14px; color:var(--fg); padding-right: 6px;">₹${fmt(totalRev)}</td></tr></tfoot></table>`;
+  const totalSubCols = order.reduce((s,k)=>s+animals[k].cols.length,0);
+  const foot = `<td colspan="${1+totalSubCols}" style="text-align:center;font-weight:900;">Period Grand Total:</td><td style="text-align:right;font-weight:900;">₹${fmt(grandTotal)}</td>`;
+
+  return `<table class="preview-mtable"><thead><tr>${row1}</tr><tr>${row2}</tr><tr>${row3}</tr></thead><tbody>${bodyRows}</tbody><tfoot><tr>${foot}</tr></tfoot></table>`;
+}
+function buildPeriodPreviewContent(page, profile, todayStr){
+  const rotateHint = `<div class="preview-rotate-hint">🔄 Rotate your device sideways for the best view</div>`;
+  return `${rotateHint}<div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div>`;
+}
+let previewTheme = 'classic';
+function setPreviewTheme(t){
+  previewTheme = t; Haptics.fire('tick');
+  const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
+  document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
+}
+function openPeriodPreview(pageId){
+  const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
+  const profile = DB.profile();
+  document.getElementById('preview-title').textContent = `${fmtD(page.startDate)} – ${fmtD(page.endDate)}${page.locked?' 🔒 Locked':''}`;
+  document.getElementById('preview-body').innerHTML = buildPeriodPreviewContent(page, profile, today());
+  document.getElementById('preview-body').className = 'ptheme-' + previewTheme;
+  document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
+  document.getElementById('m-period-preview').classList.add('active');
+  // Best-effort only: fullscreen + a landscape nudge, both of which silently
+  // no-op on browsers/contexts that don't support them (e.g. plain Safari).
+  try { document.getElementById('m-period-preview').requestFullscreen?.().catch(()=>{}); } catch(e){}
+  try { screen.orientation?.lock?.('landscape').catch(()=>{}); } catch(e){}
+}
+function closePeriodPreview(){
+  document.getElementById('m-period-preview').classList.remove('active');
+  try { screen.orientation?.unlock?.(); } catch(e){}
+  try { if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{}); } catch(e){}
+}
+
+let currentAnimalSlideIdx = 0;
+function buildCompactTable(page,profile,todayStr, filter){
+  // Group columns by animal (or 'global' for the no-animals-configured
+  // fallback), preserving the order animals were added in.
+  let animals = {}, order = [];
+  page.cols.forEach(c=>{
+    if(['expense','date','sr','total'].includes(c.type)) return;
+    const key = c.animal || 'global';
+    if(!animals[key]){ let n = c.name.replace(/( AM| PM| Rate| Fat).*/, ''); if(n==='Rate (₹/L)') n='Global Rate'; animals[key] = {name:n, cols:[]}; order.push(key); }
+    animals[key].cols.push(c);
+  });
+
+  // "Totals Only" IS the per-animal daily-totals breakdown — no need for a
+  // separate code path, just skip straight to the pivot table using everyone.
+  if(filter === 'totals'){
+    const metas = order.map(k=>({key:k, name:animals[k].name, cols:animals[k].cols}));
+    return `<div class="twrap">${renderPivotSummaryTable(page, todayStr, metas)}</div>`;
+  }
+
+  let visibleKeys = order;
+  if(filter.startsWith('cat_')){ const cat=filter.replace('cat_',''); visibleKeys = order.filter(k=>animals[k].cols.some(c=>c.animalType===cat)); }
+  else if(filter.startsWith('anim_')){ const id=filter.replace('anim_',''); visibleKeys = order.filter(k=>k===id); }
+
+  if(!visibleKeys.length) return `<div class="empty"><div class="esub">No matching animals for this filter.</div></div>`;
+
+  // A single visible animal (e.g. filtered to just one) doesn't need a
+  // "Totals" slide in front of it — that would just duplicate its own
+  // Total column — so just show its table directly, no carousel/tabs.
+  if(visibleKeys.length === 1){
+    return `<div class="twrap">${renderAnimalMiniTable(page, profile, todayStr, animals[visibleKeys[0]].cols)}</div>`;
+  }
+
+  const pivotMetas = visibleKeys.map(k=>({key:k, name:animals[k].name, cols:animals[k].cols}));
+  const tabLabels = ['📊 Totals', ...visibleKeys.map(k=>animals[k].name)];
+  const tabsHtml = `<div class="animal-tabs">${tabLabels.map((label,idx)=>`<div class="animal-tab${idx===0?' active':''}" onclick="scrollToAnimalSlide(${idx})">${label}</div>`).join('')}</div>`;
+  const slidesHtml = [
+    `<div class="animal-slide"><div class="twrap">${renderPivotSummaryTable(page, todayStr, pivotMetas)}</div></div>`,
+    ...visibleKeys.map(k=>`<div class="animal-slide"><div class="twrap">${renderAnimalMiniTable(page, profile, todayStr, animals[k].cols)}</div></div>`)
+  ].join('');
+  const carouselHtml = `<div class="animal-carousel" id="animal-carousel" onscroll="onAnimalCarouselScroll()">${slidesHtml}</div>`;
+
+  return `${tabsHtml}${carouselHtml}`;
+}
+function scrollToAnimalSlide(idx){
+  const car = document.getElementById('animal-carousel'); if(!car) return;
+  currentAnimalSlideIdx = idx; Haptics.fire('tick');
+  car.scrollTo({left: idx * car.clientWidth, behavior: 'smooth'});
+  document.querySelectorAll('.animal-tab').forEach((el,i)=>el.classList.toggle('active', i===idx));
+}
+function onAnimalCarouselScroll(){
+  const car = document.getElementById('animal-carousel'); if(!car || !car.clientWidth) return;
+  const idx = Math.round(car.scrollLeft / car.clientWidth);
+  currentAnimalSlideIdx = idx;
+  document.querySelectorAll('.animal-tab').forEach((el,i)=>el.classList.toggle('active', i===idx));
+  document.querySelectorAll('.animal-slide').forEach((el,i)=>{ el.style.opacity = (i===idx) ? '1' : '0.45'; });
+}
+// A cell edit rebuilds #table-container from scratch — restore whichever
+// animal slide the person was swiped to instead of snapping back to the first.
+function restoreAnimalCarouselScroll(){
+  const car = document.getElementById('animal-carousel'); if(!car) return;
+  requestAnimationFrame(()=>{ car.scrollLeft = currentAnimalSlideIdx * car.clientWidth; onAnimalCarouselScroll(); });
 }
 
 // The moment the very last row of a period is filled in *on schedule* (its
@@ -3528,6 +3805,7 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   if (ri === pages[pi].rows.length - 1) { maybeAutoCreateNextPage(pageId); autoLockIfDue(pageId); }
   const freshPage = DB.pages().find(p=>p.id===pageId) || pages[pi];
   document.getElementById('table-container').innerHTML = buildCompactTable(freshPage, DB.profile(), today(), currentTableFilter);
+  restoreAnimalCarouselScroll();
 }
 
 function renderGraphs(){
