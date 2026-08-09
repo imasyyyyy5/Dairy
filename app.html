@@ -332,7 +332,14 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .animal-carousel::-webkit-scrollbar{display:none;}
 .animal-slide{flex:0 0 100%;scroll-snap-align:start;transition:opacity .2s;}
 
-.preview-table-wrap{overflow-x:auto;}
+/* Only the table area scrolls — header + theme tabs stay pinned so they're
+   never scrolled out of view, and the full-overlay's own overflow (meant for
+   simpler full-screen views) would otherwise fight this and double-scroll. */
+#m-period-preview{overflow:hidden !important;}
+#m-period-preview .preview-table-wrap{overflow:visible;}
+.preview-mtable thead{position:sticky;top:0;z-index:2;}
+.preview-mtable thead th{background:var(--bg1);}
+
 .preview-table-wrap table{font-size:14px;}
 .preview-table-wrap th{font-size:11px;padding:9px 7px;}
 .preview-table-wrap td{padding:9px 7px;font-size:14px;}
@@ -350,17 +357,31 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 #preview-body.ptheme-color .preview-mtable tbody tr:nth-child(even){background:rgba(99,102,241,0.08);}
 #preview-body.ptheme-color .preview-mtable .ttot{color:#22c55e;}
 
-/* Contrast theme: pure black/white, thick borders, for bright outdoor light */
+/* Contrast and Sepia force a specific page background — so unlike Colorful
+   (which just layers onto the app's existing dark/light theme), these two
+   must ALSO override every dark-tuned class the base table CSS uses
+   (row banding, .tsr, .ttot/.ttote, th.th-group) or that text stays styled
+   for a dark background and becomes unreadable against the new one. */
 #preview-body.ptheme-contrast{background:#fff;}
-#preview-body.ptheme-contrast .preview-mtable, #preview-body.ptheme-contrast .preview-mtable th, #preview-body.ptheme-contrast .preview-mtable td{color:#000 !important;border:1.5px solid #000 !important;}
+#preview-body.ptheme-contrast .preview-mtable{color:#000 !important;}
+#preview-body.ptheme-contrast .preview-mtable th, #preview-body.ptheme-contrast .preview-mtable td{color:#000 !important;border:1px solid #000 !important;}
 #preview-body.ptheme-contrast .preview-mtable th{background:#000 !important;color:#fff !important;}
+#preview-body.ptheme-contrast .preview-mtable tbody tr:nth-child(even){background:#f0f0f0 !important;}
+#preview-body.ptheme-contrast .preview-mtable tbody tr:nth-child(odd){background:#fff !important;}
+#preview-body.ptheme-contrast .preview-mtable .tsr{color:#000 !important;}
+#preview-body.ptheme-contrast .preview-mtable .ttot{color:#000 !important;}
+#preview-body.ptheme-contrast .preview-mtable .ttote{color:#888 !important;}
 #preview-body.ptheme-contrast .preview-rotate-hint{background:#fff3cd;color:#664d03;}
 
-/* Sepia theme: warm paper tones, closer to a printed ledger */
 #preview-body.ptheme-sepia{background:#f4ecd8;}
-#preview-body.ptheme-sepia .preview-mtable, #preview-body.ptheme-sepia .preview-mtable td{color:#5b4636 !important;border-color:#c9b896 !important;}
-#preview-body.ptheme-sepia .preview-mtable th{background:#e8dcc0 !important;color:#5b4636 !important;border-color:#c9b896 !important;}
-#preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(even){background:rgba(201,184,150,0.18);}
+#preview-body.ptheme-sepia .preview-mtable{color:#5b4636 !important;}
+#preview-body.ptheme-sepia .preview-mtable th, #preview-body.ptheme-sepia .preview-mtable td{color:#5b4636 !important;border-color:#c9b896 !important;}
+#preview-body.ptheme-sepia .preview-mtable th{background:#e8dcc0 !important;}
+#preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(even){background:rgba(201,184,150,0.22) !important;}
+#preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(odd){background:#f4ecd8 !important;}
+#preview-body.ptheme-sepia .preview-mtable .tsr{color:#5b4636 !important;}
+#preview-body.ptheme-sepia .preview-mtable .ttot{color:#5b4636 !important;}
+#preview-body.ptheme-sepia .preview-mtable .ttote{color:#a8927a !important;}
 
 .mbox{background:var(--bg1);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;width:100%;max-width:500px;margin:0 auto;padding:20px;transform:translateY(16px);transition:transform .25s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto;}
 .moverlay.open .mbox{transform:translateY(0);}
@@ -599,7 +620,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
       </div>
       <button class="mx" onclick="closePeriodPreview()">✕</button>
     </div>
-    <div id="preview-body" class="ptheme-classic" style="flex:1;overflow:auto;padding:18px;"></div>
+    <div id="preview-body" class="ptheme-classic" style="flex:1;min-height:0;overflow:auto;padding:14px 18px 18px;"></div>
   </div>
 </div>
 
@@ -3400,8 +3421,8 @@ function renderDetailView(el){
       <button class="btn bs" id="filter-btn" onclick="openFilterSheetModal('${page.id}')" style="flex:0 0 70%; justify-content:space-between; padding:11px 8px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:var(--fg); overflow:hidden;">
         <span style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🔍 ${printLabel}</span>
       </button>
-      <button class="btn bp" onclick="openPeriodPreview('${page.id}')" style="flex:1; justify-content:center; gap:6px; padding:11px 14px;">
-        <span style="font-size:13px; font-weight:700;">⛶ Full-Screen Preview</span>
+      <button class="btn bp" onclick="openPeriodPreview('${page.id}')" style="flex:1; justify-content:center; gap:6px; padding:11px 8px; overflow:hidden; min-width:0;">
+        <span style="font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⛶ Full Screen</span>
       </button>
    </div>
    <div style="padding:0 15px;margin-bottom:12px;" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div>
@@ -3643,9 +3664,9 @@ function buildPeriodPreviewContent(page, profile, todayStr){
   const rotateHint = `<div class="preview-rotate-hint">🔄 Rotate your device sideways for the best view</div>`;
   return `${rotateHint}<div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div>`;
 }
-let previewTheme = 'classic';
+let previewTheme = Store.get('mdn_preview_theme') || 'classic';
 function setPreviewTheme(t){
-  previewTheme = t; Haptics.fire('tick');
+  previewTheme = t; Haptics.fire('tick'); Store.set('mdn_preview_theme', t);
   const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
   document.querySelectorAll('.ptheme-tab').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
 }
@@ -4374,6 +4395,7 @@ function renderMe(){
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
+    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Full-Screen Preview Theme</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Default color style when previewing a period</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openPreviewThemePicker()">${PREVIEW_THEME_LABELS[previewTheme]}</button></div>
    </div>
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
@@ -4487,6 +4509,11 @@ function setThemePref(pref){ themeMemory = pref; Store.set('mdn_theme', pref); c
 function openThemePicker(){
   const opts = Object.keys(THEME_LABELS).map(k => ({ value: k, label: THEME_LABELS[k] }));
   openThemedSelect('Appearance', opts, getThemePref(), (value) => setThemePref(value));
+}
+const PREVIEW_THEME_LABELS = { classic:'Classic', color:'Colorful', contrast:'Contrast', sepia:'Sepia' };
+function openPreviewThemePicker(){
+  const opts = Object.keys(PREVIEW_THEME_LABELS).map(k => ({ value: k, label: PREVIEW_THEME_LABELS[k] }));
+  openThemedSelect('Full-Screen Preview Theme', opts, previewTheme, (value) => { setPreviewTheme(value); renderMe(); });
 }
 if (window.matchMedia) {
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (getThemePref() === 'system') applyTheme('system'); });
