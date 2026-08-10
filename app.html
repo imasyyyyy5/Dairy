@@ -344,6 +344,13 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .preview-table-wrap td{padding:9px 7px;font-size:14px;}
 .preview-table-wrap tfoot td{font-size:14px;padding:11px 7px;}
 .preview-mtable th.th-group{background:var(--bg2);}
+/* Qty/Rate/Fat/AM/PM columns: previously width:1% shrank these to fit only
+   their short header label (e.g. "AM", "5"), so a value like "4.25" had no
+   floor and could render narrower than its own text needs, visually
+   colliding with the next column ("5" appearing to hide the rest). A
+   min-width floor sized for "4.25" (worst case: 4 digits + a decimal point)
+   fixes that while staying as narrow as the data actually needs. */
+.preview-mtable .pcol-num{min-width:4.5ch;white-space:nowrap;}
 
 /* YouTube-style overlay chrome: hidden by default, fades in on tap, and
    auto-hides again — so the table itself can use the full screen edge to
@@ -644,8 +651,8 @@ svg.chart{display:block;width:100%;overflow:visible;}
       <div class="preview-controls-aspect" onclick="event.stopPropagation()">
         <div class="preview-controls-label" style="text-align:right;">Fit</div>
         <div class="preview-controls-group" style="justify-content:flex-end;">
-          <div class="ptheme-tab active" data-aspect="stretch" onclick="setPreviewAspect('stretch')">Stretch</div>
-          <div class="ptheme-tab" data-aspect="fit" onclick="setPreviewAspect('fit')">Fit</div>
+          <div class="ptheme-tab" data-aspect="stretch" onclick="setPreviewAspect('stretch')">Stretch</div>
+          <div class="ptheme-tab active" data-aspect="fit" onclick="setPreviewAspect('fit')">Fit</div>
           <div class="ptheme-tab" data-aspect="adaptive" onclick="setPreviewAspect('adaptive')">Adaptive</div>
           <div class="preview-ratio-wrap">
             <div class="ptheme-tab" onclick="togglePreviewRatioDropdown()">📐 <span id="preview-ratio-label">Ratio</span> ▾</div>
@@ -3665,7 +3672,7 @@ function buildMergedPreviewTable(page, todayStr){
     const cols = animals[k].cols; const isFat = cols.some(c=>c.type==='rate_shift');
     row1 += `<th colspan="${cols.length}" class="th-group">${animals[k].name}</th>`;
     if(!isFat){
-      cols.forEach(c=> row2 += `<th rowspan="2" style="width:1%;white-space:nowrap;">${c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.name.substring(0,6)}</th>`);
+      cols.forEach(c=> row2 += `<th rowspan="2" class="pcol-num" style="white-space:nowrap;">${c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.name.substring(0,6)}</th>`);
     } else {
       const shiftGroups = [];
       cols.forEach(c=>{
@@ -3674,7 +3681,7 @@ function buildMergedPreviewTable(page, todayStr){
       });
       shiftGroups.forEach(g=>{
         row2 += `<th colspan="${g.cols.length}">${g.shift==='am'?'AM':'PM'}</th>`;
-        g.cols.forEach(c=>{ const label = c.type==='rate_shift'?'Rate':c.type==='fat_shift'?'Fat':'Qty'; row3 += `<th style="width:1%;white-space:nowrap;">${label}</th>`; });
+        g.cols.forEach(c=>{ const label = c.type==='rate_shift'?'Rate':c.type==='fat_shift'?'Fat':'Qty'; row3 += `<th class="pcol-num" style="white-space:nowrap;">${label}</th>`; });
       });
     }
   });
@@ -3688,7 +3695,7 @@ function buildMergedPreviewTable(page, todayStr){
     order.forEach(k=>{
       const cols = animals[k].cols;
       dayTotal += computeAnimalRowRev(r, cols);
-      cols.forEach(c=>{ cells += `<td style="color:${isFuture?'var(--border)':'var(--fg)'};">${r[c.id]||'—'}</td>`; });
+      cols.forEach(c=>{ cells += `<td class="pcol-num" style="color:${isFuture?'var(--border)':'var(--fg)'};">${r[c.id]||'—'}</td>`; });
     });
     grandTotal += dayTotal;
     cells += `<td style="text-align:right;font-weight:900;">${dayTotal>0?'₹'+fmt(dayTotal):'—'}</td>`;
@@ -3755,8 +3762,36 @@ function fitPreviewTableToScreen(){
 let adaptiveState = { scale:1, x:0, y:0, minScale:1, maxScale:1 };
 let adaptivePointers = new Map();
 let adaptiveDragStart = null, adaptivePinchStartDist = 0, adaptivePinchStartScale = 1;
+// Pan/pinch had no bounds at all, so a drag or pinch-zoom could push the
+// whole table clean off the visible area with no way back short of leaving
+// and reopening the preview. This keeps at least a chunk of the table
+// (KEEP_VISIBLE px) on-screen on every axis no matter how far the person
+// pans or zooms out, the same way a map or photo viewer would.
+const ADAPTIVE_KEEP_VISIBLE = 72;
+function clampAdaptiveState(){
+  const container = document.getElementById('preview-content');
+  const wrap = document.getElementById('preview-scale-wrap');
+  if(!container || !wrap) return;
+  const cw = container.clientWidth, ch = container.clientHeight;
+  const sw = wrap.scrollWidth * adaptiveState.scale, sh = wrap.scrollHeight * adaptiveState.scale;
+  if(sw<=0 || sh<=0) return;
+  // Bounds so the content rectangle can never leave the viewport by more
+  // than (its own size - KEEP_VISIBLE): pos can't go further right than
+  // "only KEEP_VISIBLE px of the left edge still overlaps the viewport",
+  // and can't go further left than "only KEEP_VISIBLE px of the right edge
+  // still overlaps" — same idea whichever axis/size relationship applies.
+  const clampAxis = (pos, containerSize, contentSize) => {
+    const min = ADAPTIVE_KEEP_VISIBLE - contentSize;
+    const max = containerSize - ADAPTIVE_KEEP_VISIBLE;
+    if(min >= max) return (containerSize - contentSize) / 2; // content ~= KEEP_VISIBLE size: just center it
+    return Math.max(min, Math.min(max, pos));
+  };
+  adaptiveState.x = clampAxis(adaptiveState.x, cw, sw);
+  adaptiveState.y = clampAxis(adaptiveState.y, ch, sh);
+}
 function applyAdaptiveTransform(){
   const wrap = document.getElementById('preview-scale-wrap'); if(!wrap) return;
+  clampAdaptiveState();
   wrap.style.transformOrigin = 'top left';
   wrap.style.left = '0px'; wrap.style.top = '0px';
   wrap.style.transform = `translate(${adaptiveState.x}px, ${adaptiveState.y}px) scale(${adaptiveState.scale})`;
@@ -3816,9 +3851,25 @@ function initAdaptiveGestures(){
     adaptiveState.scale = Math.max(adaptiveState.minScale, Math.min(adaptiveState.maxScale, adaptiveState.scale*(e.deltaY<0?1.1:0.9)));
     applyAdaptiveTransform();
   }, {passive:false});
+  // Double-tap/double-click to snap back to the centered fit-to-screen view
+  // — the standard escape hatch in any map/photo viewer, and the only way
+  // back once you've panned or zoomed far from center.
+  container.addEventListener('dblclick', e=>{
+    if(previewAspect!=='adaptive') return;
+    e.preventDefault();
+    Haptics.fire('tick');
+    resetAdaptiveView();
+  });
 }
 let previewTheme = Store.get('mdn_preview_theme') || 'classic';
-let previewAspect = Store.get('mdn_preview_aspect') || 'stretch';
+// 'fit' (uniform scale, true proportions) is the safe default — 'stretch'
+// scales X and Y independently to force-fill the rectangle, which for a
+// wide multi-animal table on a phone screen means the horizontal scale
+// often ends up noticeably smaller than the vertical one, squashing every
+// column's text sideways (this is what made values look clipped/collided,
+// e.g. "4.25" reading like a bare "5"). Once someone picks a mode
+// themselves it's remembered as before; this only affects first-ever open.
+let previewAspect = Store.get('mdn_preview_aspect') || 'fit';
 let previewRatio = Store.get('mdn_preview_ratio') || 'auto';
 function setPreviewTheme(t){
   previewTheme = t; Haptics.fire('tick'); Store.set('mdn_preview_theme', t);
