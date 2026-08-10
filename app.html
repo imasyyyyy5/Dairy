@@ -2974,7 +2974,7 @@ function createPage(startDate){
       const r={id:uid(),index:i,assignedDate:addDays(startDate,i),date:'',dateFrozen:false,total:0};
       cols.forEach(c=>{if(!['sr','date','total'].includes(c.type))r[c.id]='';}); return r;
     }),
-    locked:false,createdAt:new Date().toISOString(),clearedAt:null,trashed:false
+    locked:false,createdAt:new Date().toISOString(),clearedAt:null,trashed:false,manualUnlock:false
   };
 }
 
@@ -3995,16 +3995,29 @@ function isPeriodComplete(page){
 }
 // Periods lock automatically so the milkmen ledger's "due" figure always
 // reflects settled, unchanging data:
-//  - the moment the period's last shift is filled in, it locks right away
+//  - once the period's own date range is over (i.e. from the day *after*
+//    its end date), it locks as soon as the last shift is filled in
 //  - otherwise it force-locks once a full day has passed since the *next*
 //    period started, so an incomplete period can't sit open indefinitely
+// Crucially, this never locks a page while `today` still falls inside its
+// own startDate–endDate range — even if the very last shift has just been
+// filled in. Locking mid-day on the period's last date used to yank the
+// sheet out from under the user instantly (getActivePage()/openQuickEntry()
+// both skip locked pages), producing a false "no active record sheet for
+// today" prompt on the last day of every period. The lock now only ever
+// kicks in starting the *next* calendar date, so today's sheet stays fully
+// usable (edits, backfills, household pouring, etc.) for its entire day.
+// Also never re-locks a page the user explicitly unlocked via reqLock() —
+// that stays open until they manually lock it again (see reqLock()), so a
+// manual unlock can't be silently undone by the next sweep.
 // Never touches an already-locked page, and never discards any entered data
 // — locking only flips the locked flag, rows/cols/totals are untouched.
 function autoLockIfDue(pageId){
   const pages = DB.pages();
   const page = pages.find(p=>p.id===pageId && !p.trashed);
-  if(!page || page.locked) return false;
+  if(!page || page.locked || page.manualUnlock) return false;
   const td = today();
+  if(td <= page.endDate) return false; // period's own date range (incl. its last day) is still current — leave it fully editable
   let shouldLock=false, complete=false;
   if(isPeriodComplete(page)){ shouldLock=true; complete=true; }
   else if(td >= addDays(page.endDate, 2)){ shouldLock=true; }
@@ -5108,10 +5121,16 @@ async function reqLock(pageId){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0) return; const page=pages[pi];
   if(page.locked){
     const agreed=await appConfirm('Unlock Record?','Unlock to edit again?'); if(!agreed) return;
-    page.locked=false; page.clearedAt=null; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
+    // manualUnlock=true tells autoLockIfDue() to leave this page alone from
+    // now on — otherwise the very next auto-lock sweep (which runs on every
+    // render) would see the same "complete"/"grace period over" condition
+    // that locked it in the first place and instantly re-lock it, making it
+    // look like the sheet "can't be unlocked". It only re-locks once the
+    // user explicitly locks it again below.
+    page.locked=false; page.clearedAt=null; page.manualUnlock=true; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
   } else {
     const agreed=await appConfirm('Mark as Cleared?','Lock record and mark account cleared?'); if(!agreed) return;
-    page.locked=true; page.clearedAt=new Date().toISOString(); DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
+    page.locked=true; page.clearedAt=new Date().toISOString(); page.manualUnlock=false; page.autoLocked=false; DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
   }
   renderHome();
 }
