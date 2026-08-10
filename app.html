@@ -352,6 +352,13 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 .preview-controls.visible{opacity:1;pointer-events:auto;}
 .preview-controls-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px 25px;gap:10px;flex-wrap:wrap;background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(to bottom, #000 55%, transparent);mask-image:linear-gradient(to bottom, #000 55%, transparent);}
 .preview-controls-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;background:linear-gradient(to top, rgba(0,0,0,0.55), transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(to top, #000 55%, transparent);mask-image:linear-gradient(to top, #000 55%, transparent);}
+.preview-controls-aspect{position:absolute;bottom:14px;right:18px;z-index:6;display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:10px 12px;border-radius:14px;background:rgba(0,0,0,0.6);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
+#preview-scale-wrap{position:absolute;top:0;left:0;}
+.preview-ratio-wrap{position:relative;}
+.preview-ratio-dropdown{display:none;position:absolute;bottom:calc(100% + 8px);right:0;background:rgba(20,20,20,0.92);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border-radius:12px;padding:6px;min-width:110px;flex-direction:column;gap:2px;}
+.preview-ratio-dropdown.open{display:flex;}
+.pratio-opt{padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;text-align:right;cursor:pointer;white-space:nowrap;}
+.pratio-opt.active{background:rgba(255,255,255,0.18);}
 .preview-controls-group{display:flex;gap:6px;flex-wrap:wrap;}
 .preview-controls-label{font-size:9px;font-weight:800;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.05em;width:100%;margin-bottom:2px;}
 
@@ -626,22 +633,28 @@ svg.chart{display:block;width:100%;overflow:visible;}
         <button class="mx" onclick="closePeriodPreview()">✕</button>
       </div>
       <div class="preview-controls-bottom" onclick="event.stopPropagation()">
-        <div style="width:100%;display:flex;flex-direction:column;gap:6px;">
-          <div>
-            <div class="preview-controls-label">Fit</div>
-            <div class="preview-controls-group">
-              <div class="ptheme-tab active" data-aspect="stretch" onclick="setPreviewAspect('stretch')">Stretch</div>
-              <div class="ptheme-tab" data-aspect="fit" onclick="setPreviewAspect('fit')">Fit</div>
-              <div class="ptheme-tab" data-aspect="adaptive" onclick="setPreviewAspect('adaptive')">Adaptive</div>
-            </div>
-          </div>
-          <div>
-            <div class="preview-controls-label">Theme</div>
-            <div class="preview-controls-group">
-              <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
-              <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
-              <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
-              <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
+        <div class="preview-controls-label">Theme</div>
+        <div class="preview-controls-group">
+          <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
+          <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
+          <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
+          <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
+        </div>
+      </div>
+      <div class="preview-controls-aspect" onclick="event.stopPropagation()">
+        <div class="preview-controls-label" style="text-align:right;">Fit</div>
+        <div class="preview-controls-group" style="justify-content:flex-end;">
+          <div class="ptheme-tab active" data-aspect="stretch" onclick="setPreviewAspect('stretch')">Stretch</div>
+          <div class="ptheme-tab" data-aspect="fit" onclick="setPreviewAspect('fit')">Fit</div>
+          <div class="ptheme-tab" data-aspect="adaptive" onclick="setPreviewAspect('adaptive')">Adaptive</div>
+          <div class="preview-ratio-wrap">
+            <div class="ptheme-tab" onclick="togglePreviewRatioDropdown()">📐 <span id="preview-ratio-label">Ratio</span> ▾</div>
+            <div class="preview-ratio-dropdown" id="preview-ratio-dropdown">
+              <div class="pratio-opt active" data-ratio="auto" onclick="setPreviewRatio('auto')">Auto (Full Screen)</div>
+              <div class="pratio-opt" data-ratio="1:1" onclick="setPreviewRatio('1:1')">1:1</div>
+              <div class="pratio-opt" data-ratio="4:3" onclick="setPreviewRatio('4:3')">4:3</div>
+              <div class="pratio-opt" data-ratio="16:9" onclick="setPreviewRatio('16:9')">16:9</div>
+              <div class="pratio-opt" data-ratio="9:16" onclick="setPreviewRatio('9:16')">9:16</div>
             </div>
           </div>
         </div>
@@ -3058,6 +3071,7 @@ function navUndo(entry) {
       case 'subview':    setMV('profile'); break;
       case 'detail':     closeDetail(); break;
       case 'detailPage': detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); break;
+      case 'preview':    closePeriodPreview(); break;
     }
   } finally {
     navUndoing = false;
@@ -3689,38 +3703,123 @@ function buildMergedPreviewTable(page, todayStr){
 function buildPeriodPreviewContent(page, profile, todayStr){
   return `<div id="preview-scale-wrap"><div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div></div>`;
 }
-// No scrolling in the preview — instead the whole table (header through the
-// Period Grand Total row) is measured at its natural size, then scaled to
-// fill #preview-content per the chosen aspect mode:
-//  - stretch:  scale X and Y independently — always fills all 4 corners,
-//              may distort row height vs column width if the ratios differ a lot
-//  - fit:      one uniform scale (the smaller of the two) — preserves the
-//              table's natural proportions, may letterbox with empty space
-//  - adaptive: stretch, but only when the two axes are already close enough
-//              (within 30%) that it won't look distorted — otherwise falls
-//              back to fit, like a "smart" middle ground between the two
+const PREVIEW_RATIOS = { auto:null, '1:1':[1,1], '4:3':[4,3], '16:9':[16,9], '9:16':[9,16] };
+// When a fixed ratio is picked, the table works within a centered rectangle
+// of that ratio (letterboxed within the real screen) instead of the full
+// #preview-content area — same idea as a video player's aspect-ratio option.
+function getPreviewViewportRect(container){
+  const cw = container.clientWidth, ch = container.clientHeight;
+  const r = PREVIEW_RATIOS[previewRatio];
+  if(!r) return {w:cw, h:ch, x:0, y:0};
+  const targetRatio = r[0]/r[1];
+  let w = cw, h = cw/targetRatio;
+  if(h > ch){ h = ch; w = ch*targetRatio; }
+  return { w, h, x:(cw-w)/2, y:(ch-h)/2 };
+}
+// No scrolling in the preview — the table (header through the Period Grand
+// Total row) is measured at its natural size, then placed per the chosen
+// mode within the (possibly ratio-constrained) viewport rectangle:
+//  - stretch:  scale X and Y independently to exactly fill the rectangle —
+//              always reaches all 4 corners, may distort proportions
+//  - fit:      one uniform scale (the smaller of the two) that preserves
+//              the table's natural proportions, CENTERED in the rectangle
+//              rather than anchored to a corner — any leftover space is
+//              split evenly on both sides instead of all ending up bottom-right
+//  - adaptive: not scaled to fit at all — shown at natural/readable cell
+//              size, and left up to the person to pinch-zoom and drag/pan
+//              around, like a map or photo viewer
 function fitPreviewTableToScreen(){
   const container = document.getElementById('preview-content');
   const wrap = document.getElementById('preview-scale-wrap');
   if(!container || !wrap) return;
-  wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = '';
-  const availH = container.clientHeight, availW = container.clientWidth;
+  if(previewAspect === 'adaptive'){ resetAdaptiveView(); return; }
+  wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = ''; wrap.style.left = '0px'; wrap.style.top = '0px';
+  const rect = getPreviewViewportRect(container);
   const naturalH = wrap.scrollHeight, naturalW = wrap.scrollWidth;
-  if(naturalH<=0 || naturalW<=0 || availH<=0 || availW<=0) return;
-  let scaleX = availW / naturalW, scaleY = availH / naturalH;
+  if(naturalH<=0 || naturalW<=0 || rect.w<=0 || rect.h<=0) return;
+  let scaleX = rect.w / naturalW, scaleY = rect.h / naturalH;
+  let offX = rect.x, offY = rect.y;
   if(previewAspect === 'fit'){
-    scaleX = scaleY = Math.min(scaleX, scaleY);
-  } else if(previewAspect === 'adaptive'){
-    const ratio = scaleX > scaleY ? scaleX/scaleY : scaleY/scaleX;
-    if(ratio > 1.3){ scaleX = scaleY = Math.min(scaleX, scaleY); }
+    const s = Math.min(scaleX, scaleY);
+    scaleX = scaleY = s;
+    offX = rect.x + (rect.w - naturalW*s)/2;
+    offY = rect.y + (rect.h - naturalH*s)/2;
   }
   wrap.style.transformOrigin = 'top left';
+  wrap.style.left = offX + 'px'; wrap.style.top = offY + 'px';
   wrap.style.transform = `scale(${scaleX}, ${scaleY})`;
   wrap.style.width = naturalW + 'px';
   wrap.style.height = naturalH + 'px';
 }
+// Adaptive mode: natural size, pan + pinch/wheel zoom instead of forced fit.
+let adaptiveState = { scale:1, x:0, y:0, minScale:1, maxScale:1 };
+let adaptivePointers = new Map();
+let adaptiveDragStart = null, adaptivePinchStartDist = 0, adaptivePinchStartScale = 1;
+function applyAdaptiveTransform(){
+  const wrap = document.getElementById('preview-scale-wrap'); if(!wrap) return;
+  wrap.style.transformOrigin = 'top left';
+  wrap.style.left = '0px'; wrap.style.top = '0px';
+  wrap.style.transform = `translate(${adaptiveState.x}px, ${adaptiveState.y}px) scale(${adaptiveState.scale})`;
+}
+function resetAdaptiveView(){
+  const container = document.getElementById('preview-content');
+  const wrap = document.getElementById('preview-scale-wrap');
+  if(!container || !wrap) return;
+  wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = '';
+  const rect = getPreviewViewportRect(container);
+  const naturalW = wrap.scrollWidth, naturalH = wrap.scrollHeight;
+  if(naturalW<=0 || naturalH<=0) return;
+  const base = Math.min(rect.w/naturalW, rect.h/naturalH, 1) || 1;
+  adaptiveState.scale = base; adaptiveState.minScale = base*0.5; adaptiveState.maxScale = base*4;
+  adaptiveState.x = rect.x + (rect.w - naturalW*base)/2;
+  adaptiveState.y = rect.y + (rect.h - naturalH*base)/2;
+  wrap.style.width = naturalW + 'px'; wrap.style.height = naturalH + 'px';
+  applyAdaptiveTransform();
+  initAdaptiveGestures();
+}
+function initAdaptiveGestures(){
+  const container = document.getElementById('preview-content');
+  if(!container || container._adaptiveInit) return;
+  container._adaptiveInit = true;
+  container.style.touchAction = 'none';
+  container.addEventListener('pointerdown', e=>{
+    if(previewAspect!=='adaptive') return;
+    container.setPointerCapture(e.pointerId);
+    adaptivePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(adaptivePointers.size===1) adaptiveDragStart = {x:e.clientX-adaptiveState.x, y:e.clientY-adaptiveState.y};
+    if(adaptivePointers.size===2){
+      const pts=[...adaptivePointers.values()];
+      adaptivePinchStartDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      adaptivePinchStartScale = adaptiveState.scale;
+    }
+  });
+  container.addEventListener('pointermove', e=>{
+    if(previewAspect!=='adaptive' || !adaptivePointers.has(e.pointerId)) return;
+    adaptivePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(adaptivePointers.size===1 && adaptiveDragStart){
+      adaptiveState.x = e.clientX - adaptiveDragStart.x;
+      adaptiveState.y = e.clientY - adaptiveDragStart.y;
+      applyAdaptiveTransform();
+    } else if(adaptivePointers.size===2 && adaptivePinchStartDist>0){
+      const pts=[...adaptivePointers.values()];
+      const dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      adaptiveState.scale = Math.max(adaptiveState.minScale, Math.min(adaptiveState.maxScale, adaptivePinchStartScale*(dist/adaptivePinchStartDist)));
+      applyAdaptiveTransform();
+    }
+  });
+  const endHandler = e=>{ adaptivePointers.delete(e.pointerId); if(adaptivePointers.size<2) adaptivePinchStartDist=0; if(adaptivePointers.size===0) adaptiveDragStart=null; };
+  container.addEventListener('pointerup', endHandler);
+  container.addEventListener('pointercancel', endHandler);
+  container.addEventListener('wheel', e=>{
+    if(previewAspect!=='adaptive') return;
+    e.preventDefault();
+    adaptiveState.scale = Math.max(adaptiveState.minScale, Math.min(adaptiveState.maxScale, adaptiveState.scale*(e.deltaY<0?1.1:0.9)));
+    applyAdaptiveTransform();
+  }, {passive:false});
+}
 let previewTheme = Store.get('mdn_preview_theme') || 'classic';
 let previewAspect = Store.get('mdn_preview_aspect') || 'stretch';
+let previewRatio = Store.get('mdn_preview_ratio') || 'auto';
 function setPreviewTheme(t){
   previewTheme = t; Haptics.fire('tick'); Store.set('mdn_preview_theme', t);
   const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
@@ -3731,6 +3830,19 @@ function setPreviewTheme(t){
 function setPreviewAspect(a){
   previewAspect = a; Haptics.fire('tick'); Store.set('mdn_preview_aspect', a);
   document.querySelectorAll('.ptheme-tab[data-aspect]').forEach(el=>el.classList.toggle('active', el.dataset.aspect===a));
+  requestAnimationFrame(fitPreviewTableToScreen);
+  showPreviewControls();
+}
+function togglePreviewRatioDropdown(){
+  const el = document.getElementById('preview-ratio-dropdown'); if(!el) return;
+  el.classList.toggle('open');
+  showPreviewControls();
+}
+function setPreviewRatio(r){
+  previewRatio = r; Haptics.fire('tick'); Store.set('mdn_preview_ratio', r);
+  document.querySelectorAll('.pratio-opt').forEach(el=>el.classList.toggle('active', el.dataset.ratio===r));
+  const label = document.getElementById('preview-ratio-label'); if(label) label.textContent = r==='auto' ? 'Ratio' : r;
+  document.getElementById('preview-ratio-dropdown')?.classList.remove('open');
   requestAnimationFrame(fitPreviewTableToScreen);
   showPreviewControls();
 }
@@ -3747,6 +3859,7 @@ function showPreviewControls(){
 }
 function togglePreviewControls(){
   const el = document.getElementById('preview-controls'); if(!el) return;
+  document.getElementById('preview-ratio-dropdown')?.classList.remove('open');
   if(el.classList.contains('visible')){ el.classList.remove('visible'); clearTimeout(previewControlsTimer); }
   else showPreviewControls();
 }
@@ -3758,7 +3871,11 @@ function openPeriodPreview(pageId){
   document.getElementById('preview-body').className = 'ptheme-' + previewTheme;
   document.querySelectorAll('.ptheme-tab[data-theme]').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
   document.querySelectorAll('.ptheme-tab[data-aspect]').forEach(el=>el.classList.toggle('active', el.dataset.aspect===previewAspect));
+  document.querySelectorAll('.pratio-opt').forEach(el=>el.classList.toggle('active', el.dataset.ratio===previewRatio));
+  const ratioLabel = document.getElementById('preview-ratio-label'); if(ratioLabel) ratioLabel.textContent = previewRatio==='auto' ? 'Ratio' : previewRatio;
+  adaptiveState = { scale:1, x:0, y:0, minScale:1, maxScale:1 };
   document.getElementById('m-period-preview').classList.add('active');
+  navPush('preview', {});
   showPreviewControls();
   requestAnimationFrame(fitPreviewTableToScreen);
   if (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) showToast('Rotate your device sideways for the best view', true, 'light');
@@ -3768,10 +3885,12 @@ function openPeriodPreview(pageId){
   try { screen.orientation?.lock?.('landscape').catch(()=>{}); } catch(e){}
 }
 function closePeriodPreview(){
+  const wasOpen = document.getElementById('m-period-preview').classList.contains('active');
   document.getElementById('m-period-preview').classList.remove('active');
   clearTimeout(previewControlsTimer);
   try { screen.orientation?.unlock?.(); } catch(e){}
   try { if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{}); } catch(e){}
+  if (wasOpen && !navUndoing) navConsumeIfTop('preview', () => true);
 }
 window.addEventListener('resize', () => { if(document.getElementById('m-period-preview')?.classList.contains('active')) requestAnimationFrame(fitPreviewTableToScreen); });
 
