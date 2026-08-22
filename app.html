@@ -25,6 +25,15 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
 
+<!-- The Firebase SDK + auth/sync calls all go to gstatic.com, but the
+     <script type="module"> that imports it sits at the very bottom of
+     <body> — meaning the browser wouldn't even start that connection
+     until the entire page had been parsed. Opening the connection here,
+     as early as possible, overlaps that network setup with everything
+     else the page is doing, so by the time the module script runs the
+     handshake is already done instead of adding to the splash wait. -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin/>
+
 <!-- ══════ SEO / DISCOVERABILITY ══════ -->
 <title>Smart Milking – Daily Milk Record & Dairy Diary App</title>
 <meta name="description" content="Smart Milking helps dairy farmers track daily milk records, animals, local customers, and payments — a simple digital diary that works offline."/>
@@ -124,7 +133,7 @@ html[data-theme="light"]{
 /* Z-INDEX HIERARCHY */
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
-#onboarding, #quick-entry, #m-period-preview { z-index: 1000 !important; }
+#onboarding, #quick-entry { z-index: 1000 !important; }
 #m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
@@ -322,89 +331,10 @@ tfoot td{padding:8px 4px;font-weight:800;font-size:12px;text-align:center; color
 }
 .finp:focus{background:var(--bg2); border-color:var(--fg);}
 .finp:disabled{opacity:.35;cursor:not-allowed;}
-.finp-narrow{max-width:32px; font-size:10px; padding:8px 1px;}
-
-.animal-tabs{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;}
-.animal-tabs::-webkit-scrollbar{display:none;}
-.animal-tab{flex-shrink:0;padding:6px 13px;border-radius:999px;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;transition:.15s;}
-.animal-tab.active{background:var(--fg);color:var(--bg);border-color:var(--fg);}
-.animal-carousel{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:10px;}
-.animal-carousel::-webkit-scrollbar{display:none;}
-.animal-slide{flex:0 0 100%;scroll-snap-align:start;transition:opacity .2s;}
-
-/* Only the table area scrolls — header + theme tabs stay pinned so they're
-   never scrolled out of view, and the full-overlay's own overflow (meant for
-   simpler full-screen views) would otherwise fight this and double-scroll. */
-#m-period-preview{overflow:hidden !important;}
-#m-period-preview .preview-table-wrap{overflow:visible;}
-.preview-mtable thead th{background:var(--bg1);}
-
-.preview-table-wrap table{font-size:14px;}
-.preview-table-wrap th{font-size:11px;padding:9px 7px;}
-.preview-table-wrap td{padding:9px 7px;font-size:14px;}
-.preview-table-wrap tfoot td{font-size:14px;padding:11px 7px;}
-.preview-mtable th.th-group{background:var(--bg2);}
-/* Qty/Rate/Fat/AM/PM columns: previously width:1% shrank these to fit only
-   their short header label (e.g. "AM", "5"), so a value like "4.25" had no
-   floor and could render narrower than its own text needs, visually
-   colliding with the next column ("5" appearing to hide the rest). A
-   min-width floor sized for "4.25" (worst case: 4 digits + a decimal point)
-   fixes that while staying as narrow as the data actually needs. */
-.preview-mtable .pcol-num{min-width:4.5ch;white-space:nowrap;}
-
-/* YouTube-style overlay chrome: hidden by default, fades in on tap, and
-   auto-hides again — so the table itself can use the full screen edge to
-   edge instead of a permanent header bar eating into it. */
-.preview-controls{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .12s;z-index:5;}
-.preview-controls.visible{opacity:1;pointer-events:auto;}
-.preview-controls-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px 25px;gap:10px;flex-wrap:wrap;background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(to bottom, #000 55%, transparent);mask-image:linear-gradient(to bottom, #000 55%, transparent);}
-.preview-controls-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px;background:linear-gradient(to top, rgba(0,0,0,0.55), transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);-webkit-mask-image:linear-gradient(to top, #000 55%, transparent);mask-image:linear-gradient(to top, #000 55%, transparent);}
-.preview-controls-aspect{position:absolute;bottom:14px;right:18px;z-index:6;display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:10px 12px;border-radius:14px;background:rgba(0,0,0,0.6);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
-#preview-scale-wrap{position:absolute;top:0;left:0;}
-.preview-ratio-wrap{position:relative;}
-.preview-ratio-dropdown{display:none;position:absolute;bottom:calc(100% + 8px);right:0;background:rgba(20,20,20,0.92);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border-radius:12px;padding:6px;min-width:110px;flex-direction:column;gap:2px;}
-.preview-ratio-dropdown.open{display:flex;}
-.pratio-opt{padding:7px 10px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;text-align:right;cursor:pointer;white-space:nowrap;}
-.pratio-opt.active{background:rgba(255,255,255,0.18);}
-.preview-controls-group{display:flex;gap:6px;flex-wrap:wrap;}
-.preview-controls-label{font-size:9px;font-weight:800;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.05em;width:100%;margin-bottom:2px;}
-
-.ptheme-tab{padding:6px 13px;border-radius:999px;border:1px solid rgba(255,255,255,0.3);font-size:11px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;}
-.ptheme-tab.active{background:#fff;color:#000;border-color:#fff;}
-
-/* Colorful theme: shaded animal-group headers + alternating row bands */
-#preview-body.ptheme-color .preview-mtable th.th-group{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;}
-#preview-body.ptheme-color .preview-mtable tbody tr:nth-child(even){background:rgba(99,102,241,0.08);}
-#preview-body.ptheme-color .preview-mtable .ttot{color:#22c55e;}
-
-/* Contrast and Sepia force a specific page background — so unlike Colorful
-   (which just layers onto the app's existing dark/light theme), these two
-   must ALSO override every dark-tuned class the base table CSS uses
-   (row banding, .tsr, .ttot/.ttote, th.th-group, and the tfoot ROW itself —
-   tfoot tr has its own explicit dark background separate from its td text
-   color, which is what left the Grand Total row unreadable) or that text
-   stays styled for a dark background and becomes unreadable against the new one. */
-#preview-body.ptheme-contrast{background:#fff;}
-#preview-body.ptheme-contrast .preview-mtable{color:#000 !important;}
-#preview-body.ptheme-contrast .preview-mtable th, #preview-body.ptheme-contrast .preview-mtable td{color:#000 !important;border:1px solid #000 !important;}
-#preview-body.ptheme-contrast .preview-mtable th{background:#000 !important;color:#fff !important;}
-#preview-body.ptheme-contrast .preview-mtable tbody tr:nth-child(even){background:#f0f0f0 !important;}
-#preview-body.ptheme-contrast .preview-mtable tbody tr:nth-child(odd){background:#fff !important;}
-#preview-body.ptheme-contrast .preview-mtable tfoot tr{background:#e0e0e0 !important;}
-#preview-body.ptheme-contrast .preview-mtable .tsr{color:#000 !important;}
-#preview-body.ptheme-contrast .preview-mtable .ttot{color:#000 !important;}
-#preview-body.ptheme-contrast .preview-mtable .ttote{color:#888 !important;}
-
-#preview-body.ptheme-sepia{background:#f4ecd8;}
-#preview-body.ptheme-sepia .preview-mtable{color:#5b4636 !important;}
-#preview-body.ptheme-sepia .preview-mtable th, #preview-body.ptheme-sepia .preview-mtable td{color:#5b4636 !important;border-color:#c9b896 !important;}
-#preview-body.ptheme-sepia .preview-mtable th{background:#e8dcc0 !important;}
-#preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(even){background:rgba(201,184,150,0.22) !important;}
-#preview-body.ptheme-sepia .preview-mtable tbody tr:nth-child(odd){background:#f4ecd8 !important;}
-#preview-body.ptheme-sepia .preview-mtable tfoot tr{background:#dcc9a3 !important;}
-#preview-body.ptheme-sepia .preview-mtable .tsr{color:#5b4636 !important;}
-#preview-body.ptheme-sepia .preview-mtable .ttot{color:#5b4636 !important;}
-#preview-body.ptheme-sepia .preview-mtable .ttote{color:#a8927a !important;}
+/* Any primary/secondary action button that's disabled pending required
+   input dims to signal "not ready yet" instead of looking tappable and
+   then bouncing an alert back at the person after the fact. */
+.btn:disabled{opacity:.4;cursor:not-allowed;filter:saturate(.6);}
 
 .mbox{background:var(--bg1);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:var(--rl) var(--rl) 0 0;width:100%;max-width:500px;margin:0 auto;padding:20px;transform:translateY(16px);transition:transform .25s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto;}
 .moverlay.open .mbox{transform:translateY(0);}
@@ -606,7 +536,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <p class="tc anim-stagger d1" style="color:var(--sub); margin-bottom:30px; font-size:15px;">Set up your profile and add the animals you milk to automate your daily entry sheets.</p>
   <div class="card mb3 anim-stagger d2" style="border-radius:24px; padding:20px;">
     <div class="slabel">Your Name / Dairy Name</div>
-    <input class="inp" id="ob-dairy-name" placeholder="Enter name..."/>
+    <input class="inp" id="ob-dairy-name" placeholder="Enter name..." oninput="renderObSetupButton()"/>
   </div>
   <div id="ob-animal-list" class="sp2 mb3 anim-stagger d2"></div>
   <div class="card mb4 anim-stagger d3" style="border-radius:24px; padding:20px;">
@@ -626,48 +556,6 @@ svg.chart{display:block;width:100%;overflow:visible;}
       <button class="btn bp" id="ob-finish-btn" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()">Continue as Guest ›</button>
   </div>
  </div>
-</div>
-
-<div id="m-period-preview" class="full-overlay" style="padding:0;">
-  <div id="preview-body" class="ptheme-classic" style="position:relative;width:100%;height:100%;overflow:hidden;" onclick="togglePreviewControls()">
-    <div id="preview-content" style="position:absolute;inset:0;padding:4px;overflow:hidden;"></div>
-    <div id="preview-controls" class="preview-controls visible">
-      <div class="preview-controls-top" onclick="event.stopPropagation()">
-        <div>
-          <div class="eyebrow" style="color:#fff;">Full-Screen Preview</div>
-          <div class="ptitle" id="preview-title" style="font-size:16px;color:#fff;">Period</div>
-        </div>
-        <button class="mx" onclick="closePeriodPreview()">✕</button>
-      </div>
-      <div class="preview-controls-bottom" onclick="event.stopPropagation()">
-        <div class="preview-controls-label">Theme</div>
-        <div class="preview-controls-group">
-          <div class="ptheme-tab active" data-theme="classic" onclick="setPreviewTheme('classic')">Classic</div>
-          <div class="ptheme-tab" data-theme="color" onclick="setPreviewTheme('color')">Colorful</div>
-          <div class="ptheme-tab" data-theme="contrast" onclick="setPreviewTheme('contrast')">Contrast</div>
-          <div class="ptheme-tab" data-theme="sepia" onclick="setPreviewTheme('sepia')">Sepia</div>
-        </div>
-      </div>
-      <div class="preview-controls-aspect" onclick="event.stopPropagation()">
-        <div class="preview-controls-label" style="text-align:right;">Fit</div>
-        <div class="preview-controls-group" style="justify-content:flex-end;">
-          <div class="ptheme-tab" data-aspect="stretch" onclick="setPreviewAspect('stretch')">Stretch</div>
-          <div class="ptheme-tab active" data-aspect="fit" onclick="setPreviewAspect('fit')">Fit</div>
-          <div class="ptheme-tab" data-aspect="adaptive" onclick="setPreviewAspect('adaptive')">Adaptive</div>
-          <div class="preview-ratio-wrap">
-            <div class="ptheme-tab" onclick="togglePreviewRatioDropdown()">📐 <span id="preview-ratio-label">Ratio</span> ▾</div>
-            <div class="preview-ratio-dropdown" id="preview-ratio-dropdown">
-              <div class="pratio-opt active" data-ratio="auto" onclick="setPreviewRatio('auto')">Auto (Full Screen)</div>
-              <div class="pratio-opt" data-ratio="1:1" onclick="setPreviewRatio('1:1')">1:1</div>
-              <div class="pratio-opt" data-ratio="4:3" onclick="setPreviewRatio('4:3')">4:3</div>
-              <div class="pratio-opt" data-ratio="16:9" onclick="setPreviewRatio('16:9')">16:9</div>
-              <div class="pratio-opt" data-ratio="9:16" onclick="setPreviewRatio('9:16')">9:16</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div id="quick-entry" class="full-overlay">
@@ -814,7 +702,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <label class="flabel">Start Date</label>
  <button class="btn bd-trigger mb3 w-100" id="mnp-date-trigger" onclick="openThemedCalendar('mnp-date')">Choose Start Date</button>
  <input type="hidden" id="mnp-date"/>
- <div class="mact"><button class="btn bs" onclick="cm('m-newpage')">Cancel</button><button class="btn bp" onclick="doNewPage()">Create Page</button></div>
+ <div class="mact"><button class="btn bs" onclick="cm('m-newpage')">Cancel</button><button class="btn bp" id="np-btn" onclick="doNewPage()">Create Page</button></div>
 </div></div>
 
 <div class="moverlay" id="m-animal" onclick="moi(event,'m-animal')"><div class="mbox">
@@ -851,20 +739,20 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div class="mh"><span class="mt">Add Expense</span><button class="mx" onclick="cm('m-expense')">✕</button></div>
  <div style="margin-bottom:9px;"><label class="flabel">Expense Name</label><input class="inp" id="m-exp-name" placeholder="e.g. Feed, Medical..."/></div>
  <div style="margin-bottom:15px;"><label class="flabel">Cost (₹)</label><input class="inp" type="number" id="m-exp-cost" placeholder="0.0"/></div>
- <div class="mact"><button class="btn bs" onclick="cm('m-expense')">Cancel</button><button class="btn bp" onclick="saveNewExpense()">Save Expense</button></div>
+ <div class="mact"><button class="btn bs" onclick="cm('m-expense')">Cancel</button><button class="btn bp" id="exp-btn" onclick="saveNewExpense()">Save Expense</button></div>
 </div></div>
 
 <div class="moverlay" id="m-household" onclick="moi(event,'m-household')"><div class="mbox">
  <div class="mh"><span class="mt" id="hh-title">Add Customer</span><button class="mx" onclick="cm('m-household')">✕</button></div>
- <div style="margin-bottom:9px;"><label class="flabel">Customer Name</label><input class="inp" id="hh-name" placeholder="e.g. Sharma Family, Tea Stall..."/></div>
+ <div style="margin-bottom:9px;"><label class="flabel">Customer Name</label><input class="inp" id="hh-name" placeholder="e.g. Sharma Family, Tea Stall..." oninput="updateHhSaveBtn()"/></div>
  <div id="hh-new-fields">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px;">
-     <div><label class="flabel">Daily Qty (L)</label><input class="inp" type="number" id="hh-qty" placeholder="e.g. 2"/></div>
+     <div><label class="flabel">Daily Qty (L)</label><input class="inp" type="number" id="hh-qty" placeholder="e.g. 2" oninput="updateHhSaveBtn()"/></div>
      <div>
       <label class="flabel">Rate (₹/L)</label>
       <button type="button" class="btn bd-trigger w-100" id="hh-rate-select-trigger" onclick="openHHRatePicker()">Select Rate...</button>
       <input type="hidden" id="hh-rate-select"/>
-      <input class="inp mt2" style="margin-top:6px;display:none;" type="number" id="hh-rate-custom" placeholder="Enter custom rate"/>
+      <input class="inp mt2" style="margin-top:6px;display:none;" type="number" id="hh-rate-custom" placeholder="Enter custom rate" oninput="updateHhSaveBtn()"/>
      </div>
     </div>
  </div>
@@ -908,7 +796,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <input type="hidden" id="mp-date"/>
  </div>
  <div style="margin-bottom:15px;"><label class="flabel">Remark</label><input class="inp" type="text" id="mp-note" placeholder="e.g. Cash, GPay, part payment..."/></div>
- <div class="mact"><button class="btn bs" onclick="cm('m-milkmen-payment')">Cancel</button><button class="btn bp" onclick="saveMilkmenPayment()">Save Payment</button></div>
+ <div class="mact"><button class="btn bs" onclick="cm('m-milkmen-payment')">Cancel</button><button class="btn bp" id="mp-btn" onclick="saveMilkmenPayment()">Save Payment</button></div>
 </div></div>
 
 <div class="moverlay" id="m-customer-payment" onclick="moi(event,'m-customer-payment')"><div class="mbox">
@@ -922,7 +810,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <input type="hidden" id="cp-date"/>
  </div>
  <div style="margin-bottom:15px;"><label class="flabel">Optional Note</label><input class="inp" type="text" id="cp-note" placeholder="e.g. Cash, GPay, settled..."/></div>
- <div class="mact"><button class="btn bs" onclick="cm('m-customer-payment')">Cancel</button><button class="btn bp" onclick="saveCustomerPayment()">Save Payment</button></div>
+ <div class="mact"><button class="btn bs" onclick="cm('m-customer-payment')">Cancel</button><button class="btn bp" id="cp-btn" onclick="saveCustomerPayment()">Save Payment</button></div>
 </div></div>
 
 <script>
@@ -1227,6 +1115,23 @@ async function cloudPushOne(key){
   renderCloudStatus();
 }
 
+// A debounced push (cloudTouch's 2s timer, used for rapid inline typing) is
+// the one place a change could go unsynced for a while — and on a phone,
+// "a while" is dangerous: backgrounding the app (switching to another app,
+// locking the screen) doesn't reliably keep JS timers alive long enough to
+// fire. That's the #1 real-world cause of "device B doesn't have the edit I
+// just made on device A" — not a slow network, but a debounce timer that
+// never got the chance to go off. So: the instant the app is hidden or about
+// to unload, every pending debounce is cancelled and pushed immediately
+// instead of waiting out its remaining time.
+function cloudFlushPendingPushes(){
+  for (const key in cloudPushTimers) {
+    if (cloudPushTimers[key]) { clearTimeout(cloudPushTimers[key]); cloudPushTimers[key] = null; cloudPushOne(key); }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') cloudFlushPendingPushes(); });
+window.addEventListener('pagehide', cloudFlushPendingPushes);
+
 // Runs once right after sign-in (and can be re-run manually): for each
 // collection, whichever side — local or remote — has the newer timestamp
 // wins. A brand-new device with no local data simply pulls everything down;
@@ -1254,8 +1159,17 @@ async function cloudInitialMerge(){
     const localMeta = cloudLocalMeta().localUpdatedAt;
     let pulledAny = false;
     try {
-      for (const key in CLOUD_COLLECTIONS) {
-        const remote = await window.CloudDB.getDoc(['users', cloudUser.uid, 'state', key]);
+      // The 9 collections are independent Firestore documents, so there's no
+      // reason to fetch them one at a time — that used to serialize 9 full
+      // network round-trips back to back, which was the single biggest chunk
+      // of splash-screen time on anything but a fast connection. Fire every
+      // getDoc at once and let them land in parallel; only the local
+      // apply/push work after each response still needs to happen per-key.
+      const keys = Object.keys(CLOUD_COLLECTIONS);
+      const remotes = await Promise.all(keys.map(key => window.CloudDB.getDoc(['users', cloudUser.uid, 'state', key])));
+      const pushes = [];
+      keys.forEach((key, i) => {
+        const remote = remotes[i];
         const localTs = localMeta[key] || 0;
         if (remote && (remote.updatedAt || 0) > localTs) {
           cloudApplyingRemote = true;
@@ -1265,9 +1179,10 @@ async function cloudInitialMerge(){
           if (key === 'theme') themeMemory = null;
           pulledAny = true;
         } else {
-          await cloudPushOne(key);
+          pushes.push(cloudPushOne(key));
         }
-      }
+      });
+      await Promise.all(pushes);
       if (pulledAny) { applyTheme(getThemePref()); AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe(); showToast('Synced from cloud', true, 'light'); }
       cloudSyncStatus = 'synced';
       cloudSetLastUid(cloudUser.uid);
@@ -1278,6 +1193,31 @@ async function cloudInitialMerge(){
   } finally {
     cloudMergeInFlight = false; renderObSetupButton();
   }
+}
+
+// Screens where a remote update landing mid-edit would be disruptive or
+// lossy: Quick Entry (actively typing shift numbers via the numpad) and the
+// single-record create/edit modals (a new record sheet, an animal, a
+// household, an exception, a payment). This is the "decide beforehand"
+// check — the app already knows, before it repaints anything, whether the
+// current screen is one where a background data swap and a "here's what
+// changed" toast would help the person or blindside them.
+const CLOUD_SENSITIVE_MODAL_IDS = ['m-newpage','m-animal','m-household','m-hh-exception','m-customer-payment','m-milkmen-payment'];
+function isSensitiveEditingOpen(){
+  const qe = document.getElementById('quick-entry');
+  if (qe && qe.classList.contains('active')) return true;
+  return CLOUD_SENSITIVE_MODAL_IDS.some(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
+}
+// Set when a remote update was merged into storage while a sensitive
+// surface (above) was open — the DATA is already safely up to date, only
+// the disruptive full re-render + toast is held back, so it can't yank the
+// screen out from under whatever the person is mid-way through entering.
+let cloudDeferredRefresh = false;
+function flushDeferredCloudRefresh(){
+  if (!cloudDeferredRefresh || isSensitiveEditingOpen()) return;
+  cloudDeferredRefresh = false;
+  AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe();
+  showToast('Updated from another device', true, 'light');
 }
 
 // Live updates from another device, once merge has run once for this session.
@@ -1294,6 +1234,7 @@ function attachCloudListeners(){
       cloudApplyingRemote = false;
       cloudMarkLocalTs(key, remote.updatedAt);
       if (key === 'theme') { themeMemory = null; applyTheme(getThemePref()); }
+      if (isSensitiveEditingOpen()) { cloudDeferredRefresh = true; return; }
       AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe();
       showToast('Updated from another device', true, 'light');
     });
@@ -1692,10 +1633,8 @@ const AnalyticsEngine = {
                    const name = c.name.replace(/( AM| PM| Rate).*/, '');
                    let rate = 0;
                    const shift = c.type==='milk_am' ? 'am' : 'pm';
-                   const rateCol = p.cols.find(col => col.type === 'rate_shift' && col.animal === c.animal && col.shift === shift);
                    const rfCol = p.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
-                   if(rateCol){ const v2 = parseFloat(r[rateCol.id]); rate = isNaN(v2) ? 0 : v2; }
-                   else if(rfCol){ const raw=(r[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); rate = isNaN(parsed)?0:parsed; }
+                   if(rfCol){ const raw=(r[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); rate = isNaN(parsed)?0:parsed; }
                    else {
                      const rCol = p.cols.find(col => (col.type === 'rate_per_animal' && col.animal === c.animal) || col.type === 'rate');
                      if (rCol) rate = parseFloat(r[rCol.id]) || (aMeta ? aMeta.rate : 0) || 0;
@@ -1748,7 +1687,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.16.1-seo-split-fix';
+const APP_VERSION = 'v1.18.0-required-field-btn-dim';
 
 const today=()=>{
   const d=new Date();
@@ -2019,7 +1958,7 @@ function appPrompt(title, defaultVal = '') {
 function submitAppPrompt(val) { cm('m-prompt'); if(promptResolution) { promptResolution(val); promptResolution = null; } }
 
 // EXPENSES
-function openExpenseModal() { document.getElementById('m-exp-name').value = ''; document.getElementById('m-exp-cost').value = ''; om('m-expense'); }
+function openExpenseModal() { document.getElementById('m-exp-name').value = ''; document.getElementById('m-exp-cost').value = ''; updateExpBtn(); om('m-expense'); }
 function saveNewExpense() {
     const name = document.getElementById('m-exp-name').value.trim(); const cost = parseFloat(document.getElementById('m-exp-cost').value) || 0;
     if(!name || cost <= 0) return appAlert('Error', 'Please enter a valid expense name and cost.');
@@ -2216,7 +2155,9 @@ function onCalDayTap(isoDateStr) {
 }
 
 function selectCalendarDate(isoDateStr) {
-  document.getElementById(activeCalendarTargetInputId).value = isoDateStr;
+  const targetInput = document.getElementById(activeCalendarTargetInputId);
+  targetInput.value = isoDateStr;
+  targetInput.dispatchEvent(new Event('input', {bubbles:true})); // JS-set .value doesn't fire 'input' on its own — dispatch it so required-field button dimming (bindRequiredFields) picks up date-picker selections too
   const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
   if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
   cm('m-calendar-sheet');
@@ -2331,32 +2272,22 @@ function defaultColumns(profile){
     milkA.forEach(a=>{
       const isFat = a.rateMethod==='fat';
       cols.push({id:'a_'+a.id+'_am',name:a.name+' AM',type:'milk_am',animal:a.id, animalType:a.type, animalRate:a.rate, rateMethod:a.rateMethod});
-      if(isFat){
-        cols.push({id:'a_'+a.id+'_am_rate', name:a.name+' AM Rate', type:'rate_shift', animal:a.id, animalType:a.type, shift:'am'});
-        cols.push({id:'a_'+a.id+'_am_fat', name:a.name+' AM Fat', type:'fat_shift', animal:a.id, animalType:a.type, shift:'am'});
-      }
+      if(isFat) cols.push({id:'a_'+a.id+'_am_rf', name:a.name+' AM Rate/Fat', type:'ratefat', animal:a.id, animalType:a.type, shift:'am'});
       cols.push({id:'a_'+a.id+'_pm',name:a.name+' PM',type:'milk_pm',animal:a.id, animalType:a.type, animalRate:a.rate, rateMethod:a.rateMethod});
-      if(isFat){
-        cols.push({id:'a_'+a.id+'_pm_rate', name:a.name+' PM Rate', type:'rate_shift', animal:a.id, animalType:a.type, shift:'pm'});
-        cols.push({id:'a_'+a.id+'_pm_fat', name:a.name+' PM Fat', type:'fat_shift', animal:a.id, animalType:a.type, shift:'pm'});
-      }
+      if(isFat) cols.push({id:'a_'+a.id+'_pm_rf', name:a.name+' PM Rate/Fat', type:'ratefat', animal:a.id, animalType:a.type, shift:'pm'});
     });
   }
   cols.push({id:'total',name:'Total (₹)',type:'total',locked:true});
   return cols;
 }
 
-// Rate and Fat are two separate narrow columns per shift (not a combined
-// "rate/fat" cell) — older pages created before this change may still carry
-// the old combined 'ratefat' column or the even older 'rate_per_animal'
-// column; both are still read here so historical periods keep totalling
-// correctly without needing a data migration.
+// Rate/Fat cells store a combined "rate/fat" string (e.g. "52/4.2") so a
+// fat-based animal only needs one extra column per shift instead of two.
 function computeRowTotal(row,cols,profile){
   const milkCols=cols.filter(c=>c.type==='milk_am'||c.type==='milk_pm');
   const legacyPerAnimalRateCols = cols.filter(c=>c.type==='rate_per_animal');
-  const legacyRateFatCols = cols.filter(c=>c.type==='ratefat');
-  const hasShiftRate = cols.some(c=>c.type==='rate_shift');
-  if(!hasShiftRate && legacyRateFatCols.length===0 && legacyPerAnimalRateCols.length===0){
+  const hasRateFat = cols.some(c=>c.type==='ratefat');
+  if(!hasRateFat && legacyPerAnimalRateCols.length===0){
     const flatRateCol = cols.find(c=>c.type==='rate');
     if(flatRateCol){
       const totalMilk=milkCols.reduce((s,c)=>s+(parseFloat(row[c.id])||0),0);
@@ -2369,19 +2300,14 @@ function computeRowTotal(row,cols,profile){
     const qty=parseFloat(row[c.id])||0; if(!qty) return;
     let rate=c.animalRate||0;
     const shift = c.type==='milk_am' ? 'am' : 'pm';
-    const rateCol = cols.find(rc=>rc.type==='rate_shift' && rc.animal===c.animal && rc.shift===shift);
-    if(rateCol){
-      const v = parseFloat(row[rateCol.id]); if(!isNaN(v)) rate = v;
+    const rfCol = cols.find(rc=>rc.type==='ratefat' && rc.animal===c.animal && rc.shift===shift);
+    if(rfCol){
+      const raw=(row[rfCol.id]||'').toString();
+      const parsed=parseFloat((raw.split('/')[0]||'').trim());
+      rate = isNaN(parsed) ? 0 : parsed;
     } else {
-      const rfCol = legacyRateFatCols.find(rc=>rc.animal===c.animal && rc.shift===shift);
-      if(rfCol){
-        const raw=(row[rfCol.id]||'').toString();
-        const parsed=parseFloat((raw.split('/')[0]||'').trim());
-        rate = isNaN(parsed) ? 0 : parsed;
-      } else {
-        const legacyCol = legacyPerAnimalRateCols.find(rc=>rc.animal===c.animal);
-        if(legacyCol){ const entered=row[legacyCol.id]; if(entered!=='' && entered!=null) rate=parseFloat(entered)||0; }
-      }
+      const legacyCol = legacyPerAnimalRateCols.find(rc=>rc.animal===c.animal);
+      if(legacyCol){ const entered=row[legacyCol.id]; if(entered!=='' && entered!=null) rate=parseFloat(entered)||0; }
     }
     total += qty*rate;
   });
@@ -2403,8 +2329,7 @@ function syncActivePageColumns(){
     const milkA = (profile.animals||[]).filter(a=>a.milks!==false);
     milkA.forEach(a=>{
       const isFat = a.rateMethod==='fat';
-      const amId='a_'+a.id+'_am', pmId='a_'+a.id+'_pm';
-      const amRateId='a_'+a.id+'_am_rate', amFatId='a_'+a.id+'_am_fat', pmRateId='a_'+a.id+'_pm_rate', pmFatId='a_'+a.id+'_pm_fat';
+      const amId='a_'+a.id+'_am', pmId='a_'+a.id+'_pm', amRfId='a_'+a.id+'_am_rf', pmRfId='a_'+a.id+'_pm_rf';
       const insertAt = () => Math.max(page.cols.length-1, 0);
       let amCol = page.cols.find(c=>c.id===amId);
       if(!amCol){
@@ -2412,9 +2337,9 @@ function syncActivePageColumns(){
         page.cols.splice(insertAt(),0,amCol);
         page.rows.forEach(r=>{ if(r[amId]===undefined) r[amId]=''; }); changed=true;
       } else { amCol.rateMethod = a.rateMethod; amCol.animalRate = a.rate; }
-      if(isFat){
-        if(!page.cols.find(c=>c.id===amRateId)){ page.cols.splice(page.cols.indexOf(amCol)+1,0,{id:amRateId,name:a.name+' AM Rate',type:'rate_shift',animal:a.id,animalType:a.type,shift:'am'}); page.rows.forEach(r=>{ if(r[amRateId]===undefined) r[amRateId]=''; }); changed=true; }
-        if(!page.cols.find(c=>c.id===amFatId)){ page.cols.splice(page.cols.indexOf(page.cols.find(c=>c.id===amRateId))+1,0,{id:amFatId,name:a.name+' AM Fat',type:'fat_shift',animal:a.id,animalType:a.type,shift:'am'}); page.rows.forEach(r=>{ if(r[amFatId]===undefined) r[amFatId]=''; }); changed=true; }
+      if(isFat && !page.cols.find(c=>c.id===amRfId)){
+        page.cols.splice(page.cols.indexOf(amCol)+1,0,{id:amRfId,name:a.name+' AM Rate/Fat',type:'ratefat',animal:a.id,animalType:a.type,shift:'am'});
+        page.rows.forEach(r=>{ if(r[amRfId]===undefined) r[amRfId]=''; }); changed=true;
       }
       let pmCol = page.cols.find(c=>c.id===pmId);
       if(!pmCol){
@@ -2422,9 +2347,9 @@ function syncActivePageColumns(){
         page.cols.splice(insertAt(),0,pmCol);
         page.rows.forEach(r=>{ if(r[pmId]===undefined) r[pmId]=''; }); changed=true;
       } else { pmCol.rateMethod = a.rateMethod; pmCol.animalRate = a.rate; }
-      if(isFat){
-        if(!page.cols.find(c=>c.id===pmRateId)){ page.cols.splice(page.cols.indexOf(pmCol)+1,0,{id:pmRateId,name:a.name+' PM Rate',type:'rate_shift',animal:a.id,animalType:a.type,shift:'pm'}); page.rows.forEach(r=>{ if(r[pmRateId]===undefined) r[pmRateId]=''; }); changed=true; }
-        if(!page.cols.find(c=>c.id===pmFatId)){ page.cols.splice(page.cols.indexOf(page.cols.find(c=>c.id===pmRateId))+1,0,{id:pmFatId,name:a.name+' PM Fat',type:'fat_shift',animal:a.id,animalType:a.type,shift:'pm'}); page.rows.forEach(r=>{ if(r[pmFatId]===undefined) r[pmFatId]=''; }); changed=true; }
+      if(isFat && !page.cols.find(c=>c.id===pmRfId)){
+        page.cols.splice(page.cols.indexOf(pmCol)+1,0,{id:pmRfId,name:a.name+' PM Rate/Fat',type:'ratefat',animal:a.id,animalType:a.type,shift:'pm'});
+        page.rows.forEach(r=>{ if(r[pmRfId]===undefined) r[pmRfId]=''; }); changed=true;
       }
     });
     if(changed){ page.rows.forEach(r=>r.total=computeRowTotal(r,page.cols,profile)); anyChanged=true; }
@@ -2553,14 +2478,12 @@ function householdFullLedger(h){
 // per-record rate entered for that animal → single page-wide rate column.
 function resolveAnimalRateForRow(row, page, profile, col){
   const shift = col.type==='milk_am' ? 'am' : 'pm';
-  const rateCol = page.cols.find(c=>c.type==='rate_shift' && c.animal===col.animal && c.shift===shift);
-  if(rateCol){ const v=parseFloat(row[rateCol.id]); if(!isNaN(v)) return v; }
   const rfCol = page.cols.find(c=>c.type==='ratefat' && c.animal===col.animal && c.shift===shift);
   if(rfCol){ const raw=(row[rfCol.id]||'').toString(); const parsed=parseFloat((raw.split('/')[0]||'').trim()); return isNaN(parsed)?0:parsed; }
   const perAnimalRateCol = page.cols.find(c=>c.type==='rate_per_animal' && c.animal===col.animal);
   if(perAnimalRateCol){ const entered=row[perAnimalRateCol.id]; if(entered!=='' && entered!=null) return parseFloat(entered)||0; }
-  const flatRateCol = page.cols.find(c=>c.type==='rate');
-  if(flatRateCol) return parseFloat(row[flatRateCol.id])||0;
+  const rateCol = page.cols.find(c=>c.type==='rate');
+  if(rateCol) return parseFloat(row[rateCol.id])||0;
   return col.animalRate||0;
 }
 
@@ -2981,7 +2904,7 @@ function createPage(startDate){
       const r={id:uid(),index:i,assignedDate:addDays(startDate,i),date:'',dateFrozen:false,total:0};
       cols.forEach(c=>{if(!['sr','date','total'].includes(c.type))r[c.id]='';}); return r;
     }),
-    locked:false,createdAt:new Date().toISOString(),clearedAt:null,trashed:false,manualUnlock:false
+    locked:false,createdAt:new Date().toISOString(),clearedAt:null,trashed:false
   };
 }
 
@@ -3078,7 +3001,6 @@ function navUndo(entry) {
       case 'subview':    setMV('profile'); break;
       case 'detail':     closeDetail(); break;
       case 'detailPage': detailPageIdx = 0; renderHome(); slideTransition('#p-home', 'back'); break;
-      case 'preview':    closePeriodPreview(); break;
     }
   } finally {
     navUndoing = false;
@@ -3149,7 +3071,7 @@ function isActuallyScrollable(el){
   // A `.twrap`/`.hscroll` container that fits its content (no overflow) should NOT block swipe.
   let node = el;
   while (node && node !== document.body) {
-    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll') || node.classList.contains('gtab-scroll') || node.classList.contains('gh-scroll') || node.classList.contains('animal-carousel'))) {
+    if (node.classList && (node.classList.contains('twrap') || node.classList.contains('hscroll') || node.classList.contains('gtab-scroll') || node.classList.contains('gh-scroll'))) {
       if (node.scrollWidth > node.clientWidth + 1) return true; // genuinely scrollable
     }
     node = node.parentElement;
@@ -3266,7 +3188,7 @@ function setObType(t) { Haptics.fire('tick'); obType = t; document.querySelector
 function addObAnimal() {
   const name = document.getElementById('ob-name').value.trim(); const rate = parseFloat(document.getElementById('ob-rate').value) || 0;
   if(!name) return appAlert('Notice', 'Please enter an animal name or ID to continue.');
-  obTempAnimals.push({id: uid(), name, type: obType, rate, rateMethod:'fixed', milks: true}); document.getElementById('ob-name').value = ''; document.getElementById('ob-rate').value = ''; renderObAnimals();
+  obTempAnimals.push({id: uid(), name, type: obType, rate, rateMethod:'fixed', milks: true}); document.getElementById('ob-name').value = ''; document.getElementById('ob-rate').value = ''; renderObAnimals(); renderObSetupButton();
 }
 function renderObAnimals() {
   const list = document.getElementById('ob-animal-list'); if(!obTempAnimals.length) { list.innerHTML = ``; return; }
@@ -3286,6 +3208,26 @@ function finishOnboarding() {
 }
 
 let justOnboarded = false; let qeContext = { pageId: null, rowId: null, cols: [], isPM: false, activeInputId: null, date: null, isBackfill: false };
+// Dims a primary action button (native `disabled`, styled via .btn:disabled)
+// until every listed field passes its check — so a required-info modal
+// never lets you tap "Save"/"Continue" only to bounce an alert back at you
+// afterward; the button itself shows, at a glance, whether you're done.
+// Each field is either a plain id (defaults to "non-empty trimmed value")
+// or an [id, checkFn] pair for a custom per-field check (e.g. amount > 0).
+// Call the returned function again any time a field is set programmatically
+// (calendar pickers, resets on modal open) since those skip the normal
+// 'input' event this also listens for.
+function bindRequiredFields(btnId, fields){
+  const list = fields.map(f => Array.isArray(f) ? f : [f, v => !!v.trim()]);
+  const update = () => {
+    const btn = document.getElementById(btnId); if (!btn) return;
+    const ok = list.every(([id, check]) => { const el = document.getElementById(id); return el && check(el.value); });
+    btn.disabled = !ok;
+  };
+  list.forEach(([id]) => { const el = document.getElementById(id); if (el) el.addEventListener('input', update); });
+  return update;
+}
+
 // Onboarding's finish button reflects sign-in state — but signing in kicks
 // off an async cloud merge (checking whether this is actually a returning
 // account with real data) that takes a moment. If the button just flipped
@@ -3298,7 +3240,8 @@ function renderObSetupButton(){
   const btn = document.getElementById('ob-finish-btn');
   if (!btn) return;
   if (cloudUser && cloudMergeInFlight) { btn.textContent = 'Signing in…'; btn.disabled = true; return; }
-  btn.disabled = false;
+  const dairyName = document.getElementById('ob-dairy-name')?.value.trim() || '';
+  btn.disabled = !dairyName || obTempAnimals.length === 0;
   btn.textContent = cloudUser ? 'Continue ›' : 'Continue as Guest ›';
 }
 // If sign-in during onboarding pulls down an ALREADY-onboarded profile (i.e.
@@ -3347,15 +3290,15 @@ function openQuickEntry(targetDate, forceIsPM) {
       let rateHtml = '';
       const shift = c.type==='milk_am' ? 'am' : 'pm';
       if (c.rateMethod === 'fat') {
-         const rateCol = page.cols.find(col => col.type === 'rate_shift' && col.animal === c.animal && col.shift === shift);
-         const fatCol = page.cols.find(col => col.type === 'fat_shift' && col.animal === c.animal && col.shift === shift);
-         if (rateCol && fatCol) {
-           rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-input-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id]||''}" onclick="setNumpadTarget('qe-input-${rateCol.id}')"/></div></div><div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px;"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Fat %</div><div class="row gap1"><input type="text" id="qe-input-${fatCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[fatCol.id]||''}" onclick="setNumpadTarget('qe-input-${fatCol.id}')"/></div></div>`;
+         const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
+         if (rfCol) {
+           const stored = (row[rfCol.id]||'').split('/'); const storedRate = stored[0]||''; const storedFat = stored[1]||'';
+           rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rfCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${storedRate}" onclick="setNumpadTarget('qe-rate-${rfCol.id}')"/></div></div><div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px;"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Fat %</div><div class="row gap1"><input type="text" id="qe-fat-${rfCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${storedFat}" onclick="setNumpadTarget('qe-fat-${rfCol.id}')"/></div></div>`;
          }
       } else if (!animalInfo) {
          // Legacy no-animals-configured fallback: a single flat rate column.
          const rateCol = page.cols.find(col => col.type === 'rate');
-         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-input-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || ''}" onclick="setNumpadTarget('qe-input-${rateCol.id}')"/></div></div>`;
+         if (rateCol) rateHtml = `<div class="row gap2 w-100" style="justify-content:space-between; align-items:center; padding-top:8px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05);"><div style="font-size:11px; color:var(--sub); font-weight:700; text-transform:uppercase;">Milk Rate</div><div class="row gap1"><span style="color:var(--muted); font-size:16px; font-weight:800;">₹</span><input type="text" id="qe-rate-${rateCol.id}" class="qe-input qe-input-sm" readonly placeholder="0.0" value="${row[rateCol.id] || ''}" onclick="setNumpadTarget('qe-rate-${rateCol.id}')"/></div></div>`;
       }
       html += `<div class="qe-card"><div class="row gap3 w-100" style="justify-content:space-between;"><div class="row gap2"><span style="font-size:28px; filter:drop-shadow(0 4px 6px rgba(0,0,0,0.5));">${icon}</span><div><div style="font-weight:900; font-size:16px; letter-spacing:0.5px;">${animalName}</div><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:1px;">${isPM ? 'Evening' : 'Morning'} (L)</div></div></div><input type="text" id="${inputId}" class="qe-input" readonly placeholder="0.0" value="${row[c.id] || ''}" onclick="setNumpadTarget('${inputId}')"/></div>${rateHtml}</div>`;
     });
@@ -3390,13 +3333,16 @@ function saveQuickEntry() {
     row[c.id] = valStr;
     const shift = c.type==='milk_am' ? 'am' : 'pm';
     if (c.rateMethod === 'fat') {
-       const rateCol = page.cols.find(col => col.type === 'rate_shift' && col.animal === c.animal && col.shift === shift);
-       const fatCol = page.cols.find(col => col.type === 'fat_shift' && col.animal === c.animal && col.shift === shift);
-       if (rateCol) { const v = document.getElementById(`qe-input-${rateCol.id}`)?.value || ''; if ((row[rateCol.id]||'') !== v) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:v}); row[rateCol.id] = v; } }
-       if (fatCol) { const v = document.getElementById(`qe-input-${fatCol.id}`)?.value || ''; if ((row[fatCol.id]||'') !== v) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:fatCol.id, from:row[fatCol.id]||'', to:v}); row[fatCol.id] = v; } }
+       const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
+       if (rfCol) {
+         const rateInput = document.getElementById(`qe-rate-${rfCol.id}`); const fatInput = document.getElementById(`qe-fat-${rfCol.id}`);
+         const rateVal = rateInput ? rateInput.value : ''; const fatVal = fatInput ? fatInput.value : '';
+         const combined = (rateVal !== '' || fatVal !== '') ? `${rateVal}/${fatVal}` : '';
+         if ((row[rfCol.id]||'') !== combined) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rfCol.id, from:row[rfCol.id]||'', to:combined}); row[rfCol.id] = combined; }
+       }
     } else if (!DB.profile().animals?.find(a => a.id === c.animal)) {
        const rateCol = page.cols.find(col => col.type === 'rate');
-       if (rateCol) { const rateInput = document.getElementById(`qe-input-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
+       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
     }
   });
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
@@ -3417,6 +3363,7 @@ function saveQuickEntry() {
 function openFullApp() {
   const qe = document.getElementById('quick-entry'); qe.classList.remove('active', 'start-anim'); qe.style.display = 'none';
   document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); checkInstallReminders(justOnboarded); justOnboarded = false;
+  cloudDeferredRefresh = false; // the renders just above already cover it — don't double-toast right after
 }
 
 function renderHome(){
@@ -3451,7 +3398,7 @@ function renderHomeContent(el){
   el.innerHTML=html+`</div>`;
 }
 
-function openDetail(id){curDetailId=id; currentTableFilter = 'all'; currentAnimalSlideIdx = 0; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward'); navPush('detail', {});}
+function openDetail(id){curDetailId=id; currentTableFilter = 'all'; detailPageIdx = 0; hhExpandedId = null; hhHistoryExpandedId = null; renderHome(); slideTransition('#p-home', 'forward'); navPush('detail', {});}
 
 function renderDetailView(el){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===curDetailId);
@@ -3465,14 +3412,11 @@ function renderDetailView(el){
   if (detailPageIdx === 0) {
     bodyHtml = `
    <div class="row gap2 mb3" style="padding:0 15px;">
-      <button class="btn bs" id="filter-btn" onclick="openFilterSheetModal('${page.id}')" style="flex:0 0 70%; justify-content:space-between; padding:11px 8px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:var(--fg); overflow:hidden;">
-        <span style="font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🔍 ${printLabel}</span>
-      </button>
-      <button class="btn bp" onclick="openPeriodPreview('${page.id}')" style="flex:1; justify-content:center; gap:6px; padding:11px 8px; overflow:hidden; min-width:0;">
-        <span style="font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⛶ Full Screen</span>
+      <button class="btn bs w-100" onclick="openFilterSheetModal('${page.id}')" style="justify-content:space-between; padding:11px 14px; background:var(--bg1); border:1px solid var(--border); border-radius:var(--r); color:var(--fg);">
+        <span style="font-size:13px; font-weight:700;">🔍 Filter: ${printLabel}</span><span style="font-size:10px; color:var(--sub);">▼</span>
       </button>
    </div>
-   <div style="padding:0 15px;margin-bottom:12px;" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div>
+   <div style="padding:0 15px;margin-bottom:12px;"><div class="twrap" id="table-container">${buildCompactTable(page,profile,todayStr, currentTableFilter)}</div></div>
    <div style="padding:0 15px 90px;"><div class="lbar${page.locked?' on':''}" onclick="reqLock('${page.id}')"><div class="cring${page.locked?' on':''}">${page.locked?'✓':''}</div><div class="f1"><div style="font-weight:700;font-size:13px;">Account Cleared</div>${page.locked&&page.clearedAt?`<div style="font-size:11px;color:var(--muted);margin-top:1px;">Locked ${fmtD(page.clearedAt)}</div>`:''}</div><span style="font-size:14px;color:var(--muted);">${page.locked?'🔒':'🔓'}</span></div></div>`;
   } else { bodyHtml = `<div style="padding:0 15px 90px;">${renderHouseholdsPageHTML(page)}</div>`; }
 
@@ -3557,455 +3501,47 @@ function openFilterSheetModal(pageId) {
 }
 
 function applyThemedFilter(pageId, targetFilterValue) {
-   Haptics.fire('tick'); cm('m-filter-sheet'); currentTableFilter = targetFilterValue; currentAnimalSlideIdx = 0;
-   const profile = DB.profile();
-   let printLabel = "Show All Columns";
-   if(currentTableFilter === 'totals') printLabel = "Totals Only";
-   else if(currentTableFilter.startsWith('cat_')) printLabel = "Only " + currentTableFilter.replace('cat_','').toUpperCase() + "s";
-   else if(currentTableFilter.startsWith('anim_')) { const targetAnim = profile.animals?.find(a=>a.id === currentTableFilter.replace('anim_','')); if(targetAnim) printLabel = targetAnim.name; }
-   const btnLabel = document.querySelector('#filter-btn span'); if(btnLabel) btnLabel.textContent = `🔍 ${printLabel}`;
-   document.getElementById('table-container').innerHTML = buildCompactTable(DB.pages().find(p=>p.id===pageId), profile, today(), currentTableFilter);
+   Haptics.fire('tick'); cm('m-filter-sheet'); currentTableFilter = targetFilterValue;
+   document.getElementById('table-container').innerHTML = buildCompactTable(DB.pages().find(p=>p.id===pageId), DB.profile(), today(), currentTableFilter);
 }
 
-// This animal's own total for one row: qty(AM)*rate(AM) + qty(PM)*rate(PM),
-// using that shift's own Rate column when the animal is Fat Based, or the
-// animal's fixed animalRate otherwise. Mirrors the same logic as
-// computeRowTotal() but scoped to a single animal instead of the whole row.
-function computeAnimalRowRev(r, animalCols){
-  let rev = 0;
-  const amCol = animalCols.find(c=>c.type==='milk_am'), pmCol = animalCols.find(c=>c.type==='milk_pm');
-  [amCol, pmCol].forEach(mc=>{
-    if(!mc) return;
-    const qty = parseFloat(r[mc.id])||0; if(!qty) return;
-    let rate = mc.animalRate||0;
-    const shift = mc.type==='milk_am' ? 'am' : 'pm';
-    const rateCol = animalCols.find(c=>c.type==='rate_shift' && c.shift===shift);
-    if(rateCol){ const v=parseFloat(r[rateCol.id]); if(!isNaN(v)) rate=v; }
-    rev += qty*rate;
-  });
-  return rev;
-}
-
-// One animal's own mini-table: Date, AM (+ Rate/Fat if Fat Based), PM (+
-// Rate/Fat), and that animal's own Total — scoped to just this animal so
-// "Rate"/"Fat" need no AM/PM prefix to be unambiguous.
-// Fixed-rate animals get a plain single-row header (Date | AM | PM | Total).
-// Fat Based animals get AM/PM as group headers over Qty/Rate/Fat sub-columns,
-// since each shift needs all three for that animal.
-function buildShiftHeaderRows(animalCols){
-  const isFat = animalCols.some(c=>c.type==='rate_shift');
-  if(!isFat){
-    const flat = animalCols.map(c=>`<th style="width:1%;white-space:nowrap;">${c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.name.substring(0,6)}</th>`).join('');
-    return `<tr><th style="width:1%;white-space:nowrap;">Date</th>${flat}<th style="text-align:right;">Total</th></tr>`;
-  }
-  const shiftGroups = [];
-  animalCols.forEach(c=>{
-    const shift = c.type==='milk_am' ? 'am' : c.type==='milk_pm' ? 'pm' : c.shift;
-    let g = shiftGroups.find(g=>g.shift===shift);
-    if(!g){ g = {shift, cols:[]}; shiftGroups.push(g); }
-    g.cols.push(c);
-  });
-  const row1 = shiftGroups.map(g=>`<th colspan="${g.cols.length}" class="th-group">${g.shift==='am'?'AM':'PM'}</th>`).join('');
-  const row2 = shiftGroups.flatMap(g=>g.cols.map(c=>{
-    const label = c.type==='rate_shift' ? 'Rate' : c.type==='fat_shift' ? 'Fat' : 'Qty';
-    return `<th style="width:1%;white-space:nowrap;">${label}</th>`;
-  })).join('');
-  return `<tr><th rowspan="2" style="width:1%;white-space:nowrap;">Date</th>${row1}<th rowspan="2" style="text-align:right;">Total</th></tr><tr>${row2}</tr>`;
-}
-function renderAnimalMiniTable(page, profile, todayStr, animalCols){
-  const n = animalCols.length;
-  let totalRev = 0;
-  const rows = page.rows.map((r,ri)=>{
-    const isFuture = r.assignedDate > todayStr, isRowLocked = page.locked || isFuture;
-    const rowRev = computeAnimalRowRev(r, animalCols); totalRev += rowRev;
-    let cells = `<td class="tsr" style="width:1%;white-space:nowrap;">${fmtDS(r.date || r.assignedDate)}</td>`;
-    animalCols.forEach(c=>{
-      const isNarrow = c.type==='rate_shift' || c.type==='fat_shift';
-      if(isRowLocked) cells += `<td style="width:1%;white-space:nowrap;color:${isFuture?'var(--border)':'var(--sub)'};font-family:monospace;font-size:${isNarrow?'10px':'11px'};">${r[c.id]||'—'}</td>`;
-      else cells += `<td style="width:1%;white-space:nowrap;"><input class="finp${isNarrow?' finp-narrow':''}" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
-    });
-    cells += `<td class="${rowRev>0?'ttot':'ttote'}" style="text-align:right;">${rowRev>0?'₹'+fmt(rowRev):'—'}</td>`;
-    return `<tr class="${isFuture?'future-row':''}">${cells}</tr>`;
-  }).join('');
-  return `<table><thead>${buildShiftHeaderRows(animalCols)}</thead><tbody>${rows}</tbody><tfoot><tr><td colspan="${n+1}" style="text-align:center;font-weight:900;">Total:</td><td style="text-align:right;font-weight:900;">₹${fmt(totalRev)}</td></tr></tfoot></table>`;
-}
-
-// The "main table": one column per animal showing THAT animal's ₹ total for
-// each day, a Day Total column on the right, and a Period Total row at the
-// bottom — both per animal and overall. This is also what "Totals Only"
-// resolves to, since it already IS the totals breakdown.
-function renderPivotSummaryTable(page, todayStr, animalMetas){
-  const head = `<th style="width:1%;white-space:nowrap;">Date</th>` + animalMetas.map(a=>`<th>${a.name}</th>`).join('') + `<th style="text-align:right;">Day Total</th>`;
-  const perAnimalTotal = {}; animalMetas.forEach(a=>perAnimalTotal[a.key]=0);
-  let grandTotal = 0;
-  const rows = page.rows.map(r=>{
-    const isFuture = r.assignedDate > todayStr;
-    let dayTotal = 0;
-    let cells = `<td class="tsr" style="width:1%;white-space:nowrap;">${fmtDS(r.date || r.assignedDate)}</td>`;
-    animalMetas.forEach(a=>{
-      const rev = computeAnimalRowRev(r, a.cols);
-      dayTotal += rev; perAnimalTotal[a.key] += rev;
-      cells += `<td style="color:${isFuture?'var(--border)':'var(--fg)'};font-weight:700;">${rev>0?'₹'+fmt(rev):'—'}</td>`;
-    });
-    grandTotal += dayTotal;
-    cells += `<td style="text-align:right;font-weight:900;">${dayTotal>0?'₹'+fmt(dayTotal):'—'}</td>`;
-    return `<tr class="${isFuture?'future-row':''}">${cells}</tr>`;
-  }).join('');
-  const foot = `<td style="text-align:center;font-weight:900;">Period Total:</td>` + animalMetas.map(a=>`<td style="font-weight:900;">₹${fmt(perAnimalTotal[a.key])}</td>`).join('') + `<td style="text-align:right;font-weight:900;">₹${fmt(grandTotal)}</td>`;
-  return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody><tfoot><tr>${foot}</tr></tfoot></table>`;
-}
-
-// One merged table with every animal's columns side by side, grouped under
-// a 3-level header (animal name -> AM/PM -> Qty/Rate/Fat) — read-only, for
-// reading/comparing the whole period at a glance rather than editing.
-function buildMergedPreviewTable(page, todayStr){
-  let animals = {}, order = [];
-  page.cols.forEach(c=>{
-    if(['expense','date','sr','total'].includes(c.type)) return;
-    const key = c.animal || 'global';
-    if(!animals[key]){ let n = c.name.replace(/( AM| PM| Rate| Fat).*/, ''); if(n==='Rate (₹/L)') n='Global Rate'; animals[key] = {name:n, cols:[]}; order.push(key); }
-    animals[key].cols.push(c);
-  });
-
-  let row1 = `<th rowspan="3" style="width:1%;white-space:nowrap;">Date</th>`, row2 = '', row3 = '';
-  order.forEach(k=>{
-    const cols = animals[k].cols; const isFat = cols.some(c=>c.type==='rate_shift');
-    row1 += `<th colspan="${cols.length}" class="th-group">${animals[k].name}</th>`;
-    if(!isFat){
-      cols.forEach(c=> row2 += `<th rowspan="2" class="pcol-num" style="white-space:nowrap;">${c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.name.substring(0,6)}</th>`);
-    } else {
-      const shiftGroups = [];
-      cols.forEach(c=>{
-        const shift = c.type==='milk_am' ? 'am' : c.type==='milk_pm' ? 'pm' : c.shift;
-        let g = shiftGroups.find(g=>g.shift===shift); if(!g){ g={shift,cols:[]}; shiftGroups.push(g); } g.cols.push(c);
-      });
-      shiftGroups.forEach(g=>{
-        row2 += `<th colspan="${g.cols.length}">${g.shift==='am'?'AM':'PM'}</th>`;
-        g.cols.forEach(c=>{ const label = c.type==='rate_shift'?'Rate':c.type==='fat_shift'?'Fat':'Qty'; row3 += `<th class="pcol-num" style="white-space:nowrap;">${label}</th>`; });
-      });
-    }
-  });
-  row1 += `<th rowspan="3" style="text-align:right;">Day Total</th>`;
-
-  let grandTotal = 0;
-  const bodyRows = page.rows.map(r=>{
-    const isFuture = r.assignedDate > todayStr;
-    let dayTotal = 0;
-    let cells = `<td class="tsr">${fmtDS(r.date || r.assignedDate)}</td>`;
-    order.forEach(k=>{
-      const cols = animals[k].cols;
-      dayTotal += computeAnimalRowRev(r, cols);
-      cols.forEach(c=>{ cells += `<td class="pcol-num" style="color:${isFuture?'var(--border)':'var(--fg)'};">${r[c.id]||'—'}</td>`; });
-    });
-    grandTotal += dayTotal;
-    cells += `<td style="text-align:right;font-weight:900;">${dayTotal>0?'₹'+fmt(dayTotal):'—'}</td>`;
-    return `<tr class="${isFuture?'future-row':''}">${cells}</tr>`;
-  }).join('');
-
-  const totalSubCols = order.reduce((s,k)=>s+animals[k].cols.length,0);
-  const foot = `<td colspan="${1+totalSubCols}" style="text-align:center;font-weight:900;">Period Grand Total:</td><td style="text-align:right;font-weight:900;">₹${fmt(grandTotal)}</td>`;
-
-  return `<table class="preview-mtable"><thead><tr>${row1}</tr><tr>${row2}</tr><tr>${row3}</tr></thead><tbody>${bodyRows}</tbody><tfoot><tr>${foot}</tr></tfoot></table>`;
-}
-function buildPeriodPreviewContent(page, profile, todayStr){
-  return `<div id="preview-scale-wrap"><div class="preview-table-wrap">${buildMergedPreviewTable(page, todayStr)}</div></div>`;
-}
-const PREVIEW_RATIOS = { auto:null, '1:1':[1,1], '4:3':[4,3], '16:9':[16,9], '9:16':[9,16] };
-// When a fixed ratio is picked, the table works within a centered rectangle
-// of that ratio (letterboxed within the real screen) instead of the full
-// #preview-content area — same idea as a video player's aspect-ratio option.
-function getPreviewViewportRect(container){
-  const cw = container.clientWidth, ch = container.clientHeight;
-  const r = PREVIEW_RATIOS[previewRatio];
-  if(!r) return {w:cw, h:ch, x:0, y:0};
-  const targetRatio = r[0]/r[1];
-  let w = cw, h = cw/targetRatio;
-  if(h > ch){ h = ch; w = ch*targetRatio; }
-  return { w, h, x:(cw-w)/2, y:(ch-h)/2 };
-}
-// No scrolling in the preview — the table (header through the Period Grand
-// Total row) is measured at its natural size, then placed per the chosen
-// mode within the (possibly ratio-constrained) viewport rectangle:
-//  - stretch:  scale X and Y independently to exactly fill the rectangle —
-//              always reaches all 4 corners, may distort proportions
-//  - fit:      one uniform scale (the smaller of the two) that preserves
-//              the table's natural proportions, CENTERED in the rectangle
-//              rather than anchored to a corner — any leftover space is
-//              split evenly on both sides instead of all ending up bottom-right
-//  - adaptive: not scaled to fit at all — shown at natural/readable cell
-//              size, and left up to the person to pinch-zoom and drag/pan
-//              around, like a map or photo viewer
-function fitPreviewTableToScreen(){
-  const container = document.getElementById('preview-content');
-  const wrap = document.getElementById('preview-scale-wrap');
-  if(!container || !wrap) return;
-  if(previewAspect === 'adaptive'){ resetAdaptiveView(); return; }
-  wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = ''; wrap.style.left = '0px'; wrap.style.top = '0px';
-  const rect = getPreviewViewportRect(container);
-  const naturalH = wrap.scrollHeight, naturalW = wrap.scrollWidth;
-  if(naturalH<=0 || naturalW<=0 || rect.w<=0 || rect.h<=0) return;
-  let scaleX = rect.w / naturalW, scaleY = rect.h / naturalH;
-  let offX = rect.x, offY = rect.y;
-  if(previewAspect === 'fit'){
-    const s = Math.min(scaleX, scaleY);
-    scaleX = scaleY = s;
-    offX = rect.x + (rect.w - naturalW*s)/2;
-    offY = rect.y + (rect.h - naturalH*s)/2;
-  }
-  wrap.style.transformOrigin = 'top left';
-  wrap.style.left = offX + 'px'; wrap.style.top = offY + 'px';
-  wrap.style.transform = `scale(${scaleX}, ${scaleY})`;
-  wrap.style.width = naturalW + 'px';
-  wrap.style.height = naturalH + 'px';
-}
-// Adaptive mode: natural size, pan + pinch/wheel zoom instead of forced fit.
-let adaptiveState = { scale:1, x:0, y:0, minScale:1, maxScale:1 };
-let adaptivePointers = new Map();
-let adaptiveDragStart = null, adaptivePinchStartDist = 0, adaptivePinchStartScale = 1;
-// Pan/pinch had no bounds at all, so a drag or pinch-zoom could push the
-// whole table clean off the visible area with no way back short of leaving
-// and reopening the preview. This keeps at least a chunk of the table
-// (KEEP_VISIBLE px) on-screen on every axis no matter how far the person
-// pans or zooms out, the same way a map or photo viewer would.
-const ADAPTIVE_KEEP_VISIBLE = 72;
-function clampAdaptiveState(){
-  const container = document.getElementById('preview-content');
-  const wrap = document.getElementById('preview-scale-wrap');
-  if(!container || !wrap) return;
-  const cw = container.clientWidth, ch = container.clientHeight;
-  const sw = wrap.scrollWidth * adaptiveState.scale, sh = wrap.scrollHeight * adaptiveState.scale;
-  if(sw<=0 || sh<=0) return;
-  // Bounds so the content rectangle can never leave the viewport by more
-  // than (its own size - KEEP_VISIBLE): pos can't go further right than
-  // "only KEEP_VISIBLE px of the left edge still overlaps the viewport",
-  // and can't go further left than "only KEEP_VISIBLE px of the right edge
-  // still overlaps" — same idea whichever axis/size relationship applies.
-  const clampAxis = (pos, containerSize, contentSize) => {
-    const min = ADAPTIVE_KEEP_VISIBLE - contentSize;
-    const max = containerSize - ADAPTIVE_KEEP_VISIBLE;
-    if(min >= max) return (containerSize - contentSize) / 2; // content ~= KEEP_VISIBLE size: just center it
-    return Math.max(min, Math.min(max, pos));
-  };
-  adaptiveState.x = clampAxis(adaptiveState.x, cw, sw);
-  adaptiveState.y = clampAxis(adaptiveState.y, ch, sh);
-}
-function applyAdaptiveTransform(){
-  const wrap = document.getElementById('preview-scale-wrap'); if(!wrap) return;
-  clampAdaptiveState();
-  wrap.style.transformOrigin = 'top left';
-  wrap.style.left = '0px'; wrap.style.top = '0px';
-  wrap.style.transform = `translate(${adaptiveState.x}px, ${adaptiveState.y}px) scale(${adaptiveState.scale})`;
-}
-function resetAdaptiveView(){
-  const container = document.getElementById('preview-content');
-  const wrap = document.getElementById('preview-scale-wrap');
-  if(!container || !wrap) return;
-  wrap.style.transform = 'none'; wrap.style.width = ''; wrap.style.height = '';
-  const rect = getPreviewViewportRect(container);
-  const naturalW = wrap.scrollWidth, naturalH = wrap.scrollHeight;
-  if(naturalW<=0 || naturalH<=0) return;
-  const base = Math.min(rect.w/naturalW, rect.h/naturalH, 1) || 1;
-  adaptiveState.scale = base; adaptiveState.minScale = base*0.5; adaptiveState.maxScale = base*4;
-  adaptiveState.x = rect.x + (rect.w - naturalW*base)/2;
-  adaptiveState.y = rect.y + (rect.h - naturalH*base)/2;
-  wrap.style.width = naturalW + 'px'; wrap.style.height = naturalH + 'px';
-  applyAdaptiveTransform();
-  initAdaptiveGestures();
-}
-function initAdaptiveGestures(){
-  const container = document.getElementById('preview-content');
-  if(!container || container._adaptiveInit) return;
-  container._adaptiveInit = true;
-  container.style.touchAction = 'none';
-  container.addEventListener('pointerdown', e=>{
-    if(previewAspect!=='adaptive') return;
-    container.setPointerCapture(e.pointerId);
-    adaptivePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if(adaptivePointers.size===1) adaptiveDragStart = {x:e.clientX-adaptiveState.x, y:e.clientY-adaptiveState.y};
-    if(adaptivePointers.size===2){
-      const pts=[...adaptivePointers.values()];
-      adaptivePinchStartDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
-      adaptivePinchStartScale = adaptiveState.scale;
-    }
-  });
-  container.addEventListener('pointermove', e=>{
-    if(previewAspect!=='adaptive' || !adaptivePointers.has(e.pointerId)) return;
-    adaptivePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if(adaptivePointers.size===1 && adaptiveDragStart){
-      adaptiveState.x = e.clientX - adaptiveDragStart.x;
-      adaptiveState.y = e.clientY - adaptiveDragStart.y;
-      applyAdaptiveTransform();
-    } else if(adaptivePointers.size===2 && adaptivePinchStartDist>0){
-      const pts=[...adaptivePointers.values()];
-      const dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
-      adaptiveState.scale = Math.max(adaptiveState.minScale, Math.min(adaptiveState.maxScale, adaptivePinchStartScale*(dist/adaptivePinchStartDist)));
-      applyAdaptiveTransform();
-    }
-  });
-  const endHandler = e=>{ adaptivePointers.delete(e.pointerId); if(adaptivePointers.size<2) adaptivePinchStartDist=0; if(adaptivePointers.size===0) adaptiveDragStart=null; };
-  container.addEventListener('pointerup', endHandler);
-  container.addEventListener('pointercancel', endHandler);
-  container.addEventListener('wheel', e=>{
-    if(previewAspect!=='adaptive') return;
-    e.preventDefault();
-    adaptiveState.scale = Math.max(adaptiveState.minScale, Math.min(adaptiveState.maxScale, adaptiveState.scale*(e.deltaY<0?1.1:0.9)));
-    applyAdaptiveTransform();
-  }, {passive:false});
-  // Double-tap/double-click to snap back to the centered fit-to-screen view
-  // — the standard escape hatch in any map/photo viewer, and the only way
-  // back once you've panned or zoomed far from center.
-  container.addEventListener('dblclick', e=>{
-    if(previewAspect!=='adaptive') return;
-    e.preventDefault();
-    Haptics.fire('tick');
-    resetAdaptiveView();
-  });
-}
-let previewTheme = Store.get('mdn_preview_theme') || 'classic';
-// 'fit' (uniform scale, true proportions) is the safe default — 'stretch'
-// scales X and Y independently to force-fill the rectangle, which for a
-// wide multi-animal table on a phone screen means the horizontal scale
-// often ends up noticeably smaller than the vertical one, squashing every
-// column's text sideways (this is what made values look clipped/collided,
-// e.g. "4.25" reading like a bare "5"). Once someone picks a mode
-// themselves it's remembered as before; this only affects first-ever open.
-let previewAspect = Store.get('mdn_preview_aspect') || 'fit';
-let previewRatio = Store.get('mdn_preview_ratio') || 'auto';
-function setPreviewTheme(t){
-  previewTheme = t; Haptics.fire('tick'); Store.set('mdn_preview_theme', t);
-  const body = document.getElementById('preview-body'); if(body) body.className = 'ptheme-' + t;
-  document.querySelectorAll('.ptheme-tab[data-theme]').forEach(el=>el.classList.toggle('active', el.dataset.theme===t));
-  requestAnimationFrame(fitPreviewTableToScreen);
-  showPreviewControls();
-}
-function setPreviewAspect(a){
-  previewAspect = a; Haptics.fire('tick'); Store.set('mdn_preview_aspect', a);
-  document.querySelectorAll('.ptheme-tab[data-aspect]').forEach(el=>el.classList.toggle('active', el.dataset.aspect===a));
-  requestAnimationFrame(fitPreviewTableToScreen);
-  showPreviewControls();
-}
-function togglePreviewRatioDropdown(){
-  const el = document.getElementById('preview-ratio-dropdown'); if(!el) return;
-  el.classList.toggle('open');
-  showPreviewControls();
-}
-function setPreviewRatio(r){
-  previewRatio = r; Haptics.fire('tick'); Store.set('mdn_preview_ratio', r);
-  document.querySelectorAll('.pratio-opt').forEach(el=>el.classList.toggle('active', el.dataset.ratio===r));
-  const label = document.getElementById('preview-ratio-label'); if(label) label.textContent = r==='auto' ? 'Ratio' : r;
-  document.getElementById('preview-ratio-dropdown')?.classList.remove('open');
-  requestAnimationFrame(fitPreviewTableToScreen);
-  showPreviewControls();
-}
-// YouTube-style chrome: visible when the preview opens, tap anywhere to
-// toggle, and auto-hides itself after a few seconds so the table gets the
-// full screen. Tapping a control inside it (theme pill, close) stops the
-// tap from propagating to the toggle handler and just resets the timer.
-let previewControlsTimer = null;
-function showPreviewControls(){
-  const el = document.getElementById('preview-controls'); if(!el) return;
-  el.classList.add('visible');
-  clearTimeout(previewControlsTimer);
-  previewControlsTimer = setTimeout(()=>{ el.classList.remove('visible'); }, 3000);
-}
-function togglePreviewControls(){
-  const el = document.getElementById('preview-controls'); if(!el) return;
-  document.getElementById('preview-ratio-dropdown')?.classList.remove('open');
-  if(el.classList.contains('visible')){ el.classList.remove('visible'); clearTimeout(previewControlsTimer); }
-  else showPreviewControls();
-}
-function openPeriodPreview(pageId){
-  const page = DB.pages().find(p=>p.id===pageId); if(!page) return;
-  const profile = DB.profile();
-  document.getElementById('preview-title').textContent = `${fmtD(page.startDate)} – ${fmtD(page.endDate)}${page.locked?' 🔒 Locked':''}`;
-  document.getElementById('preview-content').innerHTML = buildPeriodPreviewContent(page, profile, today());
-  document.getElementById('preview-body').className = 'ptheme-' + previewTheme;
-  document.querySelectorAll('.ptheme-tab[data-theme]').forEach(el=>el.classList.toggle('active', el.dataset.theme===previewTheme));
-  document.querySelectorAll('.ptheme-tab[data-aspect]').forEach(el=>el.classList.toggle('active', el.dataset.aspect===previewAspect));
-  document.querySelectorAll('.pratio-opt').forEach(el=>el.classList.toggle('active', el.dataset.ratio===previewRatio));
-  const ratioLabel = document.getElementById('preview-ratio-label'); if(ratioLabel) ratioLabel.textContent = previewRatio==='auto' ? 'Ratio' : previewRatio;
-  adaptiveState = { scale:1, x:0, y:0, minScale:1, maxScale:1 };
-  document.getElementById('m-period-preview').classList.add('active');
-  navPush('preview', {});
-  showPreviewControls();
-  requestAnimationFrame(fitPreviewTableToScreen);
-  if (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) showToast('Rotate your device sideways for the best view', true, 'light');
-  // Best-effort only: fullscreen + a landscape nudge, both of which silently
-  // no-op on browsers/contexts that don't support them (e.g. plain Safari).
-  try { document.getElementById('m-period-preview').requestFullscreen?.().catch(()=>{}); } catch(e){}
-  try { screen.orientation?.lock?.('landscape').catch(()=>{}); } catch(e){}
-}
-function closePeriodPreview(){
-  const wasOpen = document.getElementById('m-period-preview').classList.contains('active');
-  document.getElementById('m-period-preview').classList.remove('active');
-  clearTimeout(previewControlsTimer);
-  try { screen.orientation?.unlock?.(); } catch(e){}
-  try { if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{}); } catch(e){}
-  if (wasOpen && !navUndoing) navConsumeIfTop('preview', () => true);
-}
-window.addEventListener('resize', () => { if(document.getElementById('m-period-preview')?.classList.contains('active')) requestAnimationFrame(fitPreviewTableToScreen); });
-
-let currentAnimalSlideIdx = 0;
 function buildCompactTable(page,profile,todayStr, filter){
-  // Group columns by animal (or 'global' for the no-animals-configured
-  // fallback), preserving the order animals were added in.
-  let animals = {}, order = [];
-  page.cols.forEach(c=>{
-    if(['expense','date','sr','total'].includes(c.type)) return;
-    const key = c.animal || 'global';
-    if(!animals[key]){ let n = c.name.replace(/( AM| PM| Rate| Fat).*/, ''); if(n==='Rate (₹/L)') n='Global Rate'; animals[key] = {name:n, cols:[]}; order.push(key); }
-    animals[key].cols.push(c);
+  let sys1 = [], animals = {}, sys2 = [];
+  page.cols.forEach(c => {
+    if(c.type === 'expense') return; 
+    if(c.type === 'date' || c.type === 'sr') sys1.push(c); else if(c.type === 'total') { if(filter === 'totals' || filter === 'all') sys2.push(c); }
+    else {
+      const key = c.animal || 'global';
+      if(filter !== 'all') { if(filter === 'totals') return; if(filter.startsWith('cat_') && c.animalType !== filter.replace('cat_','')) return; if(filter.startsWith('anim_') && c.animal !== filter.replace('anim_','')) return; }
+      if(!animals[key]) { let n = c.name.replace(/( AM| PM| Rate).*/, ''); if(n === 'Rate (₹/L)') n = 'Global Rate'; animals[key] = {name: n, cols: []}; }
+      animals[key].cols.push(c);
+    }
   });
 
-  // "Totals Only" IS the per-animal daily-totals breakdown — no need for a
-  // separate code path, just skip straight to the pivot table using everyone.
-  if(filter === 'totals'){
-    const metas = order.map(k=>({key:k, name:animals[k].name, cols:animals[k].cols}));
-    return `<div class="twrap">${renderPivotSummaryTable(page, todayStr, metas)}</div>`;
-  }
+  const animalKeys = Object.keys(animals);
+  let head1 = sys1.map(c => `<th rowspan="2" class="th-sys">${c.name}</th>`).join(''), colCount = 0;
+  animalKeys.forEach((k, idx) => { const g = animals[k]; colCount += g.cols.length; head1 += `<th colspan="${g.cols.length}" class="th-group ${(idx < animalKeys.length - 1 || sys2.length > 0) ? 'v-sep' : ''}">${g.name}</th>`; });
+  head1 += sys2.map(c => `<th rowspan="2" class="th-sys" style="text-align:right;">${c.name}</th>`).join('');
 
-  let visibleKeys = order;
-  if(filter.startsWith('cat_')){ const cat=filter.replace('cat_',''); visibleKeys = order.filter(k=>animals[k].cols.some(c=>c.animalType===cat)); }
-  else if(filter.startsWith('anim_')){ const id=filter.replace('anim_',''); visibleKeys = order.filter(k=>k===id); }
+  let head2 = '';
+  animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => { let sub = c.type==='milk_am'?'AM':c.type==='milk_pm'?'PM':c.type==='ratefat'?(c.shift==='am'?'AM R/F':'PM R/F'):''; if(c.type==='number' || c.type==='text') sub = c.name.substring(0,4); head2 += `<th class="${(cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : ''}">${sub}</th>`; }); });
+  const thead = `<thead><tr>${head1}</tr><tr>${head2}</tr></thead>`;
 
-  if(!visibleKeys.length) return `<div class="empty"><div class="esub">No matching animals for this filter.</div></div>`;
+  let totalMilk = 0, totalRev = 0;
+  const rows = page.rows.map((r,ri)=>{
+    const isFuture = r.assignedDate > todayStr, isRowLocked = page.locked || isFuture; let cells = '';
+    sys1.forEach(c => { if(c.type==='date' || c.type==='sr') cells += `<td class="tsr">${fmtDS(r.date || r.assignedDate)}</td>`; });
+    animalKeys.forEach((k, idx) => { animals[k].cols.forEach((c, cidx) => {
+         if (c.type === 'milk_am' || c.type === 'milk_pm') totalMilk += parseFloat(r[c.id]) || 0;
+         const sepClass = (cidx === animals[k].cols.length - 1 && (idx < animalKeys.length - 1 || sys2.length > 0)) ? 'v-sep' : '';
+         if(isRowLocked) cells += `<td class="${sepClass}" style="color:${isFuture?'var(--border)':'var(--sub)'}; font-family:monospace; font-size:11px;">${r[c.id]||'—'}</td>`;
+         else cells += `<td class="${sepClass}"><input class="finp" type="text" inputmode="${c.type==='text'?'text':'decimal'}" autocomplete="off" data-lpignore="true" value="${r[c.id]||''}" placeholder="-" onchange="updCell('${page.id}','${r.id}','${c.id}',this.value,'${c.name}','${c.type}','${r.assignedDate}',${ri})" onfocus="this.closest('tr').classList.add('arow')" onblur="this.closest('tr').classList.remove('arow')"/></td>`;
+    });});
+    sys2.forEach(c => { totalRev += parseFloat(r.total) || 0; cells += `<td class="${r.total>0?'ttot':'ttote'}" style="text-align:right;">${r.total>0?'₹'+fmt(r.total):'—'}</td>`; });
+    return `<tr class="${isFuture ? 'future-row' : ''}">${cells}</tr>`;
+  }).join('');
 
-  // A single visible animal (e.g. filtered to just one) doesn't need a
-  // "Totals" slide in front of it — that would just duplicate its own
-  // Total column — so just show its table directly, no carousel/tabs.
-  if(visibleKeys.length === 1){
-    return `<div class="twrap">${renderAnimalMiniTable(page, profile, todayStr, animals[visibleKeys[0]].cols)}</div>`;
-  }
-
-  const pivotMetas = visibleKeys.map(k=>({key:k, name:animals[k].name, cols:animals[k].cols}));
-  const tabLabels = ['📊 Totals', ...visibleKeys.map(k=>animals[k].name)];
-  const tabsHtml = `<div class="animal-tabs">${tabLabels.map((label,idx)=>`<div class="animal-tab${idx===0?' active':''}" onclick="scrollToAnimalSlide(${idx})">${label}</div>`).join('')}</div>`;
-  const slidesHtml = [
-    `<div class="animal-slide"><div class="twrap">${renderPivotSummaryTable(page, todayStr, pivotMetas)}</div></div>`,
-    ...visibleKeys.map(k=>`<div class="animal-slide"><div class="twrap">${renderAnimalMiniTable(page, profile, todayStr, animals[k].cols)}</div></div>`)
-  ].join('');
-  const carouselHtml = `<div class="animal-carousel" id="animal-carousel" onscroll="onAnimalCarouselScroll()">${slidesHtml}</div>`;
-
-  return `${tabsHtml}${carouselHtml}`;
-}
-function scrollToAnimalSlide(idx){
-  const car = document.getElementById('animal-carousel'); if(!car) return;
-  currentAnimalSlideIdx = idx; Haptics.fire('tick');
-  car.scrollTo({left: idx * car.clientWidth, behavior: 'smooth'});
-  document.querySelectorAll('.animal-tab').forEach((el,i)=>el.classList.toggle('active', i===idx));
-}
-function onAnimalCarouselScroll(){
-  const car = document.getElementById('animal-carousel'); if(!car || !car.clientWidth) return;
-  const idx = Math.round(car.scrollLeft / car.clientWidth);
-  currentAnimalSlideIdx = idx;
-  document.querySelectorAll('.animal-tab').forEach((el,i)=>el.classList.toggle('active', i===idx));
-  document.querySelectorAll('.animal-slide').forEach((el,i)=>{ el.style.opacity = (i===idx) ? '1' : '0.45'; });
-}
-// A cell edit rebuilds #table-container from scratch — restore whichever
-// animal slide the person was swiped to instead of snapping back to the first.
-function restoreAnimalCarouselScroll(){
-  const car = document.getElementById('animal-carousel'); if(!car) return;
-  requestAnimationFrame(()=>{ car.scrollLeft = currentAnimalSlideIdx * car.clientWidth; onAnimalCarouselScroll(); });
+  return `<table>${thead}<tbody>${rows}</tbody><tfoot><tr style="height: 44px; background: var(--bg2); border-top: 2px solid var(--border2);"><td colspan="${sys1.length}" style="text-align:center; font-weight:900; font-size:14px; color:var(--fg);">Total:</td><td colspan="${colCount}" style="text-align:center; font-weight:900; font-size:14px; color:var(--fg);">${fmt(totalMilk)} L</td><td colspan="${sys2.length}" style="text-align:right; font-weight:900; font-size:14px; color:var(--fg); padding-right: 6px;">₹${fmt(totalRev)}</td></tr></tfoot></table>`;
 }
 
 // The moment the very last row of a period is filled in *on schedule* (its
@@ -4046,29 +3582,16 @@ function isPeriodComplete(page){
 }
 // Periods lock automatically so the milkmen ledger's "due" figure always
 // reflects settled, unchanging data:
-//  - once the period's own date range is over (i.e. from the day *after*
-//    its end date), it locks as soon as the last shift is filled in
+//  - the moment the period's last shift is filled in, it locks right away
 //  - otherwise it force-locks once a full day has passed since the *next*
 //    period started, so an incomplete period can't sit open indefinitely
-// Crucially, this never locks a page while `today` still falls inside its
-// own startDate–endDate range — even if the very last shift has just been
-// filled in. Locking mid-day on the period's last date used to yank the
-// sheet out from under the user instantly (getActivePage()/openQuickEntry()
-// both skip locked pages), producing a false "no active record sheet for
-// today" prompt on the last day of every period. The lock now only ever
-// kicks in starting the *next* calendar date, so today's sheet stays fully
-// usable (edits, backfills, household pouring, etc.) for its entire day.
-// Also never re-locks a page the user explicitly unlocked via reqLock() —
-// that stays open until they manually lock it again (see reqLock()), so a
-// manual unlock can't be silently undone by the next sweep.
 // Never touches an already-locked page, and never discards any entered data
 // — locking only flips the locked flag, rows/cols/totals are untouched.
 function autoLockIfDue(pageId){
   const pages = DB.pages();
   const page = pages.find(p=>p.id===pageId && !p.trashed);
-  if(!page || page.locked || page.manualUnlock) return false;
+  if(!page || page.locked) return false;
   const td = today();
-  if(td <= page.endDate) return false; // period's own date range (incl. its last day) is still current — leave it fully editable
   let shouldLock=false, complete=false;
   if(isPeriodComplete(page)){ shouldLock=true; complete=true; }
   else if(td >= addDays(page.endDate, 2)){ shouldLock=true; }
@@ -4095,7 +3618,6 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   if (ri === pages[pi].rows.length - 1) { maybeAutoCreateNextPage(pageId); autoLockIfDue(pageId); }
   const freshPage = DB.pages().find(p=>p.id===pageId) || pages[pi];
   document.getElementById('table-container').innerHTML = buildCompactTable(freshPage, DB.profile(), today(), currentTableFilter);
-  restoreAnimalCarouselScroll();
 }
 
 function renderGraphs(){
@@ -4664,8 +4186,6 @@ function renderMe(){
     <div class="row gap2 mb2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Evening Shift Starts At</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openShiftTimePicker(${profile.shiftTime})">${profile.shiftTime>12?profile.shiftTime-12:profile.shiftTime} PM</button></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
-    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Full-Screen Preview Theme</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Default color style when previewing a period</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openPreviewThemePicker()">${PREVIEW_THEME_LABELS[previewTheme]}</button></div>
-    <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Full-Screen Preview Fit</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">How the table scales to the screen</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openPreviewAspectPicker()">${PREVIEW_ASPECT_LABELS[previewAspect]}</button></div>
    </div>
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
@@ -4780,16 +4300,6 @@ function openThemePicker(){
   const opts = Object.keys(THEME_LABELS).map(k => ({ value: k, label: THEME_LABELS[k] }));
   openThemedSelect('Appearance', opts, getThemePref(), (value) => setThemePref(value));
 }
-const PREVIEW_THEME_LABELS = { classic:'Classic', color:'Colorful', contrast:'Contrast', sepia:'Sepia' };
-function openPreviewThemePicker(){
-  const opts = Object.keys(PREVIEW_THEME_LABELS).map(k => ({ value: k, label: PREVIEW_THEME_LABELS[k] }));
-  openThemedSelect('Full-Screen Preview Theme', opts, previewTheme, (value) => { setPreviewTheme(value); renderMe(); });
-}
-const PREVIEW_ASPECT_LABELS = { stretch:'Stretch', fit:'Fit', adaptive:'Adaptive' };
-function openPreviewAspectPicker(){
-  const opts = Object.keys(PREVIEW_ASPECT_LABELS).map(k => ({ value: k, label: PREVIEW_ASPECT_LABELS[k] }));
-  openThemedSelect('Full-Screen Preview Fit', opts, previewAspect, (value) => { setPreviewAspect(value); renderMe(); });
-}
 if (window.matchMedia) {
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (getThemePref() === 'system') applyTheme('system'); });
 }
@@ -4813,6 +4323,7 @@ function openAnimalModal(id){
     document.getElementById('ma-vax-date').value=''; document.getElementById('ma-vax-date-trigger').textContent = 'Not Set';
     document.getElementById('ma-calving-date').value=''; document.getElementById('ma-calving-date-trigger').textContent = 'Not Set'; document.getElementById('ma-illness').value='';
   }
+  updateMaBtn();
   om('m-animal');
 }
 function setAT(t){ Haptics.fire('tick'); animalType=t; document.querySelectorAll('#ma-types .rpill').forEach(b => b.classList.remove('on')); document.getElementById('ma-'+t+'-btn').classList.add('on'); }
@@ -4841,39 +4352,15 @@ async function doSaveAnimal() {
   }
   renderMe();
 }
-// Drops an animal's columns from unlocked periods, but ONLY where nothing
-// was ever entered for it — a period with real data for that animal keeps
-// its columns untouched, since removing the animal from the profile
-// shouldn't erase history that's already been recorded. Locked periods are
-// never touched at all.
-function removeEmptyAnimalColumnsFromUnlockedPages(animalId){
-  const pages = DB.pages(); let changed = false;
-  pages.forEach(page=>{
-    if(page.locked || page.trashed) return;
-    const animalCols = page.cols.filter(c=>c.animal===animalId);
-    if(!animalCols.length) return;
-    const hasAnyData = page.rows.some(r=>animalCols.some(c=>{
-      const v = r[c.id]; return v!==undefined && v!==null && String(v).trim()!=='';
-    }));
-    if(hasAnyData) return;
-    const colIds = new Set(animalCols.map(c=>c.id));
-    page.cols = page.cols.filter(c=>!colIds.has(c.id));
-    page.rows.forEach(r=>{ colIds.forEach(id=>{ delete r[id]; }); r.total = computeRowTotal(r, page.cols, DB.profile()); });
-    changed = true;
-  });
-  if(changed) DB.savePages(pages, {immediate:true});
-}
 async function removeAnimal(id){
   const p=DB.profile(); const a=p.animals?.find(x=>x.id===id); const agreed = await appConfirm('Remove Animal?', 'Remove '+a?.name+'?'); if(!agreed) return;
-  p.animals=p.animals.filter(x=>x.id!==id); DB.saveProfile(p); DB.log(`Removed animal: ${a?.name}`, 'delete');
-  removeEmptyAnimalColumnsFromUnlockedPages(id);
-  renderMe();
+  p.animals=p.animals.filter(x=>x.id!==id); DB.saveProfile(p); DB.log(`Removed animal: ${a?.name}`, 'delete'); renderMe();
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  CUSTOMER POURING LOGIC
 // ══════════════════════════════════════════════════════════════════
-function toggleHHExpand(id){ const opening = hhExpandedId !== id; hhExpandedId = opening ? id : null; hhHistoryExpandedId = null; renderHome(); if (opening) scheduleCoach('hhhistorybtn', () => document.querySelector('.hh-history-btn'), 'Tap here to see every past quantity/rate change for this customer.', 'bottom', 400, 3); }
+function toggleHHExpand(id){ const opening = hhExpandedId !== id; hhExpandedId = opening ? id : null; hhHistoryExpandedId = opening ? id : null; renderHome(); }
 function toggleHHHistory(id){ hhHistoryExpandedId = (hhHistoryExpandedId===id) ? null : id; renderHome(); }
 
 function getHouseholdChangeHistory(h){
@@ -4901,6 +4388,20 @@ function removeHHChange(householdId, dateStr){
   DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
+// The household modal's Save button has different requirements depending on
+// context: a brand-new customer needs name + a positive daily qty + a
+// positive rate (custom or picked); editing an existing one only needs the
+// name, since qty/rate live in the changes/exceptions timeline instead.
+function updateHhSaveBtn(){
+  const btn = document.getElementById('hh-btn'); if (!btn) return;
+  const name = document.getElementById('hh-name')?.value.trim() || '';
+  let ok = !!name;
+  if (editHouseholdId === 'new') {
+    const qty = parseFloat(document.getElementById('hh-qty')?.value) || 0;
+    ok = ok && qty > 0 && getHHRateValue() > 0;
+  }
+  btn.disabled = !ok;
+}
 function openHouseholdModal(id){
   editHouseholdId = id; const isNew = id === 'new';
   document.getElementById('hh-title').textContent = isNew ? 'Add Customer' : 'Edit Customer Info';
@@ -4922,6 +4423,7 @@ function openHouseholdModal(id){
     if (stopRow) { stopRow.style.display = 'flex'; document.getElementById('hh-stop-btn').textContent = h.stopped ? '▶ Resume Service' : '⏸ Stop Service'; }
   }
   om('m-household');
+  updateHhSaveBtn();
 }
 
 let hhRateOptionsCache = [];
@@ -4954,6 +4456,7 @@ function handleHHRateSelectChange(){
   const hidden = document.getElementById('hh-rate-select'); const customInp = document.getElementById('hh-rate-custom'); if (!hidden || !customInp) return;
   if (hidden.value === 'custom') { customInp.style.display = 'block'; customInp.value = ''; customInp.focus(); }
   else { customInp.style.display = 'none'; customInp.value = ''; }
+  updateHhSaveBtn();
 }
 
 function getHHRateValue(){
@@ -5004,6 +4507,7 @@ function openMilkmenPaymentModal() {
   document.getElementById('mp-amount').value = '';
   document.getElementById('mp-note').value = '';
   document.getElementById('mp-date').value = today(); document.getElementById('mp-date-trigger').textContent = fmtD(today());
+  updateMpBtn();
   om('m-milkmen-payment');
 }
 function saveMilkmenPayment() {
@@ -5031,6 +4535,7 @@ function openCustomerPaymentModal(hId) {
   document.getElementById('cp-amount').value = stats.currentDue > 0 ? stats.currentDue : '';
   document.getElementById('cp-note').value = '';
   document.getElementById('cp-date').value = today(); document.getElementById('cp-date-trigger').textContent = fmtD(today());
+  updateCpBtn();
   om('m-customer-payment');
 }
 
@@ -5143,7 +4648,7 @@ function openNewPageModal() {
   const minStart = latestEnd ? addDays(latestEnd, 1) : null; const suggestedStart = minStart || today();
   document.getElementById('mnp-date').value = suggestedStart; document.getElementById('mnp-date-trigger').textContent = fmtD(suggestedStart);
   document.getElementById('mnp-date-trigger').setAttribute('onclick', `openThemedCalendar('mnp-date', ${minStart ? `'${minStart}'` : 'null'})`);
-  document.getElementById('mnp-modal-title').textContent = `New ${DB.profile().periodLength || 10}-Day Record`; om('m-newpage');
+  document.getElementById('mnp-modal-title').textContent = `New ${DB.profile().periodLength || 10}-Day Record`; updateNpBtn(); om('m-newpage');
 }
 
 function doNewPage() {
@@ -5172,16 +4677,10 @@ async function reqLock(pageId){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0) return; const page=pages[pi];
   if(page.locked){
     const agreed=await appConfirm('Unlock Record?','Unlock to edit again?'); if(!agreed) return;
-    // manualUnlock=true tells autoLockIfDue() to leave this page alone from
-    // now on — otherwise the very next auto-lock sweep (which runs on every
-    // render) would see the same "complete"/"grace period over" condition
-    // that locked it in the first place and instantly re-lock it, making it
-    // look like the sheet "can't be unlocked". It only re-locks once the
-    // user explicitly locks it again below.
-    page.locked=false; page.clearedAt=null; page.manualUnlock=true; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
+    page.locked=false; page.clearedAt=null; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
   } else {
     const agreed=await appConfirm('Mark as Cleared?','Lock record and mark account cleared?'); if(!agreed) return;
-    page.locked=true; page.clearedAt=new Date().toISOString(); page.manualUnlock=false; page.autoLocked=false; DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
+    page.locked=true; page.clearedAt=new Date().toISOString(); DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
   }
   renderHome();
 }
@@ -5212,6 +4711,7 @@ function cm(id){
   const el = document.getElementById(id); const wasOpen = el.classList.contains('open');
   el.classList.remove('open');
   if (wasOpen && !navUndoing) navConsumeIfTop('modal', p => p.id === id);
+  if (wasOpen && CLOUD_SENSITIVE_MODAL_IDS.includes(id)) flushDeferredCloudRefresh();
 }
 function moi(e,id){if(e.target.id===id)cm(id);}
 
@@ -5316,6 +4816,19 @@ async function editPageLength(pageId) {
   const now=Date.now(); const trash=DB.trash().filter(p=>(now-new Date(p.trashedAt).getTime())<30*86400000); DB.saveTrash(trash);
   AnalyticsEngine.build(); AutoBackup.trigger(); 
 })();
+
+// Wire up the required-field dimming for the straightforward single-shot
+// modals (see bindRequiredFields above) — the household modal has its own
+// updateHhSaveBtn() instead, since what's "required" there depends on
+// whether it's a new customer or an edit. Kept as named functions (not just
+// fire-and-forget) so each modal's open function can also call them once
+// right after resetting its fields programmatically — a JS-set .value alone
+// doesn't trigger the 'input' listener these are wired to.
+const updateMaBtn = bindRequiredFields('ma-btn', ['ma-name']);
+const updateExpBtn = bindRequiredFields('exp-btn', ['m-exp-name', ['m-exp-cost', v => parseFloat(v) > 0]]);
+const updateMpBtn = bindRequiredFields('mp-btn', [['mp-amount', v => parseFloat(v) > 0]]);
+const updateCpBtn = bindRequiredFields('cp-btn', [['cp-amount', v => parseFloat(v) > 0]]);
+const updateNpBtn = bindRequiredFields('np-btn', [['mnp-date', v => !!v]]);
 
 initApp();
 checkForPasswordResetLink();
