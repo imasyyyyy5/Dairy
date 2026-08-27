@@ -134,7 +134,7 @@ html[data-theme="light"]{
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view { z-index: 2000 !important; }
+#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-resetpw { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
@@ -474,10 +474,10 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
 #app-version-mark{
   max-height:0; opacity:0; transform:translateY(18px); overflow:hidden; padding:0 0; margin:0;
-  text-align:center; color:rgba(255,255,255,0.5); font-size:11px; line-height:1;
+  text-align:center; color:rgba(255,255,255,0.5); font-size:11px; line-height:1.6;
   transition: max-height 0.45s cubic-bezier(.34,1.56,.64,1), opacity 0.35s ease, transform 0.45s cubic-bezier(.34,1.56,.64,1), padding 0.45s ease;
 }
-#app-version-mark.show{ max-height:40px; opacity:0.5; transform:translateY(0); padding:14px 0 4px; }
+#app-version-mark.show{ max-height:60px; opacity:0.5; transform:translateY(0); padding:14px 0 4px; }
 
 /* NARROW PHONES (e.g. iPhone SE, small Android, ~360px and under):
    trim outer padding and step down a few font sizes so nothing clips
@@ -577,7 +577,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
           <button class="num-key" onclick="numpadPress('4')">4</button><button class="num-key" onclick="numpadPress('5')">5</button><button class="num-key" onclick="numpadPress('6')">6</button>
           <button class="num-key" onclick="numpadPress('7')">7</button><button class="num-key" onclick="numpadPress('8')">8</button><button class="num-key" onclick="numpadPress('9')">9</button>
           <button class="num-key num-action" onclick="numpadPress('.')">.</button><button class="num-key" onclick="numpadPress('0')">0</button><button class="num-key num-action" onclick="numpadPress('back')">⌫</button>
-          <button class="num-save" onclick="saveQuickEntry()">Save Data & Close</button>
+          <button class="num-save" id="qe-save-btn" onclick="saveQuickEntry()">Save Data & Close</button>
       </div>
   </div>
  </div>
@@ -829,6 +829,20 @@ const Store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}},
 };
 
+// Dev-only diagnostic (surfaced next to the hidden version mark — see
+// revealVersionMark) — total bytes this origin has written to localStorage
+// against the ~5MB-per-origin browser ceiling. UTF-16 storage means 2 bytes
+// per character for both the key and its stored value.
+function localStorageUsageStr(){
+  try {
+    let bytes = 0;
+    for (const k in localStorage) {
+      if (Object.prototype.hasOwnProperty.call(localStorage, k)) bytes += (localStorage[k].length + k.length) * 2;
+    }
+    return (bytes/1024/1024).toFixed(2) + ' / 5 MB';
+  } catch(e) { return '—'; }
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  HAPTICS
 //  A single named-tier table so every tap/action feel in the app is tuned
@@ -988,17 +1002,30 @@ const AutoBackup = {
 
 const DB={
   profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[], onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
-  saveProfile:(p,opts)=>{ Store.set('mdn_profile',p); AutoBackup.trigger(); cloudTouch('profile', opts&&opts.immediate); },
+  // Every save* returns the AutoBackup promise (local write is already
+  // synchronous by the time you get this promise — it resolves once the
+  // OPFS/IndexedDB backup copy has ALSO actually landed on disk). Callers
+  // that care whether data is genuinely durable before telling the user
+  // "saved" (e.g. Quick Entry) should await this; nothing else has to
+  // change since a plain unwaited call behaves exactly as before. The
+  // network push to the cloud is intentionally NOT part of this promise —
+  // that can be slow or fail offline, and "saved on this device" shouldn't
+  // hang waiting on a network round-trip.
+  saveProfile:(p,opts)=>{ if(!Store.set('mdn_profile',p)) return Promise.reject(new Error('local storage write failed')); cloudTouch('profile', opts&&opts.immediate); return AutoBackup.trigger(); },
   pages:()=>{
     const p = Store.get('mdn_pages')||[];
     p.forEach(pg => { pg.cols.forEach(c => { if (c.type === 'sr' || c.id === 'sr' || c.name === 'S.No') { c.type = 'date'; c.id = 'date'; c.name = 'Date'; } }); });
     return p;
   },
-  savePages:(p,opts)=>{ Store.set('mdn_pages',p); AnalyticsEngine.build(); AutoBackup.trigger(); cloudTouch('pages', opts&&opts.immediate); },
+  // Store.set returning false (e.g. localStorage quota exceeded) now
+  // actually surfaces as a rejected promise instead of silently pretending
+  // the save happened — this is what lets Quick Entry refuse to show the
+  // ✅ screen when the write genuinely didn't land.
+  savePages:(p,opts)=>{ if(!Store.set('mdn_pages',p)) return Promise.reject(new Error('local storage write failed')); AnalyticsEngine.build(); cloudTouch('pages', opts&&opts.immediate); return AutoBackup.trigger(); },
   payments:()=>Store.get('mdn_payments')||[],
-  savePayments:(p,opts)=>{ Store.set('mdn_payments',p); AutoBackup.trigger(); cloudTouch('payments', opts&&opts.immediate); },
+  savePayments:(p,opts)=>{ if(!Store.set('mdn_payments',p)) return Promise.reject(new Error('local storage write failed')); cloudTouch('payments', opts&&opts.immediate); return AutoBackup.trigger(); },
   trash:()=>Store.get('mdn_trash')||[],
-  saveTrash:(t,opts)=>{ Store.set('mdn_trash',t); AutoBackup.trigger(); cloudTouch('trash', opts&&opts.immediate); },
+  saveTrash:(t,opts)=>{ Store.set('mdn_trash',t); cloudTouch('trash', opts&&opts.immediate); return AutoBackup.trigger(); },
   // ── CUSTOMER UPGRADE MIGRATION ──
   households:()=>{
     const raw = Store.get('mdn_households')||[];
@@ -1022,22 +1049,26 @@ const DB={
             updated = true;
         }
     });
-    if(updated) { Store.set('mdn_households', raw); AutoBackup.trigger(); cloudTouch('households'); }
+    if(updated) { Store.set('mdn_households', raw); cloudTouch('households'); AutoBackup.trigger(); }
     return raw;
   },
-  saveHouseholds:(h,opts)=>{ Store.set('mdn_households',h); AutoBackup.trigger(); cloudTouch('households', opts&&opts.immediate); },
+  saveHouseholds:(h,opts)=>{ Store.set('mdn_households',h); cloudTouch('households', opts&&opts.immediate); return AutoBackup.trigger(); },
   logs:()=>{
     const rawLogs = Store.get('mdn_logs')||[];
     const cleanLogs = rawLogs.filter(l => l && l.text && l.text !== 'undefined' && l.text.trim() !== '');
     if (cleanLogs.length !== rawLogs.length) Store.set('mdn_logs', cleanLogs); 
     return cleanLogs;
   },
+  // Logs are local-first, append-only history — see mergeLogs above. A sync
+  // can bring in entries another device created (so both devices end up
+  // with the full combined timeline), but nothing here ever lets an
+  // incoming sync remove or rewrite an entry already on this device.
   log(text, type='info', undoOp=null, hapticOverride=null){
     const l=DB.logs();
     const entry = {id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()};
     if(undoOp) entry.undoOp = undoOp;
     l.unshift(entry);
-    if(l.length>3000)l.splice(3000); Store.set('mdn_logs',l); AutoBackup.trigger(); cloudTouch('logs');
+    if(l.length>3000)l.splice(3000); Store.set('mdn_logs',l); cloudTouch('logs'); AutoBackup.trigger();
     // Covers most save-confirmation haptics for free, keyed off the log type
     // almost every meaningful action already passes in. A call site can
     // still override the tier (e.g. Quick Entry's save is `light`, lighter
@@ -1048,17 +1079,216 @@ const DB={
 };
 
 // ══════════════════════════════════════════════════════════════════
+//  MERGE ENGINE
+//  Every synced collection is still ONE Firestore document per collection,
+//  but incoming data is never allowed to blindly replace local data anymore
+//  — old whole-collection last-write-wins could silently drop an edit made
+//  on this device that just hadn't finished pushing yet, if a second
+//  device's write landed in that window. Everything below merges instead:
+//  whichever side has an item wins nothing by default — both sides' items
+//  are kept (union), and only a genuine same-item conflict is resolved by
+//  per-item updatedAt. Nothing is ever discarded just because a sync ran.
+// ══════════════════════════════════════════════════════════════════
+
+// Flat array collections (payments, trash, households, expenses,
+// sharedHisaabs): union by id. An item that exists on only one side is
+// always kept. Only when BOTH sides have the same id do we pick a winner,
+// and only then by whichever copy is newer — so nobody's payment or
+// household record can vanish just because the other side didn't know
+// about it yet.
+function mergeById(localArr, remoteArr, tsField){
+  tsField = tsField || 'updatedAt';
+  const map = new Map();
+  (localArr||[]).forEach(item => { if(item && item.id!=null) map.set(item.id, item); });
+  (remoteArr||[]).forEach(rItem => {
+    if(!rItem || rItem.id==null) return;
+    const lItem = map.get(rItem.id);
+    if(!lItem){ map.set(rItem.id, rItem); return; }
+    // `rev` is a logical edit-count, immune to device clock drift — prefer
+    // it whenever both sides have recorded one and they actually differ.
+    // Falls straight through to the old timestamp behavior for any item
+    // that hasn't been stamped with a rev yet, so this is a no-op until a
+    // write path starts setting `rev`.
+    const lRev = lItem.rev||0, rRev = rItem.rev||0;
+    if(lRev !== rRev){ if(rRev > lRev) map.set(rItem.id, rItem); return; }
+    const lTs = lItem[tsField]||0, rTs = rItem[tsField]||0;
+    if(rTs > lTs) map.set(rItem.id, rItem);
+  });
+  return Array.from(map.values());
+}
+
+// Rows within a single page merge CELL BY CELL, not whole-row. A row
+// carries its own `_cellTs` ledger — { colId: timestamp } — stamped every
+// time a specific cell is written (see updCell / saveQuickEntry). Picking
+// the newer whole row here would mean Device A's AM entry for Cow 1 gets
+// thrown away just because Device B's PM entry for Cow 2 (a DIFFERENT
+// cell, same row) happened to save a moment later. Instead each cell picks
+// its own winner from its own timestamp, so unrelated cells in the same
+// row never compete with each other.
+const ROW_STRUCTURAL_FIELDS = new Set(['id','index','assignedDate','total','updatedAt','_cellTs']);
+function mergeRowCells(localRow, remoteRow){
+  if(!localRow) return remoteRow;
+  if(!remoteRow) return localRow;
+  const lTs = localRow._cellTs || {}, rTs = remoteRow._cellTs || {};
+  const lRev = localRow._cellRev || {}, rRev = remoteRow._cellRev || {};
+  const merged = { id: localRow.id, index: localRow.index, assignedDate: localRow.assignedDate };
+
+  // date/dateFrozen travel together (they both describe "when was this row
+  // first actually filled in") and are stamped under the synthetic '__meta'
+  // key rather than a real column id. Whichever side actually froze the row
+  // wins over one that hasn't touched it yet; if both froze it (two devices
+  // both treated it as a fresh entry before either had synced), the
+  // EARLIER stamp wins, since that reflects which entry genuinely happened
+  // first chronologically.
+  const lMeta = lTs.__meta||0, rMeta = rTs.__meta||0, lFrozen = !!localRow.dateFrozen, rFrozen = !!remoteRow.dateFrozen;
+  let dateSrc;
+  if(lFrozen && rFrozen) dateSrc = (lMeta && rMeta) ? (lMeta <= rMeta ? localRow : remoteRow) : (lMeta ? localRow : remoteRow);
+  else if(lFrozen) dateSrc = localRow;
+  else if(rFrozen) dateSrc = remoteRow;
+  else dateSrc = localRow;
+  merged.date = dateSrc.date; merged.dateFrozen = dateSrc.dateFrozen;
+
+  // Every other key is a real data column (milk qty, rate, rate/fat combo,
+  // etc.) — dynamic per profile, so just take the union of keys present on
+  // either side and let each cell's own timestamp decide.
+  const dataKeys = new Set([...Object.keys(localRow), ...Object.keys(remoteRow)].filter(k => !ROW_STRUCTURAL_FIELDS.has(k) && k!=='date' && k!=='dateFrozen'));
+  dataKeys.forEach(colId => {
+    const lVal = localRow[colId], rVal = remoteRow[colId];
+    if(lVal===undefined){ merged[colId]=rVal; return; }
+    if(rVal===undefined){ merged[colId]=lVal; return; }
+    // Per-cell rev (a local edit counter, not wall-clock time) breaks the
+    // tie whenever both sides have one and they disagree — this is what
+    // keeps a drifted device clock from silently clobbering a genuinely
+    // newer edit made on another device. Only falls back to the raw
+    // timestamp for cells with no rev recorded yet (older data).
+    const lc = lRev[colId]||0, rc = rRev[colId]||0;
+    if(lc !== rc){ merged[colId] = (rc > lc) ? rVal : lVal; return; }
+    merged[colId] = ((rTs[colId]||0) > (lTs[colId]||0)) ? rVal : lVal;
+  });
+
+  // Carry forward the union of both ledgers (newer stamp/higher rev wins
+  // per key) so the NEXT merge still has full history to work from.
+  const mergedTs = Object.assign({}, lTs);
+  Object.keys(rTs).forEach(k => { if((rTs[k]||0) > (mergedTs[k]||0)) mergedTs[k]=rTs[k]; });
+  merged._cellTs = mergedTs;
+  const mergedRev = Object.assign({}, lRev);
+  Object.keys(rRev).forEach(k => { if((rRev[k]||0) > (mergedRev[k]||0)) mergedRev[k]=rRev[k]; });
+  merged._cellRev = mergedRev;
+  merged.updatedAt = Math.max(localRow.updatedAt||0, remoteRow.updatedAt||0);
+  merged.rev = Math.max(localRow.rev||0, remoteRow.rev||0);
+  // `total` is derived from the cells above, not a cell itself — a stale
+  // placeholder goes here and mergePage() recomputes it properly once it
+  // knows which page's columns (and profile rates) apply. Prefer rev over
+  // raw timestamp here too, same reasoning as the per-cell merge above.
+  const rowRevLocal = localRow.rev||0, rowRevRemote = remoteRow.rev||0;
+  merged.total = (rowRevLocal !== rowRevRemote)
+    ? (rowRevRemote > rowRevLocal ? remoteRow.total : localRow.total)
+    : (((remoteRow.updatedAt||0) > (localRow.updatedAt||0)) ? remoteRow.total : localRow.total);
+  return merged;
+}
+
+// Row ARRAY merge: union by row id (a row present on only one side is
+// always kept), each shared row resolved cell-by-cell via mergeRowCells
+// above. Row order follows whichever side has more rows so an entire-array
+// replace never trims the other side's rows.
+function mergeRows(localRows, remoteRows){
+  const map = new Map();
+  (localRows||[]).forEach(r=>{ if(r && r.id!=null) map.set(r.id, r); });
+  (remoteRows||[]).forEach(rr=>{
+    if(!rr || rr.id==null) return;
+    const lr = map.get(rr.id);
+    map.set(rr.id, lr ? mergeRowCells(lr, rr) : rr);
+  });
+  const base = (localRows && localRows.length >= (remoteRows||[]).length) ? localRows : remoteRows;
+  const order = (base||[]).map(r=>r.id).filter(id=>map.has(id));
+  const orderedSet = new Set(order);
+  const leftover = Array.from(map.keys()).filter(id=>!orderedSet.has(id));
+  return [...order, ...leftover].map(id=>map.get(id));
+}
+
+// A single page: page-level fields (label, cols, locked, endDate, etc.)
+// come from whichever whole page object is newer — those don't have
+// per-field granularity and aren't usually edited concurrently — but the
+// rows array is ALWAYS merged cell-by-cell regardless of which page
+// "wins", so a same-period edit on two devices never loses either one, and
+// every row's total is recomputed fresh from the merged cells (never
+// trusted from either side's stale copy) using the winning page's columns.
+function mergePage(localPage, remotePage){
+  if(!localPage) return remotePage;
+  if(!remotePage) return localPage;
+  // Prefer page.rev (a local edit counter) over the raw timestamp when both
+  // sides have one and disagree — protects page-level fields (label, cols,
+  // locked, endDate) the same way the cell-level merge above protects row
+  // data, in case one device's clock has drifted.
+  const localRev = localPage.rev||0, remoteRev = remotePage.rev||0;
+  const winner = (localRev !== remoteRev)
+    ? (remoteRev > localRev ? remotePage : localPage)
+    : ((remotePage.updatedAt||0) > (localPage.updatedAt||0) ? remotePage : localPage);
+  const mergedRows = mergeRows(localPage.rows, remotePage.rows);
+  try {
+    const profile = DB.profile();
+    mergedRows.forEach(r => { r.total = computeRowTotal(r, winner.cols, profile); });
+  } catch(e) { /* if this ever runs before computeRowTotal/DB are ready, the placeholder total from mergeRowCells is still a safe fallback */ }
+  return Object.assign({}, winner, { rows: mergedRows });
+}
+
+function mergePagesCollections(localPages, remotePages){
+  const map = new Map();
+  (localPages||[]).forEach(p=>{ if(p && p.id!=null) map.set(p.id, p); });
+  (remotePages||[]).forEach(rp=>{
+    if(!rp || rp.id==null) return;
+    map.set(rp.id, map.has(rp.id) ? mergePage(map.get(rp.id), rp) : rp);
+  });
+  return Array.from(map.values());
+}
+
+// Logs are pure history — an event either happened or it didn't, and it
+// never changes after the fact. So this is a straight append-only union by
+// log id: anything present on either side stays, forever. A sync can ADD a
+// log entry this device didn't have yet (e.g. "Device B logged the evening
+// shift for the 14th"), but it can never remove or rewrite one that's
+// already here — no updatedAt comparison, no "newer wins", because there's
+// nothing to reconcile about an immutable event record. The only trimming
+// that ever happens is this device's own local retention cap.
+function mergeLogs(localLogs, remoteLogs){
+  const seen = new Set();
+  const merged = [];
+  (localLogs||[]).forEach(l=>{ if(l && l.id!=null && !seen.has(l.id)){ seen.add(l.id); merged.push(l); } });
+  (remoteLogs||[]).forEach(l=>{ if(l && l.id!=null && !seen.has(l.id)){ seen.add(l.id); merged.push(l); } });
+  merged.sort((a,b)=> new Date(b.ts||0) - new Date(a.ts||0));
+  if(merged.length>3000) merged.length=3000;
+  return merged;
+}
+
+// Which collections get real merge logic vs. simple whole-object
+// last-write-wins. 'profile' and 'theme' are singleton settings objects,
+// not arrays of records — there's no meaningful per-field merge for "my
+// dairy's name" or "which theme I picked", so those two stay
+// whichever-is-newer-wins-wholesale, same as before.
+const MERGE_FN = {
+  pages: mergePagesCollections,
+  logs: mergeLogs,
+  payments: mergeById,
+  trash: mergeById,
+  households: mergeById,
+  expenses: mergeById,
+  sharedHisaabs: (l,r)=>mergeById(l,r,'receivedAt'),
+};
+function mergeCollectionData(key, localData, remoteData){
+  const fn = MERGE_FN[key];
+  return fn ? fn(localData, remoteData) : remoteData;
+}
+function jsonEq(a,b){ try { return JSON.stringify(a) === JSON.stringify(b); } catch(e){ return a===b; } }
+
+// ══════════════════════════════════════════════════════════════════
 //  CLOUD SYNC
-//  Whole-collection last-write-wins, decided per collection. Each synced
-//  collection is ONE Firestore document (users/{uid}/state/{key}) rather
-//  than per-row — far simpler than a granular outbox, and plenty for one
-//  farmer's data across a couple of personal devices.
-//
-//  Scope/limitation to be upfront about: this is last-write-wins at the
-//  collection level, decided on login + live listener updates — it does NOT
-//  merge concurrent edits made on two devices at the same moment. Fine for
-//  "phone in the morning, desktop in the evening" use; not safe for two
-//  people actively editing the same account simultaneously.
+//  Each synced collection is ONE Firestore document (users/{uid}/state/{key}).
+//  Incoming data is always merged (see MERGE ENGINE above) rather than
+//  replacing local storage outright, so a background sync can never destroy
+//  an edit — worst case for two devices editing concurrently is that the
+//  merge has to pick a winner for the exact same field, which is rare and
+//  never loses an entire record. profile/theme remain simple
+//  whichever-is-newer singletons, since there's nothing to merge within them.
 // ══════════════════════════════════════════════════════════════════
 let cloudUser = null;
 let cloudSyncStatus = 'signed-out'; // 'signed-out' | 'syncing' | 'synced' | 'error'
@@ -1170,16 +1400,36 @@ async function cloudInitialMerge(){
       const pushes = [];
       keys.forEach((key, i) => {
         const remote = remotes[i];
-        const localTs = localMeta[key] || 0;
-        if (remote && (remote.updatedAt || 0) > localTs) {
-          cloudApplyingRemote = true;
-          Store.set(CLOUD_COLLECTIONS[key], remote.data);
-          cloudApplyingRemote = false;
-          cloudMarkLocalTs(key, remote.updatedAt);
-          if (key === 'theme') themeMemory = null;
-          pulledAny = true;
+        const localData = Store.get(CLOUD_COLLECTIONS[key]);
+        if (!remote) { pushes.push(cloudPushOne(key)); return; } // nothing in the cloud yet — push what we have
+        if (MERGE_FN[key]) {
+          // Mergeable collection: combine both sides regardless of which
+          // timestamp is newer, so neither device's records get dropped.
+          const merged = mergeCollectionData(key, localData, remote.data);
+          const changedFromLocal = !jsonEq(merged, localData);
+          const changedFromRemote = !jsonEq(merged, remote.data);
+          if (changedFromLocal) {
+            cloudApplyingRemote = true;
+            Store.set(CLOUD_COLLECTIONS[key], merged);
+            cloudApplyingRemote = false;
+            pulledAny = true;
+          }
+          cloudMarkLocalTs(key, Date.now());
+          if (changedFromRemote) pushes.push(cloudPushOne(key)); // remote is missing something local/merged now has
         } else {
-          pushes.push(cloudPushOne(key));
+          // Singleton (profile/theme): no per-field merge possible, so
+          // whichever whole copy is newer wins, same as before.
+          const localTs = localMeta[key] || 0;
+          if ((remote.updatedAt || 0) > localTs) {
+            cloudApplyingRemote = true;
+            Store.set(CLOUD_COLLECTIONS[key], remote.data);
+            cloudApplyingRemote = false;
+            cloudMarkLocalTs(key, remote.updatedAt);
+            if (key === 'theme') themeMemory = null;
+            pulledAny = true;
+          } else {
+            pushes.push(cloudPushOne(key));
+          }
         }
       });
       await Promise.all(pushes);
@@ -1204,6 +1454,12 @@ async function cloudInitialMerge(){
 // changed" toast would help the person or blindside them.
 const CLOUD_SENSITIVE_MODAL_IDS = ['m-newpage','m-animal','m-household','m-hh-exception','m-customer-payment','m-milkmen-payment'];
 function isSensitiveEditingOpen(){
+  // An in-progress keystroke in an inline table cell (or any other text
+  // input/textarea) is just as disruptive as the modals below — a remote
+  // snapshot landing mid-type would blow away the table DOM (and focus)
+  // under the user's fingers, so it counts as "sensitive" too.
+  const active = document.activeElement;
+  if (active && (active.classList?.contains('finp') || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return true;
   const qe = document.getElementById('quick-entry');
   if (qe && qe.classList.contains('active')) return true;
   return CLOUD_SENSITIVE_MODAL_IDS.some(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
@@ -1228,12 +1484,36 @@ function attachCloudListeners(){
     const unsub = window.CloudDB.onSnapshot(['users', cloudUser.uid, 'state', key], (remote) => {
       if (!remote) return;
       const localTs = cloudLocalMeta().localUpdatedAt[key] || 0;
-      if ((remote.updatedAt || 0) <= localTs) return; // our own write echoing back, or already-applied/stale
-      cloudApplyingRemote = true;
-      Store.set(CLOUD_COLLECTIONS[key], remote.data);
-      cloudApplyingRemote = false;
-      cloudMarkLocalTs(key, remote.updatedAt);
-      if (key === 'theme') { themeMemory = null; applyTheme(getThemePref()); }
+      const isOwnEcho = (remote.updatedAt || 0) <= localTs && remote.device === DEVICE_ID;
+      if (isOwnEcho) return; // this is just our own push landing back — nothing to merge
+      const localData = Store.get(CLOUD_COLLECTIONS[key]);
+      let finalData, changedFromLocal, changedFromRemote;
+      if (MERGE_FN[key]) {
+        // Merge regardless of timestamp ordering: this is exactly the case
+        // that used to lose data — an edit made on THIS device that hadn't
+        // finished pushing yet, clobbered by another device's write landing
+        // first. Merging instead of replacing means that in-flight local
+        // edit survives no matter which side's timestamp looks newer.
+        finalData = mergeCollectionData(key, localData, remote.data);
+        changedFromLocal = !jsonEq(finalData, localData);
+        changedFromRemote = !jsonEq(finalData, remote.data);
+      } else {
+        // Singleton (profile/theme): nothing to merge field-by-field, so
+        // only act if the remote copy is actually newer than what we have.
+        if ((remote.updatedAt || 0) <= localTs) return;
+        finalData = remote.data;
+        changedFromLocal = !jsonEq(finalData, localData);
+        changedFromRemote = false;
+      }
+      if (changedFromLocal) {
+        cloudApplyingRemote = true;
+        Store.set(CLOUD_COLLECTIONS[key], finalData);
+        cloudApplyingRemote = false;
+      }
+      cloudMarkLocalTs(key, Date.now());
+      if (key === 'theme' && changedFromLocal) { themeMemory = null; applyTheme(getThemePref()); }
+      if (changedFromRemote) cloudPushOne(key); // remote/other devices are missing what we just merged in — let them catch up
+      if (!changedFromLocal) return; // nothing actually changed on this device — no need to re-render or notify
       if (isSensitiveEditingOpen()) { cloudDeferredRefresh = true; return; }
       AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe();
       showToast('Updated from another device', true, 'light');
@@ -1536,7 +1816,14 @@ function applyUndoOp(op, direction){ // direction: 'undo' or 'redo'
     const pages = DB.pages(); const p = pages.find(pg=>pg.id===op.pageId); if(!p) return;
     const r = p.rows.find(rw=>rw.id===op.rowId); if(!r) return;
     r[op.colId] = direction==='undo' ? op.from : op.to;
-    r.total = computeRowTotal(r, p.cols, DB.profile());
+    // Restore the total exactly as it stood right after the ORIGINAL edit,
+    // rather than recomputing against today's profile rates — an animal's
+    // rate changing after the fact must never rewrite a historical row's
+    // total when a much older entry is undone/redone. Old log entries saved
+    // before this field existed won't have it, so fall back to a recompute
+    // for those (matches the previous, imperfect behavior only for them).
+    const hasStoredTotal = direction==='undo' ? op.previousTotal !== undefined : op.newTotal !== undefined;
+    r.total = hasStoredTotal ? (direction==='undo' ? op.previousTotal : op.newTotal) : computeRowTotal(r, p.cols, DB.profile());
     DB.savePages(pages);
     return;
   }
@@ -2352,7 +2639,7 @@ function syncActivePageColumns(){
         page.rows.forEach(r=>{ if(r[pmRfId]===undefined) r[pmRfId]=''; }); changed=true;
       }
     });
-    if(changed){ page.rows.forEach(r=>r.total=computeRowTotal(r,page.cols,profile)); anyChanged=true; }
+    if(changed){ const stamp=Date.now(); page.rows.forEach(r=>{r.total=computeRowTotal(r,page.cols,profile); r.updatedAt=stamp; r.rev=(r.rev||0)+1;}); page.updatedAt=stamp; page.rev=(page.rev||0)+1; anyChanged=true; }
   });
   if(anyChanged) DB.savePages(pages);
 }
@@ -2898,13 +3185,14 @@ function createPage(startDate){
   const numDays = Math.round((eD - sD) / 86400000) + 1;
   const label=sD.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' – '+eD.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const cols=defaultColumns(profile);
+  const now = Date.now();
   return{
     id:uid(),label,startDate,endDate:end, cols,
     rows:Array.from({length: numDays},(_,i)=>{
-      const r={id:uid(),index:i,assignedDate:addDays(startDate,i),date:'',dateFrozen:false,total:0};
+      const r={id:uid(),index:i,assignedDate:addDays(startDate,i),date:'',dateFrozen:false,total:0,updatedAt:now,rev:0};
       cols.forEach(c=>{if(!['sr','date','total'].includes(c.type))r[c.id]='';}); return r;
     }),
-    locked:false,createdAt:new Date().toISOString(),clearedAt:null,trashed:false
+    locked:false,createdAt:new Date().toISOString(),updatedAt:now,rev:0,clearedAt:null,trashed:false
   };
 }
 
@@ -3315,11 +3603,23 @@ function numpadPress(val) {
     Haptics.fire('tick');
 }
 
-function saveQuickEntry() {
+// Async and awaited end-to-end: the ✅ screen below is only shown once the
+// write has actually completed on this device (localStorage + the OPFS/
+// IndexedDB backup copy — see DB.savePages), not the instant the button is
+// tapped. The button shows "Saving…" for that (usually sub-second) gap so
+// there's never a moment where the UI claims success before the save ran.
+async function saveQuickEntry() {
+  const saveBtn = document.getElementById('qe-save-btn');
+  if (saveBtn) { if (saveBtn.disabled) return; saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
   const pages = DB.pages(); const pageIdx = pages.findIndex(p => p.id === qeContext.pageId);
   if (pageIdx < 0) { openFullApp(); return; }
   const page = pages[pageIdx]; const rowIdx = page.rows.findIndex(r => r.id === qeContext.rowId); if (rowIdx < 0) { openFullApp(); return; }
   const row = page.rows[rowIdx]; let shiftMilkAdded = false; const animalAmounts = []; const cellOps = [];
+  const qeStamp = Date.now();
+  const rowTotalBefore = row.total;
+  row._cellTs = row._cellTs || {};
+  row._cellRev = row._cellRev || {};
 
   qeContext.cols.forEach(c => {
     const valStr = document.getElementById(`qe-input-${c.id}`)?.value || '';
@@ -3330,7 +3630,7 @@ function saveQuickEntry() {
       animalAmounts.push(`${animalName} ${valStr}L`);
     }
     if((row[c.id]||'') !== valStr) cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:c.id, from:row[c.id]||'', to:valStr});
-    row[c.id] = valStr;
+    row[c.id] = valStr; row._cellTs[c.id] = qeStamp; row._cellRev[c.id] = (row._cellRev[c.id]||0) + 1;
     const shift = c.type==='milk_am' ? 'am' : 'pm';
     if (c.rateMethod === 'fat') {
        const rfCol = page.cols.find(col => col.type === 'ratefat' && col.animal === c.animal && col.shift === shift);
@@ -3338,23 +3638,46 @@ function saveQuickEntry() {
          const rateInput = document.getElementById(`qe-rate-${rfCol.id}`); const fatInput = document.getElementById(`qe-fat-${rfCol.id}`);
          const rateVal = rateInput ? rateInput.value : ''; const fatVal = fatInput ? fatInput.value : '';
          const combined = (rateVal !== '' || fatVal !== '') ? `${rateVal}/${fatVal}` : '';
-         if ((row[rfCol.id]||'') !== combined) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rfCol.id, from:row[rfCol.id]||'', to:combined}); row[rfCol.id] = combined; }
+         if ((row[rfCol.id]||'') !== combined) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rfCol.id, from:row[rfCol.id]||'', to:combined}); row[rfCol.id] = combined; row._cellTs[rfCol.id] = qeStamp; row._cellRev[rfCol.id] = (row._cellRev[rfCol.id]||0) + 1; }
        }
     } else if (!DB.profile().animals?.find(a => a.id === c.animal)) {
        const rateCol = page.cols.find(col => col.type === 'rate');
-       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; } }
+       if (rateCol) { const rateInput = document.getElementById(`qe-rate-${rateCol.id}`); if (rateInput && rateInput.value !== '' && (row[rateCol.id]||'') !== rateInput.value) { cellOps.push({kind:'cell', pageId:page.id, rowId:row.id, colId:rateCol.id, from:row[rateCol.id]||'', to:rateInput.value}); row[rateCol.id] = rateInput.value; row._cellTs[rateCol.id] = qeStamp; row._cellRev[rateCol.id] = (row._cellRev[rateCol.id]||0) + 1; } }
     }
   });
+  const wasAlreadyFrozen = row.dateFrozen;
   row.date = qeContext.date || today(); row.dateFrozen = true; row.total = computeRowTotal(row, page.cols, DB.profile());
-  DB.savePages(pages, {immediate:true});
-  if (rowIdx === page.rows.length - 1) { maybeAutoCreateNextPage(page.id); autoLockIfDue(page.id); }
-  if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} milk for ${fmtDS(row.date)}: ${animalAmounts.join(', ')}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update', cellOps.length ? {kind:'multi', ops:cellOps} : null, 'light');
+  if(!wasAlreadyFrozen) row._cellTs.__meta = qeStamp;
+  row.updatedAt = qeStamp; row.rev = (row.rev||0) + 1; page.updatedAt = qeStamp; page.rev = (page.rev||0) + 1;
+  // Every cell touched in this one Quick Entry save shares the same
+  // before/after row total — see applyUndoOp's 'cell' handling for why
+  // that total (not a rate-recomputed one) is what undo/redo restores.
+  cellOps.forEach(op => { op.previousTotal = rowTotalBefore; op.newTotal = row.total; });
 
-  const pTog = document.getElementById('qe-payment-toggle');
-  if (pTog && pTog.checked) {
-      const paid = parseFloat(document.getElementById('qe-payment-amount')?.value) || 0;
-      if (paid > 0) { const payment = { id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry` }; const payments = DB.payments(); payments.unshift(payment); DB.savePayments(payments, {immediate:true}); DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment', {kind:'payment', payment}); }
+  try {
+    await DB.savePages(pages, {immediate:true}); // resolves once local write + backup copy are both actually on disk
+    if (rowIdx === page.rows.length - 1) { maybeAutoCreateNextPage(page.id); autoLockIfDue(page.id); }
+    if(shiftMilkAdded) DB.log(`Saved ${qeContext.isPM ? 'PM' : 'AM'} milk for ${fmtDS(row.date)}: ${animalAmounts.join(', ')}${qeContext.isBackfill ? ' (backfilled)' : ' via Quick Screen'}.`, 'update', cellOps.length ? {kind:'multi', ops:cellOps} : null, 'light');
+
+    const pTog = document.getElementById('qe-payment-toggle');
+    if (pTog && pTog.checked) {
+        const paid = parseFloat(document.getElementById('qe-payment-amount')?.value) || 0;
+        if (paid > 0) {
+          const payment = { id: uid(), type: 'received', amount: paid, date: row.date, note: `Logged via Quick Entry`, updatedAt: Date.now() };
+          const payments = DB.payments(); payments.unshift(payment);
+          await DB.savePayments(payments, {immediate:true});
+          DB.log(`Logged milkmen payment: ₹${paid.toFixed(2)}`, 'payment', {kind:'payment', payment});
+        }
+    }
+  } catch (e) {
+    // The write genuinely failed — tell the person instead of showing a
+    // false checkmark, and let them try again rather than silently moving on.
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Data & Close'; }
+    showToast("Couldn't save — please try again.", false);
+    return;
   }
+
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Data & Close'; }
   document.getElementById('qe-active-content').style.display = 'none'; document.getElementById('qe-success-content').style.display = 'block';
   const wasBackfill = qeContext.isBackfill;
   setTimeout(() => { openFullApp(); if (!wasBackfill) checkPreviousShiftPrompt(); }, 1500);
@@ -3596,7 +3919,7 @@ function autoLockIfDue(pageId){
   if(isPeriodComplete(page)){ shouldLock=true; complete=true; }
   else if(td >= addDays(page.endDate, 2)){ shouldLock=true; }
   if(!shouldLock) return false;
-  page.locked = true; page.clearedAt = new Date().toISOString(); page.autoLocked = true;
+  page.locked = true; page.clearedAt = new Date().toISOString(); page.autoLocked = true; page.updatedAt = Date.now(); page.rev = (page.rev||0) + 1;
   DB.savePages(pages, {immediate:true});
   DB.log(complete ? `Auto-locked sheet (all entries complete): ${page.label}` : `Auto-locked sheet (grace period ended — entries may be incomplete): ${page.label}`, 'info');
   return true;
@@ -3609,12 +3932,18 @@ function runAutoLockSweep(){
 function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0||pages[pi].locked)return;
   const ri=pages[pi].rows.findIndex(r=>r.id===rowId); if(ri<0)return;
-  const old=pages[pi].rows[ri][colId]; pages[pi].rows[ri][colId]=value;
-  const isNewRecord = !pages[pi].rows[ri].dateFrozen;
-  if(isNewRecord){ pages[pi].rows[ri].date=pages[pi].rows[ri].assignedDate||today(); pages[pi].rows[ri].dateFrozen=true; }
-  pages[pi].rows[ri].total=computeRowTotal(pages[pi].rows[ri],pages[pi].cols,DB.profile()); DB.savePages(pages, {immediate:isNewRecord});
+  const row = pages[pi].rows[ri];
+  const old=row[colId]; const previousTotal = row.total; row[colId]=value;
+  const now = Date.now();
+  row._cellTs = row._cellTs || {}; row._cellTs[colId] = now; // per-cell stamp — see mergeRowCells
+  row._cellRev = row._cellRev || {}; row._cellRev[colId] = (row._cellRev[colId]||0) + 1; // logical clock, immune to device clock drift — see mergeRowCells
+  const isNewRecord = !row.dateFrozen;
+  if(isNewRecord){ row.date=row.assignedDate||today(); row.dateFrozen=true; row._cellTs.__meta = now; }
+  row.total=computeRowTotal(row,pages[pi].cols,DB.profile());
+  row.updatedAt = now; row.rev = (row.rev||0) + 1; pages[pi].updatedAt = now; pages[pi].rev = (pages[pi].rev||0) + 1;
+  DB.savePages(pages, {immediate:isNewRecord});
   const unit = colType.includes('rate') ? '₹/L' : (colType === 'total' ? '₹' : 'L');
-  if((old||'0') !== (value||'0')) DB.log(`Changed ${colName} from ${old||'0'}${unit} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update', {kind:'cell', pageId, rowId, colId, from:old||'', to:value||''});
+  if((old||'0') !== (value||'0')) DB.log(`Changed ${colName} from ${old||'0'}${unit} to ${value||'0'}${unit} for ${fmtDS(assignedDate)}`, 'update', {kind:'cell', pageId, rowId, colId, from:old||'', to:value||'', previousTotal, newTotal: row.total});
   if (ri === pages[pi].rows.length - 1) { maybeAutoCreateNextPage(pageId); autoLockIfDue(pageId); }
   const freshPage = DB.pages().find(p=>p.id===pageId) || pages[pi];
   document.getElementById('table-container').innerHTML = buildCompactTable(freshPage, DB.profile(), today(), currentTableFilter);
@@ -4191,7 +4520,7 @@ function renderMe(){
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
   const pages=DB.pages().filter(p=>!p.trashed);
   html+=`<div class="card mt4"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div><div class="sg2"><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.length}</div><div class="ssub">Total Pages</div></div><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>p.locked).length}</div><div class="ssub">Cleared</div></div></div></div></div>`;
-  html+=`<div id="app-version-mark" class="${versionMarkShown?'show':''}">${APP_VERSION}</div>`;
+  html+=`<div id="app-version-mark" class="${versionMarkShown?'show':''}"><div>${APP_VERSION}</div><div>Storage: ${localStorageUsageStr()}</div></div>`;
   el.innerHTML=html;
 }
 function revealVersionMark(){
@@ -4345,7 +4674,9 @@ async function doSaveAnimal() {
        const doUpdate = await appConfirm('Update Current Period?', `You changed the rate from ₹${oldRate} to ₹${rate}. Apply this new rate to your ongoing active sheet?`);
        if (doUpdate) {
            activePage.cols.forEach(c => { if ((c.type === 'milk_am' || c.type === 'milk_pm') && c.animal === editAnimalId) c.animalRate = rate; });
-           activePage.rows.forEach(r => { r.total = computeRowTotal(r, activePage.cols, profile); });
+           const rateStamp = Date.now();
+           activePage.rows.forEach(r => { r.total = computeRowTotal(r, activePage.cols, profile); r.updatedAt = rateStamp; });
+           activePage.updatedAt = rateStamp;
            DB.savePages(pages); showToast('Active period updated with the new rate.', true, 'light'); if (curDetailId === activePage.id) renderHome();
        }
     }
@@ -4667,7 +4998,7 @@ function closeDetail(){ const wasOpen = !!curDetailId; curDetailId=null; current
 async function trashPage(pageId){
   const agreed = await appConfirm('Move to Trash?','Move to trash and delete after 30 days?'); if(!agreed) return;
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0) return;
-  const page=pages[pi]; page.trashed=true; page.trashedAt=new Date().toISOString();
+  const page=pages[pi]; page.trashed=true; page.trashedAt=new Date().toISOString(); page.updatedAt=Date.now(); page.rev=(page.rev||0)+1;
   const trash=DB.trash(); trash.unshift(page); DB.saveTrash(trash);
   pages.splice(pi,1); DB.savePages(pages); DB.log(`Moved sheet to trash: ${page.label}`, 'delete');
   curDetailId=null; currentTableFilter='all'; renderHome();
@@ -4677,10 +5008,10 @@ async function reqLock(pageId){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0) return; const page=pages[pi];
   if(page.locked){
     const agreed=await appConfirm('Unlock Record?','Unlock to edit again?'); if(!agreed) return;
-    page.locked=false; page.clearedAt=null; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
+    page.locked=false; page.clearedAt=null; page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
   } else {
     const agreed=await appConfirm('Mark as Cleared?','Lock record and mark account cleared?'); if(!agreed) return;
-    page.locked=true; page.clearedAt=new Date().toISOString(); DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
+    page.locked=true; page.clearedAt=new Date().toISOString(); page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
   }
   renderHome();
 }
@@ -4796,9 +5127,10 @@ async function editPageLength(pageId) {
     const page = pages[pi]; const currentLen = page.rows.length;
     const res = await appPrompt(`Current length is ${currentLen} days. Enter new length:`, currentLen); if (!res) return;
     const newLen = parseInt(res); if (isNaN(newLen) || newLen <= 0) return appAlert('Error', 'Valid number greater than 0 required.'); if (newLen === currentLen) return;
+    const lenStamp = Date.now();
     if (newLen > currentLen) {
         for (let i = currentLen; i < newLen; i++) {
-            const r = { id: uid(), index: i, assignedDate: addDays(page.startDate, i), date: '', dateFrozen: false, total: 0 };
+            const r = { id: uid(), index: i, assignedDate: addDays(page.startDate, i), date: '', dateFrozen: false, total: 0, updatedAt: lenStamp };
             page.cols.forEach(c => { if (!['sr', 'date', 'total'].includes(c.type)) r[c.id] = ''; }); page.rows.push(r);
         }
     } else {
@@ -4806,7 +5138,7 @@ async function editPageLength(pageId) {
         if (hasData) { const confirm = await appConfirm('Warning', 'The days you are removing contain saved data. Delete them?'); if (!confirm) return; }
         page.rows = page.rows.slice(0, newLen);
     }
-    page.endDate = addDays(page.startDate, newLen - 1);
+    page.endDate = addDays(page.startDate, newLen - 1); page.updatedAt = lenStamp; page.rev = (page.rev||0) + 1;
     const overlapping = pages.find(p => p.id !== page.id && !p.trashed && page.startDate <= p.endDate && page.endDate >= p.startDate);
     if (overlapping) return appAlert('Overlap Error', `Changing length overlaps with "${overlapping.label}".`);
     DB.savePages(pages); DB.log(`Changed record sheet length from ${currentLen} to ${newLen} days.`, 'update'); renderHome();
