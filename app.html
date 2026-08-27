@@ -4038,7 +4038,8 @@ function isPeriodComplete(page){
 function autoLockIfDue(pageId){
   const pages = DB.pages();
   const page = pages.find(p=>p.id===pageId && !p.trashed);
-  if(!page || page.locked) return false;
+  // Do not auto-lock if it was manually unlocked (manualUnlock flag)
+  if(!page || page.locked || page.manualUnlock) return false;
   const td = today();
   let shouldLock=false, complete=false;
   if(isPeriodComplete(page)){ shouldLock=true; complete=true; }
@@ -4390,7 +4391,7 @@ function renderCalc(){
   const milkmenNetBal = milkmenEarned - milkmenReceived;
   const milkmenPayExpanded = calcMilkmenPayExpanded;
   const milkmenPaymentsSorted = milkmenPayments.slice().sort((a,b) => b.date.localeCompare(a.date));
-  const milkmenPaymentListHtml = !milkmenPaymentsSorted.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : milkmenPaymentsSorted.slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')">✕</button></div>`).join('');
+  const milkmenPaymentListHtml = !milkmenPaymentsSorted.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : milkmenPaymentsSorted.map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')">✕</button></div>`).join('');
 
   // ── CUSTOMERS LEDGER ──
   const hhSummary = householdAllTimeSummary(); const households = DB.households();
@@ -4399,7 +4400,7 @@ function renderCalc(){
       const stats = getCustomerStats(h); totalHHOutstanding += stats.currentDue;
       const isPaidUp = stats.currentDue <= 0;
       const payExpanded = calcHHExpandedId === h.id;
-      const paymentListHtml = !(h.payments&&h.payments.length) ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : h.payments.slice().reverse().slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('');
+      const paymentListHtml = !(h.payments&&h.payments.length) ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : h.payments.slice().reverse().map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('');
       return `<div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px;">
        <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcHHExpand('${h.id}')">
         <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">Paid: ₹${fmt(stats.totalPaid)}</div></div>
@@ -5136,10 +5137,10 @@ async function reqLock(pageId){
   const pages=DB.pages(); const pi=pages.findIndex(p=>p.id===pageId); if(pi<0) return; const page=pages[pi];
   if(page.locked){
     const agreed=await appConfirm('Unlock Record?','Unlock to edit again?'); if(!agreed) return;
-    page.locked=false; page.clearedAt=null; page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
+    page.locked=false; page.clearedAt=null; page.manualUnlock=true; page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Unlocked sheet: ${page.label}`, 'info'); Haptics.fire('medium');
   } else {
     const agreed=await appConfirm('Mark as Cleared?','Lock record and mark account cleared?'); if(!agreed) return;
-    page.locked=true; page.clearedAt=new Date().toISOString(); page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
+    page.locked=true; page.clearedAt=new Date().toISOString(); page.manualUnlock=false; page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
   }
   renderHome(); renderCalc();
 }
