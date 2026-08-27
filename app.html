@@ -3145,12 +3145,22 @@ async function buildHisaabPages_Milkmen(){
   let runningBalance = 0;
   const ledgerRows = ledger.map(r => {
     runningBalance += r.billed - r.paid;
+
+    // Use multi-colored text to make payments green
+    const dateCell = r.paid ? [{ text: fmtDS(r.date), color: '#1f9d55' }] : fmtDS(r.date);
+    const descCell = r.paid ? [{ text: truncateHisaabText(r.desc, 30), color: '#1f9d55' }] : truncateHisaabText(r.desc, 30);
+    const billedCell = r.billed ? '₹' + fmt(r.billed) : '—';
+    const paidCell = r.paid ? [{ text: '₹' + fmt(r.paid), color: '#1f9d55' }] : '—';
+    const balCell = runningBalance === 0 ? 'Settled' : (runningBalance > 0 ? '₹' + fmt(runningBalance) + ' due' : 'Overpaid ₹' + fmt(-runningBalance));
+
+    const finalBalCell = r.paid ? [{ text: balCell, color: '#1f9d55' }] : balCell;
+
     return [
-      fmtDS(r.date),
-      truncateHisaabText(r.desc, 30),
-      r.billed ? '₹' + fmt(r.billed) : '—',
-      r.paid ? '₹' + fmt(r.paid) : '—',
-      runningBalance === 0 ? 'Settled' : (runningBalance > 0 ? '₹' + fmt(runningBalance) + ' due' : 'Overpaid ₹' + fmt(-runningBalance))
+      dateCell,
+      descCell,
+      billedCell,
+      paidCell,
+      finalBalCell
     ];
   });
 
