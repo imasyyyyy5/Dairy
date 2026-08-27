@@ -1974,7 +1974,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.18.0-required-field-btn-dim';
+const APP_VERSION = 'v1.19.0-milkmen-balance-fix';
 
 const today=()=>{
   const d=new Date();
@@ -3690,7 +3690,9 @@ function openFullApp() {
 }
 
 function renderHome(){
-  runAutoLockSweep();
+  // Auto-locking a page here shifts its revenue from "pending" to "earned",
+  // which changes the milkmen net balance — keep the Calc tab in sync.
+  if(runAutoLockSweep()) renderCalc();
   const profile=DB.profile(); const el=document.getElementById('p-home');
   if(curDetailId) renderDetailView(el); else renderHomeContent(el);
 }
@@ -4260,9 +4262,12 @@ function renderCalc(){
   const milkmenPayments = DB.payments().filter(p=>p.type==='received');
   milkmenPayments.forEach(p => { milkmenReceived += parseFloat(p.amount)||0; });
   const exps = Store.get('mdn_expenses') || []; let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
-  const milkmenNetBal = milkmenEarned - milkmenReceived - totalExp;
+  // Net balance reflects only what milkmen have earned vs what they've been paid —
+  // farm expenses are a separate ledger and must never offset the milkmen balance.
+  const milkmenNetBal = milkmenEarned - milkmenReceived;
   const milkmenPayExpanded = calcMilkmenPayExpanded;
-  const milkmenPaymentListHtml = !milkmenPayments.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : milkmenPayments.slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')">✕</button></div>`).join('');
+  const milkmenPaymentsSorted = milkmenPayments.slice().sort((a,b) => b.date.localeCompare(a.date));
+  const milkmenPaymentListHtml = !milkmenPaymentsSorted.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : milkmenPaymentsSorted.slice(0,5).map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')">✕</button></div>`).join('');
 
   // ── CUSTOMERS LEDGER ──
   const hhSummary = householdAllTimeSummary(); const households = DB.households();
@@ -5001,7 +5006,7 @@ async function trashPage(pageId){
   const page=pages[pi]; page.trashed=true; page.trashedAt=new Date().toISOString(); page.updatedAt=Date.now(); page.rev=(page.rev||0)+1;
   const trash=DB.trash(); trash.unshift(page); DB.saveTrash(trash);
   pages.splice(pi,1); DB.savePages(pages); DB.log(`Moved sheet to trash: ${page.label}`, 'delete');
-  curDetailId=null; currentTableFilter='all'; renderHome();
+  curDetailId=null; currentTableFilter='all'; renderHome(); renderCalc();
 }
 
 async function reqLock(pageId){
@@ -5013,7 +5018,7 @@ async function reqLock(pageId){
     const agreed=await appConfirm('Mark as Cleared?','Lock record and mark account cleared?'); if(!agreed) return;
     page.locked=true; page.clearedAt=new Date().toISOString(); page.updatedAt=Date.now(); page.rev=(page.rev||0)+1; DB.savePages(pages); DB.log(`Locked sheet: ${page.label}`, 'info'); Haptics.fire('heavy');
   }
-  renderHome();
+  renderHome(); renderCalc();
 }
 
 function openTrash(){
@@ -5034,7 +5039,7 @@ function restoreFromTrash(pageId){
   const page=trash[ti]; page.trashed=false; delete page.trashedAt;
   const pages=DB.pages(); pages.unshift(page); DB.savePages(pages);
   trash.splice(ti,1); DB.saveTrash(trash); DB.log(`Restored sheet from trash: ${page.label}`, 'info');
-  cm('m-confirm'); renderHome();
+  cm('m-confirm'); renderHome(); renderCalc();
 }
 
 function om(id){document.getElementById(id).classList.add('open'); navPush('modal', {id});}
@@ -5141,7 +5146,7 @@ async function editPageLength(pageId) {
     page.endDate = addDays(page.startDate, newLen - 1); page.updatedAt = lenStamp; page.rev = (page.rev||0) + 1;
     const overlapping = pages.find(p => p.id !== page.id && !p.trashed && page.startDate <= p.endDate && page.endDate >= p.startDate);
     if (overlapping) return appAlert('Overlap Error', `Changing length overlaps with "${overlapping.label}".`);
-    DB.savePages(pages); DB.log(`Changed record sheet length from ${currentLen} to ${newLen} days.`, 'update'); renderHome();
+    DB.savePages(pages); DB.log(`Changed record sheet length from ${currentLen} to ${newLen} days.`, 'update'); renderHome(); renderCalc();
 }
 
 (()=>{
