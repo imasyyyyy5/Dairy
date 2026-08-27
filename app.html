@@ -2822,6 +2822,51 @@ function buildShareData_Page(page){
 
 // Same idea as buildShareData_Page but for a household/customer's full
 // ledger, including any payments received against it.
+function buildShareData_Milkmen(){
+  const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
+  const milkmenPayments = DB.payments().filter(p => p.type === 'received');
+
+  let ledger = [];
+  lockedPages.forEach(p => {
+    const rev = pageSummary(p).rev;
+    ledger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0 });
+  });
+  milkmenPayments.forEach(p => {
+    ledger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: parseFloat(p.amount) || 0 });
+  });
+
+  ledger.sort((a, b) => a.date.localeCompare(b.date));
+
+  let runningBalance = 0;
+  const rows = ledger.map(r => {
+    runningBalance += r.billed - r.paid;
+    return [
+      fmtDS(r.date),
+      truncateHisaabText(r.desc, 30),
+      r.billed ? '₹' + fmt(r.billed) : '—',
+      r.paid ? '₹' + fmt(r.paid) : '—',
+      runningBalance === 0 ? 'Settled' : (runningBalance > 0 ? '₹' + fmt(runningBalance) + ' due' : 'Overpaid ₹' + fmt(-runningBalance))
+    ];
+  });
+
+  let totalBilled = 0, totalPaid = 0;
+  ledger.forEach(r => { totalBilled += r.billed; totalPaid += r.paid; });
+  const finalBalance = totalBilled - totalPaid;
+
+  return {
+    kind: 'milkmen',
+    title: `Main Dairy Ledger (Milkmen)`,
+    subtitle: `As of ${fmtD(today())}`,
+    headers: ['Date', 'Description', 'Billed ₹', 'Paid ₹', 'Balance ₹'],
+    rows,
+    totals: [
+      {label: 'Total Billed', value: '₹' + fmt(totalBilled)},
+      {label: 'Total Paid', value: '₹' + fmt(totalPaid)},
+      {label: 'Net Balance', value: finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : finalBalance < 0 ? 'Overpaid ₹' + fmt(-finalBalance) : 'Settled'}
+    ]
+  };
+}
+
 function buildShareData_Household(h){
   const ledger = householdFullLedger(h);
   const rows = ledger.map(r=>[fmtD(r.date), fmt(r.qty)+' L', '₹'+fmt(r.rate)+'/L', '₹'+fmt(r.amount)]);
@@ -3012,6 +3057,13 @@ const HISAAB_ENTRY_COLS_PAGE = [
   {label:'PM (L)', x:560, align:'left'},
   {label:'Amount ₹', x:856, align:'right'}
 ];
+const HISAAB_MILKMEN_COLS = [
+  {label:'Date', x:92, align:'left'},
+  {label:'Description', x:260, align:'left'},
+  {label:'Billed ₹', x:500, align:'right'},
+  {label:'Paid ₹', x:680, align:'right'},
+  {label:'Balance ₹', x:856, align:'right'}
+];
 const HISAAB_PAYMENT_COLS = [
   {label:'Date', x:92, align:'left'},
   {label:'Amount ₹', x:490, align:'right'},
@@ -3074,6 +3126,60 @@ async function buildHisaabPages_Page(page){
 // them, so their name — not the dairy's or any animal's — leads), followed by
 // the daily milk entries, and then a dedicated payments ledger with remarks so
 // they can see exactly when they paid, how much, and what's still outstanding.
+async function buildHisaabPages_Milkmen(){
+  const profile = DB.profile();
+  const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
+  const milkmenPayments = DB.payments().filter(p => p.type === 'received');
+
+  let ledger = [];
+  lockedPages.forEach(p => {
+    const rev = pageSummary(p).rev;
+    ledger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0 });
+  });
+  milkmenPayments.forEach(p => {
+    ledger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: parseFloat(p.amount) || 0 });
+  });
+
+  ledger.sort((a, b) => a.date.localeCompare(b.date));
+
+  let runningBalance = 0;
+  const ledgerRows = ledger.map(r => {
+    runningBalance += r.billed - r.paid;
+    return [
+      fmtDS(r.date),
+      truncateHisaabText(r.desc, 30),
+      r.billed ? '₹' + fmt(r.billed) : '—',
+      r.paid ? '₹' + fmt(r.paid) : '—',
+      runningBalance === 0 ? 'Settled' : (runningBalance > 0 ? '₹' + fmt(runningBalance) + ' due' : 'Overpaid ₹' + fmt(-runningBalance))
+    ];
+  });
+
+  const chunks = chunkArr(ledgerRows, HISAAB_ROWS_PER_PAGE); const chunkList = chunks.length ? chunks : [[]];
+  let totalBilled = 0, totalPaid = 0;
+  ledger.forEach(r => { totalBilled += r.billed; totalPaid += r.paid; });
+  const finalBalance = totalBilled - totalPaid;
+
+  const pages = await Promise.all(chunkList.map(async (chunk, idx) => {
+    const isLast = idx === chunkList.length - 1;
+    const footerLines = isLast ? [
+      `Total Billed: ₹${fmt(totalBilled)}`,
+      `Total Paid: ₹${fmt(totalPaid)}   Net Balance: ${finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : finalBalance < 0 ? 'Overpaid ₹' + fmt(-finalBalance) : 'Settled'}`
+    ] : null;
+    return await drawNotebookPage({
+      heading: profile.name || 'Dairy Hisaab',
+      subheading: 'Main Dairy Ledger (Milkmen)',
+      subtitle: `As of ${fmtD(today())}`,
+      columns: HISAAB_MILKMEN_COLS,
+      rows: chunk,
+      footerLines,
+      pageNum: idx + 1,
+      totalPages: chunkList.length,
+      footNote: `Milkmen Net Balance`
+    });
+  }));
+  return pages;
+}
+
 async function buildHisaabPages_Household(h){
   const profile = DB.profile(); const ledger = householdFullLedger(h);
   const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
@@ -3175,6 +3281,13 @@ async function shareHisaabForHousehold(hhId){
   const h = DB.households().find(x=>x.id===hhId); if(!h) return;
   if(!householdFullLedger(h).length && !(h.payments||[]).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
   await shareHisaabCanvases(await buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h));
+}
+
+async function shareHisaabForMilkmen() {
+  const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
+  const milkmenPayments = DB.payments().filter(p => p.type === 'received');
+  if (!lockedPages.length && !milkmenPayments.length) return appAlert('No Entries', 'There are no locked periods or received payments to share.');
+  await shareHisaabCanvases(await buildHisaabPages_Milkmen(), `Hisaab_Milkmen_${today()}`, buildShareData_Milkmen());
 }
 
 
@@ -4312,7 +4425,7 @@ function renderCalc(){
      ${milkmenPending > 0 ? `<div class="payrow"><span style="font-size:18px;">🕓</span><div class="f1"><div style="font-weight:700;">Ongoing (Not Yet Due)</div><div style="font-size:10px;color:var(--muted);">From unlocked period(s) — excluded above</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenPending)}</span></div>` : ''}
      <div class="payrow"><span style="font-size:18px;">💵</span><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenReceived)}</span></div>
      <div class="payrow"><span style="font-size:18px;">📉</span><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
-     <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
+     <div class="payrow" style="border:1px solid var(--border2);"><span style="font-size:18px;">⚖️</span><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};margin-right:8px;">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span><button class="btn bs bsm" onclick="event.stopPropagation();shareHisaabForMilkmen()">📤 Share</button></div>
     </div>
     <div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px; margin-top:10px;">
      <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcMilkmenPayExpand()">
