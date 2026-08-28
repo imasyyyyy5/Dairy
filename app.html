@@ -2681,7 +2681,7 @@ function getCustomerStats(h) {
       daysActive++; d = addDays(d, 1); guard++;
     }
   }
-  const totalPaid = (h.payments||[]).reduce((s, p) => s + (parseFloat(p.amount)||0), 0);
+  const totalPaid = (h.payments||[]).filter(p=>!p.deleted).reduce((s, p) => s + (parseFloat(p.amount)||0), 0);
   return {
     totalLiters: parseFloat(totalLiters.toFixed(2)),
     totalMilkValue: parseFloat(totalMilkValue.toFixed(2)),
@@ -2697,7 +2697,7 @@ function getCustomerStats(h) {
 function householdDueTimeline(h, days){
   const end = (h.stopped && h.stopDate) ? h.stopDate : today();
   const winStart = addDays(end, -(days-1));
-  const payments = (h.payments||[]).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+  const payments = (h.payments||[]).filter(p=>!p.deleted).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
   let billed = 0, paid = 0, pIdx = 0; const out = [];
   let d = h.startDate; if(!d || d > end) return out; let guard = 0;
   for(; d <= end && guard < 3660; d = addDays(d,1), guard++){
@@ -2824,7 +2824,7 @@ function buildShareData_Page(page){
 // ledger, including any payments received against it.
 function buildShareData_Milkmen(){
   const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
-  const milkmenPayments = DB.payments().filter(p => p.type === 'received');
+  const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
 
   let ledger = [];
   lockedPages.forEach(p => {
@@ -2871,8 +2871,8 @@ function buildShareData_Household(h){
   const ledger = householdFullLedger(h);
   const rows = ledger.map(r=>[fmtD(r.date), fmt(r.qty)+' L', '₹'+fmt(r.rate)+'/L', '₹'+fmt(r.amount)]);
   const totalQty = ledger.reduce((s,r)=>s+r.qty,0); const totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
-  const paid = (h.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
-  const paymentRows = (h.payments||[]).map(p=>[fmtD(p.date), '₹'+fmt(p.amount), p.note||'—']);
+  const paid = (h.payments||[]).filter(p=>!p.deleted).reduce((s,p)=>s+(p.amount||0),0);
+  const paymentRows = (h.payments||[]).filter(p=>!p.deleted).map(p=>[fmtD(p.date), '₹'+fmt(p.amount), p.note||'—']);
   return {
     kind: 'household',
     title: h.name,
@@ -3129,7 +3129,7 @@ async function buildHisaabPages_Page(page){
 async function buildHisaabPages_Milkmen(){
   const profile = DB.profile();
   const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
-  const milkmenPayments = DB.payments().filter(p => p.type === 'received');
+  const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
 
   let ledger = [];
   lockedPages.forEach(p => {
@@ -3195,7 +3195,7 @@ async function buildHisaabPages_Household(h){
   const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
   const stats = getCustomerStats(h);
   const period = `${fmtD(h.startDate)} – ${(h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present'}`;
-  const payments = (h.payments||[]).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+  const payments = (h.payments||[]).filter(p=>!p.deleted).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
   const paymentChunks = chunkArr(payments, HISAAB_ROWS_PER_PAGE); const paymentChunkList = paymentChunks.length?paymentChunks:[[]];
   const totalPages = entryChunkList.length + paymentChunkList.length;
   const footNote = `Milk supplied by ${profile.name||'Dairy'}`;
@@ -3289,13 +3289,13 @@ async function shareHisaabForPage(pageId){
 
 async function shareHisaabForHousehold(hhId){
   const h = DB.households().find(x=>x.id===hhId); if(!h) return;
-  if(!householdFullLedger(h).length && !(h.payments||[]).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
+  if(!householdFullLedger(h).length && !(h.payments||[]).filter(p=>!p.deleted).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
   await shareHisaabCanvases(await buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h));
 }
 
 async function shareHisaabForMilkmen() {
   const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
-  const milkmenPayments = DB.payments().filter(p => p.type === 'received');
+  const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
   if (!lockedPages.length && !milkmenPayments.length) return appAlert('No Entries', 'There are no locked periods or received payments to share.');
   await shareHisaabCanvases(await buildHisaabPages_Milkmen(), `Hisaab_Milkmen_${today()}`, buildShareData_Milkmen());
 }
@@ -4383,7 +4383,7 @@ function renderCalc(){
   let milkmenEarned = 0, milkmenPending = 0, milkmenReceived = 0;
   lockedPages.forEach(p => { milkmenEarned += pageSummary(p).rev; });
   unlockedPages.forEach(p => { milkmenPending += pageSummary(p).rev; });
-  const milkmenPayments = DB.payments().filter(p=>p.type==='received');
+  const milkmenPayments = DB.payments().filter(p=>p.type==='received' && !p.deleted);
   milkmenPayments.forEach(p => { milkmenReceived += parseFloat(p.amount)||0; });
   const exps = Store.get('mdn_expenses') || []; let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
   // Net balance reflects only what milkmen have earned vs what they've been paid —
@@ -4934,10 +4934,10 @@ function doSaveHousehold(){
     const qty = parseFloat(document.getElementById('hh-qty').value) || 0; const rate = getHHRateValue();
     if (qty <= 0) return appAlert('Missing Field', 'Please enter a valid daily quantity.');
     if (rate <= 0) return appAlert('Missing Field', 'Please select an animal rate or enter a custom rate.');
-    households.unshift({ id: uid(), name, baseQty: qty, baseRate: rate, startDate, stopped: false, stopDate: null, changes: [], exceptions: {}, payments: [], createdAt: new Date().toISOString() });
+    households.unshift({ id: uid(), name, baseQty: qty, baseRate: rate, startDate, stopped: false, stopDate: null, changes: [], exceptions: {}, payments: [], createdAt: new Date().toISOString(), updatedAt: Date.now(), rev: 1 });
     DB.log(`Added local customer: ${name} (${qty}L/day @ ₹${rate})`, 'create');
   } else {
-    const h = households.find(x=>x.id===editHouseholdId); if (h) { h.name = name; h.startDate = startDate; }
+    const h = households.find(x=>x.id===editHouseholdId); if (h) { h.name = name; h.startDate = startDate; h.updatedAt = Date.now(); h.rev = (h.rev||0)+1; }
     DB.log(`Updated customer info: ${name}`, 'update');
   }
   DB.saveHouseholds(households, {immediate:true}); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
@@ -4947,10 +4947,10 @@ async function toggleStopHousehold(){
   const households = DB.households(); const h = households.find(x=>x.id===editHouseholdId); if (!h) return;
   if (h.stopped) {
     const agreed = await appConfirm('Resume Customer?', `Resume daily pouring for ${h.name} from today?`); if (!agreed) return;
-    h.stopped = false; h.stopDate = null; if (h.startDate > today()) h.startDate = today(); DB.log(`Resumed service: ${h.name}`, 'update');
+    h.stopped = false; h.stopDate = null; h.updatedAt = Date.now(); h.rev = (h.rev||0)+1; if (h.startDate > today()) h.startDate = today(); DB.log(`Resumed service: ${h.name}`, 'update');
   } else {
     const agreed = await appConfirm('Stop Customer?', `Stop daily pouring for ${h.name}? Past records kept.`); if (!agreed) return;
-    h.stopped = true; h.stopDate = addDays(today(), -1); DB.log(`Stopped service: ${h.name}`, 'delete');
+    h.stopped = true; h.stopDate = addDays(today(), -1); h.updatedAt = Date.now(); h.rev = (h.rev||0)+1; DB.log(`Stopped service: ${h.name}`, 'delete');
   }
   DB.saveHouseholds(households); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
@@ -4975,7 +4975,7 @@ function saveMilkmenPayment() {
   if(amount <= 0) return appAlert('Error', 'Please enter a valid amount.');
   const date = document.getElementById('mp-date').value || today();
   const note = document.getElementById('mp-note').value.trim();
-  const payment = { id: uid(), type: 'received', amount, date, note: note || undefined };
+  const payment = { id: uid(), type: 'received', amount, date, note: note || undefined, updatedAt: Date.now(), rev: 1 };
   const payments = DB.payments(); payments.unshift(payment); DB.savePayments(payments, {immediate:true});
   DB.log(`Logged milkmen payment: ₹${amount}${note ? ' ('+note+')' : ''} for ${fmtDS(date)}`, 'payment', {kind:'payment', payment});
   cm('m-milkmen-payment'); renderCalc();
@@ -4983,8 +4983,10 @@ function saveMilkmenPayment() {
 async function deleteMilkmenPayment(pId) {
   const agreed = await appConfirm('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the milkmen balance due.');
   if(!agreed) return;
-  const payments = DB.payments().filter(p => p.id !== pId);
-  DB.savePayments(payments); DB.log('Removed milkmen payment record', 'delete'); renderCalc();
+  const payments = DB.payments();
+  const p = payments.find(p => p.id === pId);
+  if(p) { p.deleted = true; p.updatedAt = Date.now(); p.rev = (p.rev||0)+1; }
+  DB.savePayments(payments, {immediate:true}); DB.log('Removed milkmen payment record', 'delete'); renderCalc();
 }
 
 function openCustomerPaymentModal(hId) {
@@ -5010,6 +5012,8 @@ function saveCustomerPayment() {
   if(!h.payments) h.payments = [];
   const payment = { id: uid(), date, amount, note };
   h.payments.push(payment);
+  h.updatedAt = Date.now();
+  h.rev = (h.rev||0)+1;
   
   DB.saveHouseholds(households, {immediate:true});
   DB.log(`Logged payment of ₹${amount} from customer: ${h.name}`, 'payment', {kind:'household-payment', householdId:h.id, payment});
@@ -5020,8 +5024,11 @@ async function deleteCustomerPayment(hId, pId) {
   const agreed = await appConfirm('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the customer\'s balance.');
   if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===hId); if(!h) return;
-  h.payments = h.payments.filter(p => p.id !== pId);
-  DB.saveHouseholds(households); DB.log(`Removed payment for customer: ${h.name}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc();
+  const p = h.payments.find(p => p.id === pId);
+  if(p) { p.deleted = true; p.updatedAt = Date.now(); p.rev = (p.rev||0)+1; }
+  h.updatedAt = Date.now();
+  h.rev = (h.rev||0)+1;
+  DB.saveHouseholds(households, {immediate:true}); DB.log(`Removed payment for customer: ${h.name}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc();
 }
 
 let hhExceptionTargetDates = null; // array of dates when applying a multi-date exception; null for single-date flow
