@@ -4142,14 +4142,8 @@ function gridLines(maxV, PAD, W, cW, cH, labelFmt, minV){
   return s;
 }
 
-function drawSelectedGraph() {
-  const container = document.getElementById('graph-container'); const cache = Store.get('mdn_analytics_cache'); if(!cache) return;
-  const W=340, H=190, PAD={l:34,r:10,t:16,b:26}, cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b; let svg = '';
-
-  // ─────────────────────────────────────────────────────────────
-  // PRODUCTION TRENDS — Multi-Stream Stacked Area (per-animal colors)
-  // ─────────────────────────────────────────────────────────────
-  if(gChartType === 'overall') {
+function drawGraphOverall(container, cache, W, H, PAD, cW, cH) {
+  let svg = '';
      const dates = Object.keys(cache.daily).sort();
      if(dates.length < 2) { container.innerHTML = `<div class="empty"><div class="esub">Not enough daily data for a trend line.</div></div>`; return; }
      const days = horizonSlice(dates, gHorizon);
@@ -4225,12 +4219,10 @@ function drawSelectedGraph() {
         return `<div class="g-legend-item${dim}${active}" onclick="toggleIsolate('${name.replace(/'/g,"\\'")}')"><span class="g-legend-dot2" style="background:${col};"></span>${name}</div>`;
      }).join('');
      container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Multi-Animal Production Trend (L) — Last ${days.length} Days</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg><div class="g-legend">${legend}</div>${markers?'<div style="font-size:10px;color:var(--muted);margin-top:6px;">💉 Vaccination &nbsp; 🐄 Calving/Insemination — tap an icon for details</div>':''}</div>`;
-  }
+}
 
-  // ─────────────────────────────────────────────────────────────
-  // SHIFT OPTIMIZATION — Dual Grouped Bar (AM vs PM)
-  // ─────────────────────────────────────────────────────────────
-  else if(gChartType === 'shifts') {
+function drawGraphShifts(container, cache, W, H, PAD, cW, cH) {
+  let svg = '';
      const dates = Object.keys(cache.daily).sort();
      if(dates.length < 1) { container.innerHTML = `<div class="empty"><div class="esub">Not enough daily data yet.</div></div>`; return; }
      const days = horizonSlice(dates, gHorizon).map(d => ({date:d, am:cache.daily[d].am||0, pm:cache.daily[d].pm||0}));
@@ -4247,12 +4239,10 @@ function drawSelectedGraph() {
      });
      const totalAm = days.reduce((s,d)=>s+d.am,0), totalPm = days.reduce((s,d)=>s+d.pm,0);
      container.innerHTML = `<div class="gchart-wrap">${gKpiRow([{l:'AM Total',v:totalAm.toFixed(1)+' L',color:'#e8b800'},{l:'PM Total',v:totalPm.toFixed(1)+' L',color:'#4e8cff'},{l:'AM Share',v:Math.round(totalAm/(totalAm+totalPm||1)*100)+'%'}])}<div class="slabel mb2">Morning vs Evening Yield — Last ${days.length} Days</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg><div class="g-legend"><div class="g-legend-item"><span class="g-legend-dot2" style="background:#e8b800;"></span>Morning (AM)</div><div class="g-legend-item"><span class="g-legend-dot2" style="background:#4e8cff;"></span>Evening (PM)</div></div></div>`;
-  }
+}
 
-  // ─────────────────────────────────────────────────────────────
-  // PERIOD COMPARISON — Enhanced gradient bar chart
-  // ─────────────────────────────────────────────────────────────
-  else if(gChartType === 'compare') {
+function drawGraphCompare(container, cache, W, H, PAD, cW, cH) {
+  let svg = '';
      const data = [...cache.periods].reverse().slice(-6); if(data.length === 0) return;
      const maxV = Math.max(...data.map(d=>d.total), 1); const barW = Math.floor(cW/data.length)-8;
      svg += `<defs><linearGradient id="gbarPeriod" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--success)" stop-opacity="1"/><stop offset="100%" stop-color="var(--success)" stop-opacity="0.45"/></linearGradient></defs>`;
@@ -4264,12 +4254,10 @@ function drawSelectedGraph() {
         svg += `<text x="${x+barW/2}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${d.label.split(' – ')[0]}</text>`;
      });
      container.innerHTML = `<div class="gchart-wrap"><div class="slabel mb2">Total Milk per Period (L)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
-  }
+}
 
-  // ─────────────────────────────────────────────────────────────
-  // NET PROFIT CURVE — cumulative revenue minus expenses across periods
-  // ─────────────────────────────────────────────────────────────
-  else if(gChartType === 'profit') {
+function drawGraphProfit(container, cache, W, H, PAD, cW, cH) {
+  let svg = '';
      const chron = [...cache.periods].reverse().slice(-8);
      if(!chron.length) { container.innerHTML = `<div class="empty"><div class="esub">No period data yet.</div></div>`; return; }
      const allExpenses = Store.get('mdn_expenses') || [];
@@ -4300,12 +4288,10 @@ function drawSelectedGraph() {
         svg += `<text x="${pt.x}" y="${PAD.t+cH+15}" text-anchor="middle" class="chart-label">${rows[i].label}</text>`;
      });
      container.innerHTML = `<div class="gchart-wrap">${gKpiRow([{l:'Total Revenue',v:'₹'+fmt(totalRevAll)},{l:'Total Expenses',v:'₹'+fmt(totalExpAll),color:'var(--danger)'},{l:'Net Profit',v:'₹'+fmt(cumulative),color:lineCol}])}<div class="slabel mb2">Cumulative Net Profit Across Periods (₹)</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg></div>`;
-  }
+}
 
-  // ─────────────────────────────────────────────────────────────
-  // CUSTOMER DUES TIMELINE — multi-line running-balance "horizon" view
-  // ─────────────────────────────────────────────────────────────
-  else if(gChartType === 'households') {
+function drawGraphHouseholds(container, cache, W, H, PAD, cW, cH) {
+  let svg = '';
      const hhSummary = householdAllTimeSummary();
      const active = hhSummary.perHousehold.filter(d=>d.stats.totalMilkValue>0).sort((a,b)=>b.stats.totalMilkValue-a.stats.totalMilkValue).slice(0,5);
      if(!active.length) { container.innerHTML = `<div class="empty"><div class="esub">No local customer revenue recorded yet.</div></div>`; return; }
@@ -4337,12 +4323,10 @@ function drawSelectedGraph() {
         return `<div class="g-legend-item${dim}${activeCls}" onclick="toggleIsolate('${s.name.replace(/'/g,"\\'")}')"><span class="g-legend-dot2" style="background:${col};"></span>${s.name}</div>`;
      }).join('');
      container.innerHTML = `<div class="gchart-wrap">${gKpiRow([{l:'Billed',v:'₹'+fmt(hhSummary.billed),color:'#e8b800'},{l:'Collected',v:'₹'+fmt(hhSummary.collected),color:'var(--success)'},{l:'Outstanding',v:'₹'+fmt(hhSummary.billed-hhSummary.collected),color:'var(--danger)'}])}<div class="slabel mb2">Customer Outstanding Balance — Last ${DAYS} Days (Top ${series.length})</div><svg class="chart" viewBox="0 0 ${W} ${H}">${svg}</svg><div class="g-legend">${legend}</div></div>`;
-  }
+}
 
-  // ─────────────────────────────────────────────────────────────
-  // MILK / REVENUE SPLIT — dynamic per-name colors + tap-to-isolate legend
-  // ─────────────────────────────────────────────────────────────
-  else if(gChartType === 'pie_milk' || gChartType === 'pie_rev') {
+function drawGraphPie(container, cache, W, H, PAD, cW, cH) {
+  let svg = '';
      const isRev = gChartType === 'pie_rev'; const source = gChartFilter === 'category' ? cache.allTime.byCategory : cache.allTime.byName;
      const items = Object.keys(source).map(k => ({ name: k, val: isRev ? source[k].rev : source[k].milk, type: source[k].type || k })).filter(i => i.val > 0);
      if(!items.length) { container.innerHTML = `<div class="empty"><div class="esub">No data to split yet.</div></div>`; return; }
@@ -4364,6 +4348,24 @@ function drawSelectedGraph() {
         startA += angle;
      });
      container.innerHTML = `<div class="row gap2 mb3"><button class="ppill ${gChartFilter==='category'?'on':''}" onclick="setGFilter('category')">By Category</button><button class="ppill ${gChartFilter==='name'?'on':''}" onclick="setGFilter('name')">By Animal Name</button></div><div class="gchart-wrap"><div class="slabel mb3">${isRev ? 'All-Time Revenue Split' : 'All-Time Milk Split'}</div><div class="row gap3" style="align-items:flex-start;"><svg viewBox="0 0 160 160" style="width:140px;flex-shrink:0;">${pie}</svg><div class="f1" style="display:flex;flex-direction:column;gap:6px;">${legendRows}</div></div></div>`;
+}
+
+function drawSelectedGraph() {
+  const container = document.getElementById('graph-container'); const cache = Store.get('mdn_analytics_cache'); if(!cache) return;
+  const W=340, H=190, PAD={l:34,r:10,t:16,b:26}, cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b;
+
+  if (gChartType === 'overall') {
+    drawGraphOverall(container, cache, W, H, PAD, cW, cH);
+  } else if (gChartType === 'shifts') {
+    drawGraphShifts(container, cache, W, H, PAD, cW, cH);
+  } else if (gChartType === 'compare') {
+    drawGraphCompare(container, cache, W, H, PAD, cW, cH);
+  } else if (gChartType === 'profit') {
+    drawGraphProfit(container, cache, W, H, PAD, cW, cH);
+  } else if (gChartType === 'households') {
+    drawGraphHouseholds(container, cache, W, H, PAD, cW, cH);
+  } else if (gChartType === 'pie_milk' || gChartType === 'pie_rev') {
+    drawGraphPie(container, cache, W, H, PAD, cW, cH);
   }
 }
 
