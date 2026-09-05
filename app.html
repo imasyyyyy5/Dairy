@@ -2670,8 +2670,8 @@ function getHouseholdDayEntry(h, dateStr){
   return {qty, rate, isException: false};
 }
 
-function getCustomerStats(h) {
-  const end = (h.stopped && h.stopDate) ? h.stopDate : today();
+function getCustomerStats(h, customEndDate) {
+  const end = customEndDate || ((h.stopped && h.stopDate) ? h.stopDate : today());
   let totalMilkValue = 0, totalLiters = 0, daysActive = 0;
   let d = h.startDate, guard = 0;
   if (d <= end) {
@@ -2681,7 +2681,7 @@ function getCustomerStats(h) {
       daysActive++; d = addDays(d, 1); guard++;
     }
   }
-  const totalPaid = (h.payments||[]).filter(p=>!p.deleted).reduce((s, p) => s + (parseFloat(p.amount)||0), 0);
+  const totalPaid = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate)).reduce((s, p) => s + (parseFloat(p.amount)||0), 0);
   return {
     totalLiters: parseFloat(totalLiters.toFixed(2)),
     totalMilkValue: parseFloat(totalMilkValue.toFixed(2)),
@@ -2749,8 +2749,8 @@ function householdStatusLabel(h){
 const HISAAB_ROWS_PER_PAGE = 28;
 
 // Full day-one-to-stopped ledger for a household (not limited to a single period page)
-function householdFullLedger(h){
-  const out = []; const end = (h.stopped && h.stopDate) ? h.stopDate : today();
+function householdFullLedger(h, customEndDate){
+  const out = []; const end = customEndDate || ((h.stopped && h.stopDate) ? h.stopDate : today());
   let d = h.startDate; if(!d || d > end) return out; let guard = 0;
   while(d <= end && guard < 3660){
     const e = getHouseholdDayEntry(h, d);
@@ -2867,16 +2867,17 @@ function buildShareData_Milkmen(){
   };
 }
 
-function buildShareData_Household(h){
-  const ledger = householdFullLedger(h);
+function buildShareData_Household(h, customEndDate){
+  const ledger = householdFullLedger(h, customEndDate);
   const rows = ledger.map(r=>[fmtD(r.date), fmt(r.qty)+' L', '₹'+fmt(r.rate)+'/L', '₹'+fmt(r.amount)]);
   const totalQty = ledger.reduce((s,r)=>s+r.qty,0); const totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
-  const paid = (h.payments||[]).filter(p=>!p.deleted).reduce((s,p)=>s+(p.amount||0),0);
-  const paymentRows = (h.payments||[]).filter(p=>!p.deleted).map(p=>[fmtD(p.date), '₹'+fmt(p.amount), p.note||'—']);
+  const filteredPayments = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate));
+  const paid = filteredPayments.reduce((s,p)=>s+(p.amount||0),0);
+  const paymentRows = filteredPayments.map(p=>[fmtD(p.date), '₹'+fmt(p.amount), p.note||'—']);
   return {
     kind: 'household',
     title: h.name,
-    subtitle: `${fmtD(h.startDate)} – ${(h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present'}`,
+    subtitle: `${fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}`,
     headers: ['Date','Milk','Rate','Amount'],
     rows,
     totals: [{label:'Total Milk', value: fmt(totalQty)+' L'}, {label:'Total Billed', value:'₹'+fmt(totalAmt)}, {label:'Total Paid', value:'₹'+fmt(paid)}, {label:'Outstanding', value:'₹'+fmt(totalAmt-paid)}],
@@ -3190,12 +3191,12 @@ async function buildHisaabPages_Milkmen(){
   return pages;
 }
 
-async function buildHisaabPages_Household(h){
-  const profile = DB.profile(); const ledger = householdFullLedger(h);
+async function buildHisaabPages_Household(h, customEndDate){
+  const profile = DB.profile(); const ledger = householdFullLedger(h, customEndDate);
   const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
-  const stats = getCustomerStats(h);
-  const period = `${fmtD(h.startDate)} – ${(h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present'}`;
-  const payments = (h.payments||[]).filter(p=>!p.deleted).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+  const stats = getCustomerStats(h, customEndDate);
+  const period = `${fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}`;
+  const payments = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate)).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
   const paymentChunks = chunkArr(payments, HISAAB_ROWS_PER_PAGE); const paymentChunkList = paymentChunks.length?paymentChunks:[[]];
   const totalPages = entryChunkList.length + paymentChunkList.length;
   const footNote = `Milk supplied by ${profile.name||'Dairy'}`;
@@ -3289,8 +3290,35 @@ async function shareHisaabForPage(pageId){
 
 async function shareHisaabForHousehold(hhId){
   const h = DB.households().find(x=>x.id===hhId); if(!h) return;
-  if(!householdFullLedger(h).length && !(h.payments||[]).filter(p=>!p.deleted).length) return appAlert('No Entries','This customer has no recorded milk entries or payments yet to share.');
-  await shareHisaabCanvases(await buildHisaabPages_Household(h), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h));
+
+  const choice = await appChoice('Share Options', 'Share the hisaab up to which date?', [
+    {label: 'Up to Today', value: 'today'},
+    {label: 'Specific Date', value: 'specific'},
+    {label: 'Cancel', value: 'cancel'}
+  ]);
+
+  if (!choice || choice === 'cancel' || choice === 'false') return;
+
+  let endDate = null;
+  if (choice === 'specific') {
+    endDate = await new Promise(res => {
+      window.calendarOnCancelCallback = () => { res(null); };
+      const dummyInputId = 'cp-date'; // Need a valid ID for calendar target
+      if(!document.getElementById(dummyInputId)){
+        const input = document.createElement('input');
+        input.type = 'hidden'; input.id = dummyInputId;
+        document.body.appendChild(input);
+      }
+      openThemedCalendar(dummyInputId, h.startDate, (selectedDate) => {
+        window.calendarOnCancelCallback = null;
+        res(selectedDate);
+      });
+    });
+    if(!endDate) return;
+  }
+
+  if(!householdFullLedger(h, endDate).length && !(h.payments||[]).filter(p=>!p.deleted && (!endDate || p.date <= endDate)).length) return appAlert('No Entries','This customer has no recorded milk entries or payments in this period to share.');
+  await shareHisaabCanvases(await buildHisaabPages_Household(h, endDate), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h, endDate));
 }
 
 async function shareHisaabForMilkmen() {
@@ -4400,7 +4428,8 @@ function renderCalc(){
       const stats = getCustomerStats(h); totalHHOutstanding += stats.currentDue;
       const isPaidUp = stats.currentDue <= 0;
       const payExpanded = calcHHExpandedId === h.id;
-      const paymentListHtml = !(h.payments&&h.payments.length) ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : h.payments.slice().reverse().map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('');
+      const activePayments = (h.payments||[]).filter(p=>!p.deleted);
+      const paymentListHtml = !activePayments.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : activePayments.slice().reverse().map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:``}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')">✕</button></div>`).join('');
       return `<div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px;">
        <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcHHExpand('${h.id}')">
         <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">Paid: ₹${fmt(stats.totalPaid)}</div></div>
@@ -5174,7 +5203,13 @@ function restoreFromTrash(pageId){
 }
 
 function om(id){document.getElementById(id).classList.add('open'); navPush('modal', {id});}
+
 function cm(id){
+  if (id === 'm-calendar-sheet' && typeof window.calendarOnCancelCallback === 'function') {
+    window.calendarOnCancelCallback();
+    window.calendarOnCancelCallback = null;
+  }
+
   const el = document.getElementById(id); const wasOpen = el.classList.contains('open');
   el.classList.remove('open');
   if (wasOpen && !navUndoing) navConsumeIfTop('modal', p => p.id === id);
