@@ -4192,10 +4192,12 @@ function renderGraphs(){
     {k:'households', l:'🏠 Customer Dues'}
   ];
 
-  const sourceName = Object.keys(cache.allTime.byName || {});
-  const sourceCat = Object.keys(cache.allTime.byCategory || {});
+  const sourceName = Object.keys(cache.allTime.byName || {}).filter(k => cache.allTime.byName[k].milk > 0);
+  const sourceCat = Object.keys(cache.allTime.byCategory || {}).filter(k => cache.allTime.byCategory[k].milk > 0);
 
-  if (sourceName.length > 1 || sourceCat.length > 1) {
+  const sNameFilter = sourceName.filter(k => cache.allTime.byName[k].milk > 0);
+  const sCatFilter = sourceCat.filter(k => cache.allTime.byCategory[k].milk > 0);
+  if (sNameFilter.length > 1 || sCatFilter.length > 1) {
     baseTabs.push({k:'pie_milk', l:'Milk Split'});
     baseTabs.push({k:'pie_rev', l:'Rev Split'});
   }
@@ -4218,9 +4220,9 @@ function renderGraphs(){
   const showHorizon = (gChartType === 'overall');
 
   const filterDropdown = (gChartType === 'profit' || gChartType === 'compare') ?
-    `<button class="btn bd-trigger mb3" style="width:auto;min-width:180px;" onclick="openThemedSelect('Select Source', [{value:'all', label:'All Sources'}, {value:'milkmen', label:'Milkmen Only'}, {value:'households', label:'Households Only'}], gSourceFilter, (val)=>{ setGSourceFilter(val); })">${gSourceFilter==='all'?'All Sources':gSourceFilter==='milkmen'?'Milkmen Only':'Households Only'}</button>` : '';
+    `<button class="btn bd-trigger mb3 w-100" onclick="openThemedSelect('Select Source', [{value:'all', label:'All Sources'}, {value:'milkmen', label:'Milkmen Only'}, {value:'households', label:'Households Only'}], gSourceFilter, (val)=>{ setGSourceFilter(val); })">${gSourceFilter==='all'?'All Sources':gSourceFilter==='milkmen'?'Milkmen Only':'Households Only'}</button>` : '';
 
-  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div><button class="btn bg bsm" onclick="openGraphOrderModal()">⚙️ Order</button></div>${filterDropdown}<div class="gtab-scroll mb3">${tabs.map(t=>`<button class="ppill ${gChartType===t.k?'on':''}" onclick="setGChart('${t.k}', this)">${t.l}</button>`).join('')}</div>${showHorizon?`<div class="gh-scroll mb3">${horizons.map(h=>`<button class="ppill sm ${gHorizon===h.k?'on':''}" onclick="setGHorizon('${h.k}', this)">${h.l}</button>`).join('')}</div>`:''}<div id="graph-container" style="padding:0 15px 90px; position:relative;"></div>`;
+  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div>${filterDropdown}<div class="gtab-scroll mb3">${tabs.map(t=>`<button class="ppill ${gChartType===t.k?'on':''}" onclick="setGChart('${t.k}', this)">${t.l}</button>`).join('')}<button class="ppill" onclick="openGraphOrderModal()" style="border:1px dashed var(--border);background:transparent;">⚙️ Order</button></div>${showHorizon?`<div class="gh-scroll mb3">${horizons.map(h=>`<button class="ppill sm ${gHorizon===h.k?'on':''}" onclick="setGHorizon('${h.k}', this)">${h.l}</button>`).join('')}</div>`:''}<div id="graph-container" style="padding:0 15px 90px; position:relative;"></div>`;
   drawSelectedGraph();
 }
 
@@ -4238,8 +4240,8 @@ function openGraphOrderModal() {
   ];
 
   const cache = Store.get('mdn_analytics_cache');
-  const sourceName = Object.keys(cache.allTime.byName || {});
-  const sourceCat = Object.keys(cache.allTime.byCategory || {});
+  const sourceName = Object.keys(cache.allTime.byName || {}).filter(k => cache.allTime.byName[k].milk > 0);
+  const sourceCat = Object.keys(cache.allTime.byCategory || {}).filter(k => cache.allTime.byCategory[k].milk > 0);
   let validTabs = [...tabs];
   if (sourceName.length <= 1 && sourceCat.length <= 1) {
     validTabs = validTabs.filter(t => t.k !== 'pie_milk' && t.k !== 'pie_rev');
@@ -4262,7 +4264,7 @@ function openGraphOrderModal() {
   html += `</div><div class="row gap2 mt4"><button class="btn bg" style="flex:1;" onclick="cm('m-graph-order')">Cancel</button><button class="btn bp" style="flex:1;" onclick="saveGraphOrder()">Save</button></div>`;
 
   document.getElementById('m-graph-order-body').innerHTML = html;
-  cm('m-graph-order');
+  om('m-graph-order');
 
   const list = document.getElementById('go-list');
   let dragged = null;
@@ -4339,9 +4341,9 @@ function drawSelectedGraph() {
 
      const ranked = (cache.animalNames||[]).map(a=>a.name).sort((a,b)=> (cache.allTime.byName[b]?.milk||0)-(cache.allTime.byName[a]?.milk||0));
 
-     const animalSelector = `<select class="inp sm mb2" onchange="gIsolated = this.value; drawSelectedGraph();" style="width:100%;">
-        ${ranked.map(n => `<option value="${n}" ${gIsolated===n?'selected':''}>${n}</option>`).join('')}
-     </select>`;
+     const animalOpts = ranked.map(n => ({value: n, label: n}));
+     const animalOptsJson = JSON.stringify(animalOpts).replace(/"/g, '&quot;');
+     const animalSelector = `<button class="btn bd-trigger mb3 w-100" onclick="openThemedSelect('Select Animal', ${animalOptsJson}, '${selectedAnimal}', (val)=>{ gIsolated = val; drawSelectedGraph(); })">${selectedAnimal}</button>`;
 
      const selectedAnimal = gIsolated || ranked[0];
 
@@ -4504,8 +4506,8 @@ function drawSelectedGraph() {
         startA += angle;
      });
 
-     const hasCats = Object.keys(cache.allTime.byCategory || {}).length > 1;
-     const hasNames = Object.keys(cache.allTime.byName || {}).length > 1;
+     const hasCats = Object.keys(cache.allTime.byCategory || {}).filter(k=>cache.allTime.byCategory[k].milk>0).length > 1;
+     const hasNames = Object.keys(cache.allTime.byName || {}).filter(k=>cache.allTime.byName[k].milk>0).length > 1;
      let btnHtml = '';
      if (hasCats && hasNames) {
         btnHtml = `<div class="row gap2 mb3"><button class="ppill ${gChartFilter==='category'?'on':''}" onclick="setGFilter('category')">By Category</button><button class="ppill ${gChartFilter==='name'?'on':''}" onclick="setGFilter('name')">By Animal Name</button></div>`;
