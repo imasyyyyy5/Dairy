@@ -2447,6 +2447,7 @@ function selectCalendarDate(isoDateStr) {
   targetInput.dispatchEvent(new Event('input', {bubbles:true})); // JS-set .value doesn't fire 'input' on its own — dispatch it so required-field button dimming (bindRequiredFields) picks up date-picker selections too
   const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
   if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
+  window.calendarOnCancelCallback = null;
   cm('m-calendar-sheet');
   if (calendarOnSelectCallback) { const cb = calendarOnSelectCallback; calendarOnSelectCallback = null; cb(isoDateStr); }
 }
@@ -2469,6 +2470,7 @@ function updateCalMultiCount(){
 function confirmCalMultiSelection(){
   const dates = Array.from(calSelectedDates).filter(d => !(activeCalendarMinDate && d < activeCalendarMinDate)).sort();
   if (!dates.length) { cm('m-calendar-sheet'); return; }
+  window.calendarOnCancelCallback = null;
   cm('m-calendar-sheet');
   if (calendarOnSelectCallback) { const cb = calendarOnSelectCallback; calendarOnSelectCallback = null; cb(dates); }
 }
@@ -2736,10 +2738,25 @@ function pageHouseholdRevenue(page){
   households.forEach(h=>{ householdPageLedger(h, page).forEach(r=>{ qty+=r.qty; amount+=r.amount; }); });
   return {qty: parseFloat(qty.toFixed(2)), amount: parseFloat(amount.toFixed(2))};
 }
-function householdStatusLabel(h){
+function householdStatusLabel(h, stats = null){
   const t = today();
   if (h.startDate > t) return `Starts ${fmtD(h.startDate)}`;
   if (h.stopped) return `Stopped ${h.stopDate?fmtD(h.stopDate):''}`;
+  if (!stats) stats = getCustomerStats(h);
+  if (stats.totalPaid > 0) {
+    const ledger = householdFullLedger(h);
+    let accumulated = 0;
+    let paidUptoDate = null;
+    for (const entry of ledger) {
+      if (accumulated + entry.amount <= stats.totalPaid + 0.01) {
+        accumulated += entry.amount;
+        paidUptoDate = entry.date;
+      } else {
+        break;
+      }
+    }
+    if (paidUptoDate) return `Paid up to ${fmtD(paidUptoDate)}`;
+  }
   return `Active since ${fmtD(h.startDate)}`;
 }
 
@@ -2754,7 +2771,7 @@ function householdFullLedger(h, customEndDate){
   let d = h.startDate; if(!d || d > end) return out; let guard = 0;
   while(d <= end && guard < 3660){
     const e = getHouseholdDayEntry(h, d);
-    if((e.qty||0) > 0) out.push({date: d, qty: e.qty||0, rate: e.rate||0, amount: parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2))});
+    if((e.qty||0) > 0) out.push({date: d, qty: e.qty||0, rate: e.rate||0, amount: parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2)), isException: e.isException});
     d = addDays(d,1); guard++;
   }
   return out;
@@ -3195,6 +3212,21 @@ async function buildHisaabPages_Household(h, customEndDate){
   const profile = DB.profile(); const ledger = householdFullLedger(h, customEndDate);
   const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
   const stats = getCustomerStats(h, customEndDate);
+
+  let accumulated = 0;
+  let paidUptoDateStr = null;
+  if (stats.totalPaid > 0) {
+    const fullLedger = householdFullLedger(h);
+    for (const entry of fullLedger) {
+      if (accumulated + entry.amount <= stats.totalPaid + 0.01) {
+        accumulated += entry.amount;
+        paidUptoDateStr = entry.date;
+      } else {
+        break;
+      }
+    }
+  }
+
   const period = `${fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}`;
   const payments = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate)).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
   const paymentChunks = chunkArr(payments, HISAAB_ROWS_PER_PAGE); const paymentChunkList = paymentChunks.length?paymentChunks:[[]];
@@ -3202,8 +3234,36 @@ async function buildHisaabPages_Household(h, customEndDate){
   const footNote = `Milk supplied by ${profile.name||'Dairy'}`;
 
   const entryPages = await Promise.all(entryChunkList.map((chunk, idx)=>{
-    const rows = chunk.map(r=>[ fmtDS(r.date), fmt(r.qty)+' L', fmt(r.rate), '₹'+fmt(r.amount) ]);
-    const footerLines = (idx===entryChunkList.length-1) ? [ `Total Milk: ${fmt(stats.totalLiters)} L`, `Total Amount: ₹${fmt(stats.totalMilkValue)}` ] : null;
+    const rows = chunk.map(r=>{
+      const isPaid = paidUptoDateStr && r.date <= paidUptoDateStr;
+      const isException = r.isException;
+      const dateColor = isException ? '#d97706' : '#1a3fb0';
+      const textCol = isPaid ? '#10b981' : '#1a3fb0';
+
+      return [
+        [{text: fmtDS(r.date), color: dateColor}],
+        [{text: fmt(r.qty)+' L', color: textCol}],
+        [{text: fmt(r.rate), color: textCol}],
+        [{text: '₹'+fmt(r.amount), color: textCol}]
+      ];
+    });
+
+    const legendLine = [
+       {text:'Paid ', color:'#10b981'}, {text:'  Unpaid ', color:'#1a3fb0'}, {text:'  Exceptions ', color:'#d97706'}
+    ];
+
+    let footerLines = null;
+    if (idx===entryChunkList.length-1) {
+       footerLines = [
+         legendLine,
+         `Total Milk: ${fmt(stats.totalLiters)} L`,
+         `Total Amount: ₹${fmt(stats.totalMilkValue)}`,
+         `Total Paid: ₹${fmt(stats.totalPaid)}   Balance Due: ₹${fmt(stats.currentDue)}`
+       ];
+    } else {
+       footerLines = [ legendLine ];
+    }
+
     return drawNotebookPage({ heading:`${h.name}`, subheading:'Milk Hisaab', subtitle:period, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages, footNote });
   }));
 
@@ -3922,7 +3982,7 @@ function renderHouseholdsPageHTML(page){
       const eff = getHouseholdDayEntry(h, today());
       const stats = getCustomerStats(h);
       const isPaidUp = stats.currentDue <= 0;
-      const status = householdStatusLabel(h);
+      const status = householdStatusLabel(h, stats);
       const expanded = hhExpandedId === h.id;
       const historyOpen = hhHistoryExpandedId === h.id;
 
