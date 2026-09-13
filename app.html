@@ -134,7 +134,7 @@ html[data-theme="light"]{
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-resetpw { z-index: 2000 !important; }
+#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-resetpw, #m-graph-order { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
@@ -747,7 +747,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </div></div>
 
 
-<div class="moverlay" id="m-graph-order" onclick="moi(event,'m-graph-order')"><div class="mbox" style="max-width:320px;">
+<div class="moverlay" id="m-graph-order" onclick="moi(event,'m-graph-order')"><div class="mbox">
   <div class="mh"><span class="mt">Graph Order</span><button class="mx" onclick="cm('m-graph-order')">✕</button></div>
   <div class="mbd" id="m-graph-order-body"></div>
 </div></div>
@@ -1984,7 +1984,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.19.0-milkmen-balance-fix';
+const APP_VERSION = 'v1.19.1-graph-fixes';
 
 const today=()=>{
   const d=new Date();
@@ -4341,11 +4341,11 @@ function drawSelectedGraph() {
 
      const ranked = (cache.animalNames||[]).map(a=>a.name).sort((a,b)=> (cache.allTime.byName[b]?.milk||0)-(cache.allTime.byName[a]?.milk||0));
 
+     const selectedAnimal = gIsolated || ranked[0];
+
      const animalOpts = ranked.map(n => ({value: n, label: n}));
      const animalOptsJson = JSON.stringify(animalOpts).replace(/"/g, '&quot;');
      const animalSelector = `<button class="btn bd-trigger mb3 w-100" onclick="openThemedSelect('Select Animal', ${animalOptsJson}, '${selectedAnimal}', (val)=>{ gIsolated = val; drawSelectedGraph(); })">${selectedAnimal}</button>`;
-
-     const selectedAnimal = gIsolated || ranked[0];
 
      const dayRows = days.map(d => {
         const bn = cache.daily[d].byName || {};
