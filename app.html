@@ -738,7 +738,11 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <div class="moverlay" id="m-expense" onclick="moi(event,'m-expense')"><div class="mbox">
  <div class="mh"><span class="mt">Add Expense</span><button class="mx" onclick="cm('m-expense')">✕</button></div>
  <div style="margin-bottom:9px;"><label class="flabel">Expense Name</label><input class="inp" id="m-exp-name" placeholder="e.g. Feed, Medical..."/></div>
- <div style="margin-bottom:15px;"><label class="flabel">Cost (₹)</label><input class="inp" type="number" id="m-exp-cost" placeholder="0.0"/></div>
+ <div style="margin-bottom:9px;"><label class="flabel">Cost (₹)</label><input class="inp" type="number" id="m-exp-cost" placeholder="0.0"/></div>
+ <div style="margin-bottom:15px;"><label class="flabel">Date</label>
+  <button type="button" class="btn bd-trigger w-100" id="m-exp-date-trigger" onclick="openThemedCalendar('m-exp-date')">Today</button>
+  <input type="hidden" id="m-exp-date"/>
+ </div>
  <div class="mact"><button class="btn bs" onclick="cm('m-expense')">Cancel</button><button class="btn bp" id="exp-btn" onclick="saveNewExpense()">Save Expense</button></div>
 </div></div>
 
@@ -2251,12 +2255,20 @@ function appPrompt(title, defaultVal = '') {
 function submitAppPrompt(val) { cm('m-prompt'); if(promptResolution) { promptResolution(val); promptResolution = null; } }
 
 // EXPENSES
-function openExpenseModal() { document.getElementById('m-exp-name').value = ''; document.getElementById('m-exp-cost').value = ''; updateExpBtn(); om('m-expense'); }
+function openExpenseModal() {
+  document.getElementById('m-exp-name').value = '';
+  document.getElementById('m-exp-cost').value = '';
+  document.getElementById('m-exp-date').value = today();
+  document.getElementById('m-exp-date-trigger').textContent = fmtD(today());
+  if(typeof updateExpBtn === 'function') updateExpBtn();
+  om('m-expense');
+}
 function saveNewExpense() {
     const name = document.getElementById('m-exp-name').value.trim(); const cost = parseFloat(document.getElementById('m-exp-cost').value) || 0;
+    const dateStr = document.getElementById('m-exp-date').value || today();
     if(!name || cost <= 0) return appAlert('Error', 'Please enter a valid expense name and cost.');
     const exps = Store.get('mdn_expenses') || [];
-    exps.unshift({id: uid(), name, cost, date: today()}); Store.set('mdn_expenses', exps); AutoBackup.trigger(); cloudTouch('expenses', true); DB.log(`Added expense: ${name} for ₹${cost}`, 'create'); cm('m-expense'); renderCalc();
+    exps.unshift({id: uid(), name, cost, date: dateStr}); Store.set('mdn_expenses', exps); AutoBackup.trigger(); cloudTouch('expenses', true); DB.log(`Added expense: ${name} for ₹${cost}`, 'create'); cm('m-expense'); renderCalc();
 }
 function deleteExpense(id) {
     const exps = Store.get('mdn_expenses') || []; Store.set('mdn_expenses', exps.filter(e => e.id !== id)); AutoBackup.trigger(); cloudTouch('expenses', true); renderCalc();
@@ -4206,11 +4218,7 @@ function renderGraphs(){
   const showHorizon = (gChartType === 'overall');
 
   const filterDropdown = (gChartType === 'profit' || gChartType === 'compare') ?
-    `<select class="inp sm mb3" onchange="setGSourceFilter(this.value)">
-      <option value="all" ${gSourceFilter==='all'?'selected':''}>All Sources</option>
-      <option value="milkmen" ${gSourceFilter==='milkmen'?'selected':''}>Milkmen Only</option>
-      <option value="households" ${gSourceFilter==='households'?'selected':''}>Households Only</option>
-    </select>` : '';
+    `<button class="btn bd-trigger mb3" style="width:auto;min-width:180px;" onclick="openThemedSelect('Select Source', [{value:'all', label:'All Sources'}, {value:'milkmen', label:'Milkmen Only'}, {value:'households', label:'Households Only'}], gSourceFilter, (val)=>{ setGSourceFilter(val); })">${gSourceFilter==='all'?'All Sources':gSourceFilter==='milkmen'?'Milkmen Only':'Households Only'}</button>` : '';
 
   el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div><button class="btn bg bsm" onclick="openGraphOrderModal()">⚙️ Order</button></div>${filterDropdown}<div class="gtab-scroll mb3">${tabs.map(t=>`<button class="ppill ${gChartType===t.k?'on':''}" onclick="setGChart('${t.k}', this)">${t.l}</button>`).join('')}</div>${showHorizon?`<div class="gh-scroll mb3">${horizons.map(h=>`<button class="ppill sm ${gHorizon===h.k?'on':''}" onclick="setGHorizon('${h.k}', this)">${h.l}</button>`).join('')}</div>`:''}<div id="graph-container" style="padding:0 15px 90px; position:relative;"></div>`;
   drawSelectedGraph();
