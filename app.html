@@ -2447,6 +2447,7 @@ function selectCalendarDate(isoDateStr) {
   targetInput.dispatchEvent(new Event('input', {bubbles:true})); // JS-set .value doesn't fire 'input' on its own — dispatch it so required-field button dimming (bindRequiredFields) picks up date-picker selections too
   const triggerButton = document.getElementById(activeCalendarTargetInputId + '-trigger');
   if (triggerButton) triggerButton.textContent = fmtD(isoDateStr);
+  window.calendarOnCancelCallback = null;
   cm('m-calendar-sheet');
   if (calendarOnSelectCallback) { const cb = calendarOnSelectCallback; calendarOnSelectCallback = null; cb(isoDateStr); }
 }
@@ -2469,6 +2470,7 @@ function updateCalMultiCount(){
 function confirmCalMultiSelection(){
   const dates = Array.from(calSelectedDates).filter(d => !(activeCalendarMinDate && d < activeCalendarMinDate)).sort();
   if (!dates.length) { cm('m-calendar-sheet'); return; }
+  window.calendarOnCancelCallback = null;
   cm('m-calendar-sheet');
   if (calendarOnSelectCallback) { const cb = calendarOnSelectCallback; calendarOnSelectCallback = null; cb(dates); }
 }
@@ -2736,10 +2738,25 @@ function pageHouseholdRevenue(page){
   households.forEach(h=>{ householdPageLedger(h, page).forEach(r=>{ qty+=r.qty; amount+=r.amount; }); });
   return {qty: parseFloat(qty.toFixed(2)), amount: parseFloat(amount.toFixed(2))};
 }
-function householdStatusLabel(h){
+function householdStatusLabel(h, stats = null){
   const t = today();
   if (h.startDate > t) return `Starts ${fmtD(h.startDate)}`;
   if (h.stopped) return `Stopped ${h.stopDate?fmtD(h.stopDate):''}`;
+  if (!stats) stats = getCustomerStats(h);
+  if (stats.totalPaid > 0) {
+    const ledger = householdFullLedger(h);
+    let accumulated = 0;
+    let paidUptoDate = null;
+    for (const entry of ledger) {
+      if (accumulated + entry.amount <= stats.totalPaid + 0.01) {
+        accumulated += entry.amount;
+        paidUptoDate = entry.date;
+      } else {
+        break;
+      }
+    }
+    if (paidUptoDate) return `Paid up to ${fmtD(paidUptoDate)}`;
+  }
   return `Active since ${fmtD(h.startDate)}`;
 }
 
@@ -3922,7 +3939,7 @@ function renderHouseholdsPageHTML(page){
       const eff = getHouseholdDayEntry(h, today());
       const stats = getCustomerStats(h);
       const isPaidUp = stats.currentDue <= 0;
-      const status = householdStatusLabel(h);
+      const status = householdStatusLabel(h, stats);
       const expanded = hhExpandedId === h.id;
       const historyOpen = hhHistoryExpandedId === h.id;
 
