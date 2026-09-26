@@ -1,0 +1,4 @@
+## 2026-09-20 - Fix XSS and Prevent Accidental Data Loss
+**Vulnerability:** The `escAttr` function in `app.html` only escaped `&` and `"`, leaving the application vulnerable to Cross-Site Scripting (XSS) via injected `<` and `'` characters. Also, the UI permitted wiping local application data without user confirmation, risking accidental data loss.
+**Learning:** Due to the single-file PWA architecture relying on string concatenation for template rendering, any unescaped user input (like names or strings) could execute malicious scripts. Similarly, critical destructive actions must be guarded in client-side storage-dependent applications.
+**Prevention:** Comprehensive escaping (covering `<`,`>`,`'`,`"`,`&`) should always be used when injecting data into template literals. Critical actions like `localStorage.clear()` should be gated by a `confirm()` prompt or similar safe-guard UI.
