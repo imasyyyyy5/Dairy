@@ -521,7 +521,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <div style="font-size:50px; margin-bottom:20px;">⚠️</div>
   <h2 class="ptitle mb2" style="color:var(--danger);">App Failed to Load</h2>
   <p id="error-reason" style="color:var(--muted); font-size:14px; margin-bottom:30px;">The initialization took too long or encountered an error.</p>
-  <button class="btn bp" style="padding:15px 20px; font-size:15px; width:100%; max-width:300px;" onclick="localStorage.clear(); location.reload();">Reset App Data & Reload</button>
+  <button class="btn bp" style="padding:15px 20px; font-size:15px; width:100%; max-width:300px;" onclick="if(confirm('Are you sure you want to reset all app data? This cannot be undone.')){ localStorage.clear(); location.reload(); }">Reset App Data & Reload</button>
 </div>
 
 <div id="toast-container"></div>
@@ -1969,7 +1969,7 @@ const fmtD=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(d
 const fmtDS=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});};
 const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
 const fmtTimeOnly=ts=>{const d=new Date(ts);return isNaN(d)?'':d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
-const escAttr=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+const escAttr=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 // Persisted once per install/browser. Prefixing every id with this means two
 // devices creating records around the same moment (e.g. right after a
 // cloud-sync merge) can never produce a colliding id — plain Date.now()+random
@@ -1984,7 +1984,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.19.1-graph-fixes';
+const APP_VERSION = 'v1.19.2-security-fixes';
 
 const today=()=>{
   const d=new Date();
@@ -3934,7 +3934,7 @@ function renderHomeContent(el){
   const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   let html=`
    <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
-    <div><div class="eyebrow">My Dairy</div><div class="ptitle">${profile.name}</div></div>
+    <div><div class="eyebrow">My Dairy</div><div class="ptitle">${escAttr(profile.name)}</div></div>
     <div class="row gap2">${trash.length?`<button class="btn bg bsm" onclick="openTrash()">🗑 ${trash.length}</button>`:''}<button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button></div>
    </div>
    <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
@@ -4786,7 +4786,7 @@ function renderMe(){
     el.innerHTML=html; restoreFocus(); return;
   }
 
-  html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
+  html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${escAttr(profile.name)}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
   html+=cloudSyncCardHtml();
 
   html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;"><span style="font-size:13px;font-weight:700;">My Animals</span><button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div><div class="sp2">`;
