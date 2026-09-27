@@ -303,10 +303,10 @@
       <h1>The khaata book that <span class="accent">writes itself</span></h1>
       <p class="lede">One entry a day is all it takes. Every cow, every customer, every rupee — logged, repeated, and totalled automatically, right from your phone.</p>
       <div class="cta-row">
-        <button id="install-pwa-btn" class="btn btn-primary" style="display:none;">📲 Install App — Free</button>
+        <a href="smart-milking.apk" download="smart-milking.apk" id="install-pwa-btn" class="btn btn-primary">📲 Download App (APK) — Free</a>
         <a href="app.html" class="btn btn-ghost">Open Web Version →</a>
       </div>
-      <p id="ios-hint" class="ios-hint">iPhone users: tap <strong>Share</strong> in Safari, then <strong>Add to Home Screen</strong>.</p>
+      <p id="ios-hint" class="ios-hint" style="display:none;">Tap <strong>Download App</strong> above to get the APK for Android, or use the Web Version on iOS.</p>
     </div>
 
     <div class="ledger" aria-hidden="true">
@@ -387,20 +387,11 @@
 <!-- INSTALL -->
 <section class="install">
   <div class="wrap animate-on-scroll">
-    <div class="eyebrow" style="justify-content:center;display:flex;">progressive web app</div>
-    <h2 style="font-size:clamp(1.8rem,3vw,2.4rem);color:var(--cream);">On your home screen in under a minute</h2>
-    <p style="color:var(--muted);margin-top:.8rem;">No app store, no waiting — it installs straight from the browser.</p>
-    <div class="install-steps">
-      <div class="step-box">
-        <span class="mono">ANDROID · CHROME</span>
-        <h4>Tap "Install App"</h4>
-        <p>Use the button up top, or open the browser menu (⋮) and choose <strong>Install app</strong> / "Add to Home screen".</p>
-      </div>
-      <div class="step-box">
-        <span class="mono">IPHONE · SAFARI</span>
-        <h4>Add to Home Screen</h4>
-        <p>Tap the <strong>Share</strong> icon at the bottom of the screen, scroll down, and tap <strong>Add to Home Screen</strong>.</p>
-      </div>
+    <div class="eyebrow" style="justify-content:center;display:flex;">EASY INSTALLATION</div>
+    <h2 style="font-size:clamp(1.8rem,3vw,2.4rem);color:var(--cream);">Download & Install APK Directly</h2>
+    <p style="color:var(--muted);margin-top:.8rem;">No play store account needed — download the app APK directly to your device.</p>
+    <div style="margin-top:2rem;text-align:center;">
+      <a href="smart-milking.apk" download="smart-milking.apk" class="btn btn-primary" style="font-size:1.1rem;padding:1rem 2rem;">📲 Download Smart Milking APK</a>
     </div>
   </div>
 </section>
@@ -414,9 +405,10 @@
      "installable" yet) — replaces the plain browser alert() -->
 <div class="modal-overlay" id="install-help-overlay" role="dialog" aria-modal="true" aria-labelledby="install-help-title">
   <div class="modal-card">
-    <h3 id="install-help-title">📲 Install Smart Milking</h3>
-    <p id="install-help-body">Open your browser menu (⋮) in the top right and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
-    <button class="modal-close" id="install-help-close">Got it</button>
+    <h3 id="install-help-title">📲 Download Smart Milking</h3>
+    <p id="install-help-body">Click below to download the Smart Milking APK file directly.</p>
+    <a href="smart-milking.apk" download="smart-milking.apk" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;">Download APK</a>
+    <button class="modal-close" id="install-help-close">Close</button>
   </div>
 </div>
 
@@ -464,57 +456,15 @@
     });
   }
 
-  // PWA install logic
-  let deferredPrompt;
-  const installBtn = document.getElementById('install-pwa-btn');
-  const iosHint = document.getElementById('ios-hint');
   const helpOverlay = document.getElementById('install-help-overlay');
-  const helpBody = document.getElementById('install-help-body');
   const helpClose = document.getElementById('install-help-close');
-  const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-  const isAppInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
   function openHelpModal(){
-    if(isIos()){
-      helpBody.innerHTML = 'Tap the <strong>Share</strong> icon at the bottom of Safari, scroll down, then tap <strong>Add to Home Screen</strong>.';
-    } else {
-      helpBody.innerHTML = "Open your browser menu (⋮) in the top right and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.";
-    }
     helpOverlay.classList.add('open');
   }
   function closeHelpModal(){ helpOverlay.classList.remove('open'); }
-  helpClose.addEventListener('click', closeHelpModal);
-  helpOverlay.addEventListener('click', (e)=>{ if(e.target===helpOverlay) closeHelpModal(); });
-
-  if(!isAppInstalled){
-    if(isIos()){ iosHint.style.display='block'; }
-    else { installBtn.style.display='inline-flex'; }
-  }
-
-  // Chrome fires this only when it has decided the page is installable.
-  // Capturing + suppressing it, then firing prompt() ourselves on click,
-  // is what makes the button trigger Chrome's real native install dialog
-  // instead of the ambient mini-infobar Chrome sometimes shows on its own.
-  window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault();
-    deferredPrompt = e;
-    installBtn.style.display='inline-flex';
-  });
-
-  installBtn.addEventListener('click', async ()=>{
-    if(deferredPrompt){
-      deferredPrompt.prompt(); // the real native Chrome "Install app?" dialog
-      const {outcome} = await deferredPrompt.userChoice;
-      if(outcome==='accepted') installBtn.style.display='none';
-      deferredPrompt=null;
-    } else {
-      // Chrome hasn't fired beforeinstallprompt (iOS, unsupported browser,
-      // criteria not yet met, or a prior dismissal is still being throttled).
-      openHelpModal();
-    }
-  });
-
-  window.addEventListener('appinstalled', ()=>{ installBtn.style.display='none'; });
+  if (helpClose) helpClose.addEventListener('click', closeHelpModal);
+  if (helpOverlay) helpOverlay.addEventListener('click', (e)=>{ if(e.target===helpOverlay) closeHelpModal(); });
 </script>
 
 </body>
