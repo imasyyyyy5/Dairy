@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.24.1-google-signin';
+const APP_VERSION = 'v1.25.0-gemini-key';
 
 const today=()=>{
   const d=new Date();
@@ -4771,9 +4771,11 @@ function renderMe(){
 function devToolsCardHtml(){
   if (!devMode) return '';
   return `<div class="card mt3" style="border:1px dashed var(--accent, #2f6fed);">
-     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant API Endpoint <span style="font-size:10px;color:var(--muted);font-weight:700;">DEVELOPER</span></div>
-     <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Custom URL for AI Chat assistant (overrides config default)</div>
-     <input class="inp" type="url" placeholder="https://..." value="${escAttr(getAiEndpoint())}" onchange="setAiEndpoint(this.value)"/>
+     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant Settings <span style="font-size:10px;color:var(--muted);font-weight:700;">DEVELOPER</span></div>
+     <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Gemini API Key</div>
+     <input class="inp" type="password" placeholder="Enter Gemini API Key (e.g. AIzaSy...)" value="${escAttr(getAiKey())}" onchange="setAiKey(this.value)"/>
+     <div style="font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px;">Custom API URL (optional)</div>
+     <input class="inp" type="url" placeholder="https://... (optional)" value="${escAttr(getAiEndpoint())}" onchange="setAiEndpoint(this.value)"/>
      <button class="btn bg bsm mt3" style="width:100%;" onclick="disableDevMode()">Turn off developer mode</button>
    </div>`;
 }
@@ -4796,7 +4798,11 @@ function bumpVersionTap(){
 }
 function disableDevMode(){
   devMode = false; versionTapCount = 0;
-  try { localStorage.removeItem('mdn_dev_mode'); } catch(e){}
+  try {
+    localStorage.removeItem('mdn_dev_mode');
+    localStorage.removeItem('mdn_custom_ai_endpoint');
+    localStorage.removeItem('mdn_custom_ai_key');
+  } catch(e){}
   showToast('Developer mode off', true, 'light');
   renderMe();
 }
@@ -5472,10 +5478,23 @@ initApp();
 //  stale relative to what's actually stored. Nothing is persisted: the
 //  transcript lives in memory only and starts fresh on every app open.
 // ══════════════════════════════════════════════════════════════════
+function getAiKey(){
+  if (!devMode) return '';
+  return localStorage.getItem('mdn_custom_ai_key') || '';
+}
+function setAiKey(key){
+  if (!devMode) return;
+  key = String(key||'').trim();
+  if(!key){ localStorage.removeItem('mdn_custom_ai_key'); }
+  else { localStorage.setItem('mdn_custom_ai_key', key); }
+  showToast('AI Key saved');
+}
 function getAiEndpoint(){
+  if (!devMode) return (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://project--e3bbb5e8-f2af-49e5-bbe8-894fd50b6efe.lovable.app/api/public/dairy-chat';
   return localStorage.getItem('mdn_custom_ai_endpoint') || (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://project--e3bbb5e8-f2af-49e5-bbe8-894fd50b6efe.lovable.app/api/public/dairy-chat';
 }
 function setAiEndpoint(url){
+  if (!devMode) return;
   url = String(url||'').trim();
   if(!url){ localStorage.removeItem('mdn_custom_ai_endpoint'); }
   else { localStorage.setItem('mdn_custom_ai_endpoint', url); }
@@ -5587,36 +5606,76 @@ async function aiAsk(question){
   aiMessages.push({ role:'user', content: question });
   aiBusy = true; aiRenderLog();
   const sendBtn = document.getElementById('aic-send'); if(sendBtn) sendBtn.disabled = true;
+
+  const key = getAiKey();
+
   try{
-    const res = await fetch(getAiEndpoint(), {
-      method:'POST',
-      headers:{'content-type':'application/json'},
-      body: JSON.stringify({
-        messages: aiMessages.map(m=>({role:m.role, content:m.content})),
-        data: aiBuildPrimaryData()
-      })
-    });
-    if(!res.ok){
-      const txt = (await res.text()) || 'The assistant could not answer right now.';
-      aiMessages.push({ role:'assistant', content: txt.slice(0,300), error:true });
-      aiBusy=false; aiRenderLog(); return;
-    }
-    // Stream the answer in as it is written, so a longer reply still feels instant.
-    const reader = res.body && res.body.getReader ? res.body.getReader() : null;
-    const msg = { role:'assistant', content:'' };
-    aiMessages.push(msg);
-    if(reader){
-      const dec = new TextDecoder();
-      while(true){
-        const { value, done } = await reader.read();
-        if(done) break;
-        msg.content += dec.decode(value, { stream:true });
-        aiRenderLog();
+    if(key){
+      const primaryData = aiBuildPrimaryData();
+      const sysInstruction = `You are a helpful dairy assistant answering questions about the user's dairy records. Answers must be based strictly on the user's raw records provided below.\nToday: ${primaryData.today}\nProfile: ${JSON.stringify(primaryData.profile)}\nPages (Milk records): ${JSON.stringify(primaryData.pages)}\nHouseholds: ${JSON.stringify(primaryData.households)}\nPayments: ${JSON.stringify(primaryData.payments)}\nExpenses: ${JSON.stringify(primaryData.expenses)}${primaryData.olderPeriodsOmitted ? `\nNote: ${primaryData.olderPeriodsOmitted} older notebook pages were omitted.` : ''}\nBe concise, direct, and helpful.`;
+
+      const contents = [];
+      for(const m of aiMessages){
+        if(m.error) continue;
+        contents.push({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        });
+      }
+
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`;
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: sysInstruction }] },
+          contents: contents
+        })
+      });
+
+      const data = await res.json().catch(() => null);
+      if(!res.ok || !data){
+        const errTxt = (data && data.error && data.error.message) || 'Gemini API request failed. Please check your API key.';
+        aiMessages.push({ role:'assistant', content: errTxt, error:true });
+        aiBusy = false; aiRenderLog(); return;
+      }
+
+      const reply = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
+      if(!reply.trim()){
+        aiMessages.push({ role:'assistant', content: 'No answer came back from Gemini — please try again.', error: true });
+      } else {
+        aiMessages.push({ role:'assistant', content: reply.trim() });
       }
     } else {
-      msg.content = await res.text();
+      const res = await fetch(getAiEndpoint(), {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({
+          messages: aiMessages.map(m=>({role:m.role, content:m.content})),
+          data: aiBuildPrimaryData()
+        })
+      });
+      if(!res.ok){
+        const txt = (await res.text()) || 'The assistant could not answer right now.';
+        aiMessages.push({ role:'assistant', content: txt.slice(0,300), error:true });
+        aiBusy=false; aiRenderLog(); return;
+      }
+      const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+      const msg = { role:'assistant', content:'' };
+      aiMessages.push(msg);
+      if(reader){
+        const dec = new TextDecoder();
+        while(true){
+          const { value, done } = await reader.read();
+          if(done) break;
+          msg.content += dec.decode(value, { stream:true });
+          aiRenderLog();
+        }
+      } else {
+        msg.content = await res.text();
+      }
+      if(!msg.content.trim()){ msg.content = 'No answer came back — please try again.'; msg.error = true; }
     }
-    if(!msg.content.trim()){ msg.content = 'No answer came back — please try again.'; msg.error = true; }
   }catch(e){
     aiMessages.push({ role:'assistant', content:'Could not reach the assistant. Check your internet connection and try again.', error:true });
   }finally{
