@@ -5546,7 +5546,7 @@ function aiChatHtml(animate){
     <div class="aic-log" id="aic-log"></div>
     ${!aiMessages.length ? `<div class="aic-chips">${AI_SUGGESTIONS.map(q=>`<button class="aic-chip" onclick="aiAsk(this.textContent)">${aiEsc(q)}</button>`).join('')}</div>` : ''}
     <div class="aic-f">
-      <textarea class="aic-in" id="aic-in" rows="1" placeholder="Ask anything about your milk, customers or money…" oninput="aiGrow(this)" onkeydown="aiKey(event)"></textarea>
+      <textarea class="aic-in" id="aic-in" rows="1" placeholder="Ask anything…" oninput="aiGrow(this)" onkeydown="aiKey(event)"></textarea>
       <button class="aic-send" id="aic-send" onclick="aiSend()">➤</button>
     </div>
   </div>`;
@@ -5718,6 +5718,11 @@ async function aiAsk(question){
   // land before or after the classic <script> above finishes running.
   onAuthStateChanged(auth, (user) => {
     window.dispatchEvent(new CustomEvent('cloud-auth-change', { detail: user }));
+  });
+  </script>
+</body>
+</html>
+;
   });
   </script>
 </body>
