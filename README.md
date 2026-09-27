@@ -22,21 +22,18 @@ Smart Milking replaces the diary, but keeps the discipline. It's incredibly flex
 
 ---
 
-## 📲 How to Install (No App Store Needed!)
+## 📲 How to Install
 
-Smart Milking is a **Progressive Web App (PWA)**. This means you don't need to download a heavy file from the Play Store or App Store. You can install it straight from your browser, and it will live on your home screen like a normal app.
+You can easily install **Smart Milking** on Android or use the web app directly.
 
-### For Android (Chrome)
-1. Open the [Smart Milking App](https://imasyyyyy5.github.io/Dairy/) in Google Chrome.
-2. Tap the **three-dot menu (⋮)** in the top right corner.
-3. Tap **"Install app"** or **"Add to Home screen"**.
-4. Confirm by tapping **"Install"**. The app icon will now appear on your phone's home screen!
+### Android (Direct APK Download)
+1. Download the [Smart Milking APK](smart-milking.apk) directly from the landing page or Profile tab.
+2. Open the downloaded `smart-milking.apk` file on your phone and tap **Install**.
 
-### For iPhone (Safari)
-1. Open the [Smart Milking App](https://imasyyyyy5.github.io/Dairy/) in Safari.
-2. Tap the **Share icon** (the square with an arrow pointing up) at the bottom of the screen.
-3. Scroll down the menu and tap **"Add to Home Screen"**.
-4. Tap **"Add"** in the top right corner. You're all set!
+### Web / Progressive Web App (iOS / Desktop / Chrome)
+1. Open the [Smart Milking App](https://imasyyyyy5.github.io/Dairy/) in your browser.
+2. On Android/Chrome, tap the menu (⋮) -> **"Add to Home screen"** or **"Install app"**.
+3. On iPhone/Safari, tap the **Share icon** -> **"Add to Home Screen"**.
 
 ---
 

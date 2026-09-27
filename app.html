@@ -623,7 +623,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 
 <div id="app" style="display:none;">
  <div id="install-banner" class="install-banner">
-  <span class="install-banner-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span><span class="install-banner-text" onclick="showInstallGuide()">Best in app version</span><button class="install-banner-close" onclick="dismissInstallBanner()"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  <span class="install-banner-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span><span class="install-banner-text" onclick="downloadApk()">Download Android App (APK)</span><button class="install-banner-close" onclick="dismissInstallBanner()"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
  </div>
  <div id="main">
   <div id="p-home" class="panel active"></div>
@@ -658,9 +658,9 @@ svg.chart{display:block;width:100%;overflow:visible;}
 </div></div>
 
 <div class="moverlay" id="m-install-guide" onclick="if(event.target.id==='m-install-guide') closeInstallGuide()"><div class="mbox">
- <div class="mh"><span class="mt"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>Install This App</span><button class="mx" onclick="closeInstallGuide()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
- <div id="install-guide-steps"></div>
- <div class="mact"><button class="btn bp" style="flex:1;" onclick="closeInstallGuide()">Got It</button></div>
+ <div class="mh"><span class="mt"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Smart Milking App</span><button class="mx" onclick="closeInstallGuide()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+ <div id="install-guide-steps" style="padding:15px;font-size:13px;">Download the Android APK directly to install Smart Milking on your phone.</div>
+ <div class="mact"><button class="btn bp" style="flex:1;" onclick="downloadApk(); closeInstallGuide();">Download APK</button></div>
 </div></div>
 
 <div class="moverlay" id="m-filter-sheet" onclick="moi(event,'m-filter-sheet')"><div class="mbox">
@@ -2044,7 +2044,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.21.2-square-icons-fix';
+const APP_VERSION = 'v1.22.0-apk-download';
 
 const today=()=>{
   const d=new Date();
@@ -4871,6 +4871,7 @@ function renderMe(){
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
    </div>
+   <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Get Android App</div><button class="btn bp" style="width:100%;" onclick="downloadApk()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Smart Milking APK</button></div>
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
   const pages=DB.pages().filter(p=>!p.trashed);
@@ -5444,15 +5445,23 @@ function showInstallBanner() { const b = document.getElementById('install-banner
 function hideInstallBanner() { const b = document.getElementById('install-banner'); if (b) b.classList.remove('show'); }
 function dismissInstallBanner() { appChoice("Hide this reminder?", "You can still install anytime from your Profile tab.", [ { label: "I'll do later", value: "later" }, { label: "Never show again", value: "never" } ]).then(choice => { if (!choice) return; localStorage.setItem('mdn_install_banner_pref', choice); hideInstallBanner(); if (curTab === 'me') renderMe(); }); }
 
+function downloadApk() {
+  const a = document.createElement('a');
+  a.href = 'smart-milking.apk';
+  a.download = 'smart-milking.apk';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('Downloading Smart Milking APK...', true, 'light');
+}
+
 let installGuideCloseCb = null;
 function showInstallGuide(onClose) {
   installGuideCloseCb = typeof onClose === 'function' ? onClose : null;
-  const ua = navigator.userAgent || ''; const isIOS = /iPhone|iPad|iPod/i.test(ua); const isAndroid = /Android/i.test(ua); let steps;
-  if (isAndroid) steps = [['<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>', 'Tap the three-dot menu in the top-right corner of Chrome.'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>', 'Tap "Add to Home screen" or "Install app".'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>', 'Tap "Install" to confirm.'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--brand)" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>', 'The app icon now opens full-screen — no browser bar, faster, and works offline.']];
-  else if (isIOS) steps = [['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>', 'Tap the Share icon at the bottom of Safari.'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>', 'Scroll down and tap "Add to Home Screen".'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>', 'Tap "Add" in the top-right corner.'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--brand)" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>', 'The app icon now opens full-screen, just like a real app.']];
-  else steps = [['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>', 'Click the install icon in the address bar (or open the ⋮ menu).'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>', 'Click "Install".'], ['<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--brand)" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>', 'The app now opens in its own window, separate from your browser.']];
-  document.getElementById('install-guide-steps').innerHTML = steps.map(([icon, text]) => `<div class="ig-step"><span class="ig-num">${icon}</span><span>${text}</span></div>`).join('');
-  om('m-install-guide');
+  downloadApk();
+  if (typeof installGuideCloseCb === 'function') {
+    const cb = installGuideCloseCb; installGuideCloseCb = null; cb();
+  }
 }
 function closeInstallGuide() {
   cm('m-install-guide');
