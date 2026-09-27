@@ -691,7 +691,16 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div class="mh"><span class="mt"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>Cloud Sync</span><button class="mx" onclick="cm('m-cloudsync')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
 
  <div id="cs-view-choice">
-  <div class="mbody mb3">Sign in to sync your records across devices, or create a new account.</div>
+  <div style="text-align:center;margin:8px 0 16px;">
+  <div style="width:52px;height:52px;border-radius:16px;background:var(--bg2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/>
+      <line x1="6" y1="8" x2="18" y2="8"/>
+    </svg>
+  </div>
+  <div style="font-weight:800;font-size:15px;color:var(--fg);margin-top:6px;">Smart Milking</div>
+ </div>
+  <div class="mbody mb3 tc">Sign in to sync your records across devices, or create a new account.</div>
   <div class="mact" style="flex-direction:column;gap:8px;">
    <button class="btn bp" style="width:100%;" onclick="csShowView('signin')">Sign In</button>
    <button class="btn bs" style="width:100%;" onclick="csShowView('signup')">Create Account</button>
@@ -699,7 +708,16 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
 
  <div id="cs-view-signin" style="display:none;">
-  <div class="mbody mb3">Sign in with your email and password.</div>
+  <div style="text-align:center;margin:8px 0 16px;">
+  <div style="width:52px;height:52px;border-radius:16px;background:var(--bg2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/>
+      <line x1="6" y1="8" x2="18" y2="8"/>
+    </svg>
+  </div>
+  <div style="font-weight:800;font-size:15px;color:var(--fg);margin-top:6px;">Smart Milking</div>
+ </div>
+  <div class="mbody mb3 tc">Sign in with your email and password.</div>
   <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-si-email" autocomplete="email" placeholder="you@example.com"/></div>
   <div style="margin-bottom:4px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-si-password" autocomplete="current-password" placeholder="Your password"/></div>
   <div style="margin-top:8px;"><span id="cs-forgot-link" onclick="cloudForgotPassword()" style="font-size:12px;color:var(--accent,#2f6fed);cursor:pointer;text-decoration:underline;">Forgot password?</span></div>
@@ -708,7 +726,16 @@ svg.chart{display:block;width:100%;overflow:visible;}
  </div>
 
  <div id="cs-view-signup" style="display:none;">
-  <div class="mbody mb3">Creating an account uploads what's already on this device.</div>
+  <div style="text-align:center;margin:8px 0 16px;">
+  <div style="width:52px;height:52px;border-radius:16px;background:var(--bg2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/>
+      <line x1="6" y1="8" x2="18" y2="8"/>
+    </svg>
+  </div>
+  <div style="font-weight:800;font-size:15px;color:var(--fg);margin-top:6px;">Smart Milking</div>
+ </div>
+  <div class="mbody mb3 tc">Creating an account uploads what's already on this device.</div>
   <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-su-email" autocomplete="email" placeholder="you@example.com"/></div>
   <div style="margin-bottom:9px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-su-password" autocomplete="new-password" placeholder="At least 6 characters"/></div>
   <div style="margin-bottom:4px;"><label class="flabel">Confirm Password</label><input class="inp" type="password" id="cs-su-password2" autocomplete="new-password" placeholder="Re-enter password"/></div>
@@ -2017,7 +2044,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.21.0-svg-icons-ui';
+const APP_VERSION = 'v1.21.1-app-logo-farmer-icon';
 
 const today=()=>{
   const d=new Date();
@@ -2073,7 +2100,7 @@ function toastEmoji(message, isSuccess) {
   if (isSuccess === false) return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
   const s = message.toLowerCase();
   const rules = [
-    [/undo|reverted|restored earlier/, '↩️'],
+    [/undo|reverted|restored earlier/, '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>'],
     [/delete|remove|trash|clear/, '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'],
     [/payment|paid|₹|rupee|hisaab/, '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>'],
     [/sync|cloud|signed in|account created|welcome back/, '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>'],
@@ -4822,7 +4849,7 @@ function renderMe(){
         const touchAttrs = canToggle ? `ontouchstart="lgvTouchStart(event,'${l.id}')" ontouchmove="lgvTouchMove(event,'${l.id}')" ontouchend="lgvTouchEnd(event,'${l.id}')"` : '';
         const actionBtn = l.undone
           ? `<button class="lgv-undo-btn lgv-redo-btn" onclick="toggleLogUndo('${l.id}')"><span style="font-size:15px;">↻</span>Redo</button>`
-          : `<button class="lgv-undo-btn" onclick="toggleLogUndo('${l.id}')"><span style="font-size:15px;">↩</span>Undo</button>`;
+          : `<button class="lgv-undo-btn" onclick="toggleLogUndo('${l.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>Undo</button>`;
         html += `<div class="lgv-row">${canToggle ? `<div class="lgv-swipe-actions">${actionBtn}</div>` : ''}<div class="lgv-entry" data-log-id="${l.id}" ${touchAttrs}><div class="lgv-icon" style="color:${meta.color};border-color:${meta.color};">${meta.icon}</div><div class="f1 mw0"><div class="lgv-text ${l.undone?'undone':''}">${l.text}${l.undone?'<span class="lgv-undone-tag">Undone</span>':''}</div><div class="lgv-time">${fmtTimeOnly(l.ts)}</div></div></div></div>`;
       });
       if(logs.length > logShowCount) html += `<button class="btn bs lgv-loadmore" onclick="loadMoreLogs()">Load ${Math.min(50, logs.length-logShowCount)} More</button>`;
@@ -4831,7 +4858,7 @@ function renderMe(){
     el.innerHTML=html; restoreFocus(); return;
   }
 
-  html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--brand)" stroke-width="2"><path d="M12 2v20M12 6c-3 0-5 2-5 5s2 5 5 5M12 6c3 0 5 2 5 5s-2 5-5 5"/></svg></div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 1-2 2v14a2 2 0 0 1 2 2h14a2 2 0 0 1 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
+  html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--brand)" stroke-width="2"><path d="M12 2v20M12 6c-3 0-5 2-5 5s2 5 5 5M12 6c3 0 5 2 5 5s-2 5-5 5"/></svg></div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 1-2 2v14a2 2 0 0 1 2 2h14a2 2 0 0 1 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Farmer</div></div></div></div>`;
   html+=cloudSyncCardHtml();
 
   html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;"><span style="font-size:13px;font-weight:700;">My Animals</span><button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div><div class="sp2">`;
@@ -4844,7 +4871,7 @@ function renderMe(){
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
    </div>
-   <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()">⬆️ Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()">⬇️ Import Backup</button></div></div>
+   <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
   const pages=DB.pages().filter(p=>!p.trashed);
   html+=`<div class="card mt4"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div><div class="sg2"><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.length}</div><div class="ssub">Total Pages</div></div><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>p.locked).length}</div><div class="ssub">Cleared</div></div></div></div></div>`;
@@ -5358,7 +5385,7 @@ function openTrash(){
     document.getElementById('mc-act').innerHTML=`<button class="btn bp" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
   } else {
     let bodyHtml='<div class="sp2">';
-    trash.forEach(p=>{ const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000)); bodyHtml+=`<div class="trash-card"><div style="font-weight:700;font-size:13px;">${p.label}</div><div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div><button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')">↩ Restore</button></div>`; });
+    trash.forEach(p=>{ const daysLeft=Math.max(0,30-Math.floor((now-new Date(p.trashedAt).getTime())/86400000)); bodyHtml+=`<div class="trash-card"><div style="font-weight:700;font-size:13px;">${p.label}</div><div class="trash-days">Deletes in ${daysLeft} day${daysLeft===1?'':'s'}</div><button class="btn bs bsm" style="margin-top:8px;width:100%;" onclick="restoreFromTrash('${p.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>Restore</button></div>`; });
     bodyHtml+='</div>'; document.getElementById('mc-body').innerHTML=bodyHtml; document.getElementById('mc-act').innerHTML=`<button class="btn bs" onclick="cm('m-confirm')" style="flex:1;">Close</button>`;
   }
   om('m-confirm');
