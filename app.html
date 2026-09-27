@@ -135,7 +135,7 @@ html[data-theme="light"]{
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-resetpw, #m-graph-order { z-index: 2000 !important; }
+#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-graph-order { z-index: 2000 !important; }
 #m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
@@ -586,7 +586,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
    <button class="btn bs" style="width:100%; border-radius:12px;" onclick="addObAnimal()">+ Add This Animal</button>
   </div>
   <div class="anim-stagger d3">
-      <div class="row gap2 mb3"><button class="btn bg" style="flex:1; color:var(--text);" onclick="openCloudSyncModal('signup')">Sign Up</button><button class="btn bg" style="flex:1; color:var(--text);" onclick="openCloudSyncModal('signin')">Sign In</button></div>
+      <div class="mb3"><button class="btn bg" id="ob-google-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;color:var(--text);font-weight:700;" onclick="cloudSignInGoogle()"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</button></div>
       <button class="btn bp" id="ob-finish-btn" style="width:100%; padding:16px; font-size:16px;" onclick="finishOnboarding()">Continue as Guest ›</button>
   </div>
  </div>
@@ -691,7 +691,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <div class="moverlay" id="m-cloudsync" onclick="moi(event,'m-cloudsync')"><div class="mbox">
  <div class="mh"><span class="mt"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>Cloud Sync</span><button class="mx" onclick="cm('m-cloudsync')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
 
- <div id="cs-view-choice">
+ <div id="cs-view-google">
   <div style="text-align:center;margin:8px 0 16px;">
   <div style="width:60px;height:60px;border-radius:20px;background:var(--bg2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;">
     <svg viewBox="0 0 24 24" width="32" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent, #2f6fed);">
@@ -701,61 +701,16 @@ svg.chart{display:block;width:100%;overflow:visible;}
   </div>
   <div style="font-weight:800;font-size:16px;color:var(--fg);margin-top:6px;">Smart Milking</div>
  </div>
-  <div class="mbody mb3 tc">Sign in to sync your records across devices, or create a new account.</div>
+  <div class="mbody mb3 tc">Sign in with your Google account to sync your records across devices.</div>
   <div class="mact" style="flex-direction:column;gap:8px;">
-   <button class="btn bp" style="width:100%;" onclick="csShowView('signin')">Sign In</button>
-   <button class="btn bs" style="width:100%;" onclick="csShowView('signup')">Create Account</button>
+   <button class="btn bg" id="cs-google-btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;color:var(--text);font-weight:700;" onclick="cloudSignInGoogle()"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</button>
   </div>
- </div>
-
- <div id="cs-view-signin" style="display:none;">
-  <div style="text-align:center;margin:8px 0 16px;">
-  <div style="width:60px;height:60px;border-radius:20px;background:var(--bg2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;">
-    <svg viewBox="0 0 24 24" width="32" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent, #2f6fed);">
-      <path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/>
-      <line x1="6" y1="8" x2="18" y2="8"/>
-    </svg>
-  </div>
-  <div style="font-weight:800;font-size:16px;color:var(--fg);margin-top:6px;">Smart Milking</div>
- </div>
-  <div class="mbody mb3 tc">Sign in with your email and password.</div>
-  <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-si-email" autocomplete="email" placeholder="you@example.com"/></div>
-  <div style="margin-bottom:4px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-si-password" autocomplete="current-password" placeholder="Your password"/></div>
-  <div style="margin-top:8px;"><span id="cs-forgot-link" onclick="cloudForgotPassword()" style="font-size:12px;color:var(--accent,#2f6fed);cursor:pointer;text-decoration:underline;">Forgot password?</span></div>
-  <div id="cs-error-signin" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
-  <div class="mact"><button class="btn bg" style="flex:1;" onclick="csShowView('choice')">Back</button><button class="btn bp" style="flex:1;" onclick="cloudSignIn()">Sign In</button></div>
- </div>
-
- <div id="cs-view-signup" style="display:none;">
-  <div style="text-align:center;margin:8px 0 16px;">
-  <div style="width:60px;height:60px;border-radius:20px;background:var(--bg2);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;">
-    <svg viewBox="0 0 24 24" width="32" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent, #2f6fed);">
-      <path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/>
-      <line x1="6" y1="8" x2="18" y2="8"/>
-    </svg>
-  </div>
-  <div style="font-weight:800;font-size:16px;color:var(--fg);margin-top:6px;">Smart Milking</div>
- </div>
-  <div class="mbody mb3 tc">Creating an account uploads what's already on this device.</div>
-  <div style="margin-bottom:9px;"><label class="flabel">Email</label><input class="inp" type="email" id="cs-su-email" autocomplete="email" placeholder="you@example.com"/></div>
-  <div style="margin-bottom:9px;"><label class="flabel">Password</label><input class="inp" type="password" id="cs-su-password" autocomplete="new-password" placeholder="At least 6 characters"/></div>
-  <div style="margin-bottom:4px;"><label class="flabel">Confirm Password</label><input class="inp" type="password" id="cs-su-password2" autocomplete="new-password" placeholder="Re-enter password"/></div>
-  <div id="cs-error-signup" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
-  <div class="mact"><button class="btn bg" style="flex:1;" onclick="csShowView('choice')">Back</button><button class="btn bs" style="flex:1;" onclick="cloudSignUp()">Create Account</button></div>
+  <div id="cs-error-signin" style="color:var(--danger);font-size:12px;margin-top:10px;display:none;"></div>
+  <div style="font-size:11px;color:var(--muted);margin-top:10px;text-align:center;">No password needed — Google handles it.</div>
  </div>
 
 </div></div>
 
-<div class="moverlay" id="m-resetpw" onclick="moi(event,'m-resetpw')"><div class="mbox">
- <div class="mh"><span class="mt"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.778-7.778zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Set New Password</span><button class="mx" onclick="cm('m-resetpw')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
- <div class="mbody mb3" id="rpw-intro">Verifying your reset link…</div>
- <div id="rpw-form" style="display:none;">
-  <div style="margin-bottom:9px;"><label class="flabel">New Password</label><input class="inp" type="password" id="rpw-password" autocomplete="new-password" placeholder="At least 6 characters"/></div>
-  <div style="margin-bottom:4px;"><label class="flabel">Confirm New Password</label><input class="inp" type="password" id="rpw-password2" autocomplete="new-password" placeholder="Re-enter password"/></div>
-  <div id="rpw-error" style="color:var(--danger);font-size:12px;margin-top:6px;display:none;"></div>
-  <div class="mact"><button class="btn bp" style="width:100%;" onclick="confirmPasswordResetFlow()">Set New Password</button></div>
- </div>
-</div></div>
 
 <div class="moverlay" id="m-newpage" onclick="moi(event,'m-newpage')"><div class="mbox">
  <div class="mh"><span class="mt" id="mnp-modal-title">New Record</span><button class="mx" onclick="cm('m-newpage')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
@@ -1607,19 +1562,32 @@ function cloudSyncCardHtml(){
   return `<div class="card" id="cloud-sync-card"><div class="row gap2" style="justify-content:space-between;align-items:center;"><div><div style="font-weight:700;font-size:13px;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:6px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>Cloud Sync</div><div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:${meta[1]};display:inline-block;flex-shrink:0;"></span>${meta[0]} · ${escAttr(cloudUser.email)}</div></div><div class="row gap2"><button class="bic" style="width:30px;height:30px;font-size:13px;" title="Sync now" onclick="cloudInitialMerge()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></button><button class="btn bg bsm" onclick="cloudSignOut()">Sign Out</button></div></div></div>`;
 }
 
-function csShowView(view){
-  ['choice','signin','signup'].forEach(v => {
-    const el = document.getElementById('cs-view-' + v);
-    if (el) el.style.display = (v === view) ? '' : 'none';
-  });
+function csShowView(){
+  const el = document.getElementById('cs-view-google');
+  if (el) el.style.display = '';
   const es = document.getElementById('cs-error-signin'); if (es) es.style.display = 'none';
-  const eu = document.getElementById('cs-error-signup'); if (eu) eu.style.display = 'none';
 }
-function openCloudSyncModal(view){
-  document.getElementById('cs-si-email').value = ''; document.getElementById('cs-si-password').value = '';
-  document.getElementById('cs-su-email').value = ''; document.getElementById('cs-su-password').value = ''; document.getElementById('cs-su-password2').value = '';
-  csShowView(view === 'signin' || view === 'signup' ? view : 'choice');
+function openCloudSyncModal(){
+  csShowView();
   om('m-cloudsync');
+}
+// Google is the only sign-in method. Popup first (keeps the app state alive),
+// falling back to a full-page redirect where popups can't open — e.g. some
+// in-app browsers and installed PWAs.
+let cloudGoogleBusy = false;
+async function cloudSignInGoogle(){
+  if (cloudGoogleBusy) return;
+  const btns = ['cs-google-btn','ob-google-btn'].map(id => document.getElementById(id)).filter(Boolean);
+  const setBusy = (busy) => btns.forEach(b => { b.disabled = busy; b.style.opacity = busy ? '0.6' : ''; });
+  try { await waitForCloudSDK(); }
+  catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again.", 'signin'); }
+  cloudGoogleBusy = true; setBusy(true);
+  try {
+    const res = await window.CloudAuth.signInGoogle();
+    if (res) { cm('m-cloudsync'); showToast('Signed in with Google', true, 'light'); }
+  } catch (e) {
+    cloudShowError(cloudFriendlyError(e), 'signin');
+  } finally { cloudGoogleBusy = false; setBusy(false); }
 }
 function cloudShowError(msg, view){
   const el = document.getElementById(view === 'signup' ? 'cs-error-signup' : 'cs-error-signin');
@@ -1640,6 +1608,10 @@ function cloudFriendlyError(e){
     'auth/configuration-not-found': 'Email/Password sign-in isn\'t enabled for this project yet (Firebase Console → Authentication → Sign-in method).',
     'auth/unauthorized-domain': 'This site\'s domain isn\'t authorized yet (Firebase Console → Authentication → Settings → Authorized domains).',
     'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'The Firebase API key looks invalid — double-check firebaseConfig.',
+    'auth/popup-closed-by-user': 'Sign-in window was closed before finishing.',
+    'auth/cancelled-popup-request': 'Sign-in was cancelled.',
+    'auth/popup-blocked': 'Your browser blocked the Google sign-in window — allow popups and try again.',
+    'auth/account-exists-with-different-credential': 'That email is already linked to a different sign-in method.',
     'auth/expired-action-code': 'This reset link has expired — request a new one.',
     'auth/invalid-action-code': 'This reset link is invalid or has already been used — request a new one.'
   };
@@ -1664,104 +1636,6 @@ function waitForCloudSDK(timeoutMs = 8000){
       else if (Date.now() - start > timeoutMs) { clearInterval(iv); reject(new Error('cloud-sdk-timeout')); }
     }, 150);
   });
-}
-async function cloudSignIn(){
-  const email = document.getElementById('cs-si-email').value.trim(); const pw = document.getElementById('cs-si-password').value;
-  if (!email || !pw) return cloudShowError('Enter email and password.', 'signin');
-  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again.", 'signin'); }
-  try { await window.CloudAuth.signIn(email, pw); cm('m-cloudsync'); showToast('Signed in', true, 'light'); }
-  catch (e) { cloudShowError(cloudFriendlyError(e), 'signin'); }
-}
-async function cloudSignUp(){
-  const email = document.getElementById('cs-su-email').value.trim();
-  const pw = document.getElementById('cs-su-password').value;
-  const pw2 = document.getElementById('cs-su-password2').value;
-  if (!email || !pw || !pw2) return cloudShowError('Fill in all fields.', 'signup');
-  if (pw.length < 6) return cloudShowError('Password must be at least 6 characters.', 'signup');
-  if (pw !== pw2) return cloudShowError('Passwords do not match.', 'signup');
-  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection (or an ad-blocker/extension may be blocking gstatic.com) and try again.", 'signup'); }
-  try {
-    await window.CloudAuth.signUp(email, pw);
-    try { await window.CloudAuth.sendVerification(); } catch (e) { /* non-fatal — account still works without it */ }
-    cm('m-cloudsync');
-    showToast('Account created — check your email to verify it. Syncing your records...', true, 'light');
-  }
-  catch (e) { cloudShowError(cloudFriendlyError(e), 'signup'); }
-}
-let cloudForgotBusy = false; // true while a request is in flight OR during the post-send cooldown — blocks repeat taps either way
-async function cloudForgotPassword(){
-  if (cloudForgotBusy) return; // already sending, or still in cooldown from the last send — ignore extra taps/spam
-  const link = document.getElementById('cs-forgot-link');
-  const email = document.getElementById('cs-si-email').value.trim();
-  if (!email) return cloudShowError('Enter your email above, then tap "Forgot password?" again.', 'signin');
-  try { await waitForCloudSDK(); } catch (e) { return cloudShowError("Couldn't reach cloud services. Check your connection and try again.", 'signin'); }
-  cloudForgotBusy = true;
-  if (link) { link.style.pointerEvents = 'none'; link.style.opacity = '0.5'; link.textContent = 'Sending…'; }
-  try {
-    await window.CloudAuth.resetPassword(email);
-    showToast('Password reset email sent', true, 'light');
-    cloudForgotCooldown(link, 45);
-  }
-  catch (e) {
-    cloudShowError(cloudFriendlyError(e), 'signin');
-    cloudForgotBusy = false;
-    if (link) { link.style.pointerEvents = ''; link.style.opacity = ''; link.textContent = 'Forgot password?'; }
-  }
-}
-function cloudForgotCooldown(link, seconds){
-  if (!link) { cloudForgotBusy = false; return; }
-  let remaining = seconds;
-  const tick = () => {
-    if (remaining <= 0) { cloudForgotBusy = false; link.style.pointerEvents = ''; link.style.opacity = ''; link.textContent = 'Forgot password?'; return; }
-    link.textContent = `Email sent — resend in ${remaining}s`;
-    remaining--; setTimeout(tick, 1000);
-  };
-  tick();
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  PASSWORD RESET LANDING — Firebase's reset email, once the action URL
-//  is set to this site in the Firebase Console (Auth → Templates →
-//  Password reset → customize action URL), links straight back here with
-//  ?mode=resetPassword&oobCode=... in the query string instead of routing
-//  through Firebase's own generic hosted page. This detects that, verifies
-//  the code, and lets the person set a new password with the app's own UI.
-// ══════════════════════════════════════════════════════════════════
-let pendingResetCode = null;
-async function checkForPasswordResetLink(){
-  const params = new URLSearchParams(location.search);
-  if (params.get('mode') !== 'resetPassword' || !params.get('oobCode')) return;
-  const code = params.get('oobCode');
-  history.replaceState(null, '', location.pathname); // strip the one-time code from the visible/shareable URL right away
-  try { await waitForCloudSDK(); } catch (e) { return; }
-  om('m-resetpw');
-  try {
-    const email = await window.CloudAuth.verifyResetCode(code);
-    pendingResetCode = code;
-    document.getElementById('rpw-intro').textContent = `Setting a new password for ${email}.`;
-    document.getElementById('rpw-form').style.display = '';
-  } catch (e) {
-    document.getElementById('rpw-intro').textContent = "This reset link is invalid or has expired. Request a new one from the Sign In screen.";
-  }
-}
-async function confirmPasswordResetFlow(){
-  if (!pendingResetCode) return;
-  const pw = document.getElementById('rpw-password').value;
-  const pw2 = document.getElementById('rpw-password2').value;
-  const err = document.getElementById('rpw-error');
-  err.style.display = 'none';
-  if (pw.length < 6) { err.textContent = 'Password must be at least 6 characters.'; err.style.display = 'block'; return; }
-  if (pw !== pw2) { err.textContent = 'Passwords do not match.'; err.style.display = 'block'; return; }
-  try {
-    await window.CloudAuth.confirmReset(pendingResetCode, pw);
-    pendingResetCode = null;
-    cm('m-resetpw');
-    showToast('Password updated — sign in with your new password', true, 'light');
-    document.getElementById('cs-si-email').value = '';
-    openCloudSyncModal('signin');
-  } catch (e) {
-    err.textContent = cloudFriendlyError(e); err.style.display = 'block';
-  }
 }
 async function cloudSignOut(){
   const agreed = await appConfirm('Sign Out?', 'Cloud sync pauses until you sign in again. Your data stays safely on this device either way.');
@@ -2045,7 +1919,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.23.0-secret-config';
+const APP_VERSION = 'v1.24.0-google-signin';
 
 const today=()=>{
   const d=new Date();
@@ -3489,6 +3363,10 @@ function createPage(startDate){
 let curTab='home',curDetailId=null;
 let meView='profile', gChartType='overall', gChartFilter='category', gHorizon='30';
 let versionMarkShown = false; // reset whenever the tab/menu changes — requires a fresh hard swipe each time
+// Developer mode: hidden behind 7 taps on the version watermark. Gates
+// developer-only controls (e.g. the AI Assistant API endpoint override).
+let devMode = (function(){ try { return localStorage.getItem('mdn_dev_mode') === '1'; } catch(e){ return false; } })();
+let versionTapCount = 0, versionTapTimer = null;
 let logFilterFrom=null, logFilterTo=null, logFilterType='', logFilterSearch='';
 let logShowCount=50, logCustomOpen=false;
 const LOG_TYPE_FILTERS = [
@@ -4872,18 +4750,47 @@ function renderMe(){
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);"><div><div style="font-weight:700;font-size:13px;">Default Record Period</div></div><input class="inp" type="number" style="width:70px; padding:5px 10px;" value="${profile.periodLength || 10}" onchange="setPeriodLength(this.value)"/></div>
     <div class="row gap2" style="justify-content:space-between;align-items:center;padding:10px;background:var(--bg2);border-radius:var(--r);margin-top:8px;"><div><div style="font-weight:700;font-size:13px;">Appearance</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Theme used across the app</div></div><button type="button" class="btn bd-trigger" style="width:auto; padding:5px 10px;" onclick="openThemePicker()">${THEME_LABELS[getThemePref()]}</button></div>
    </div>
-   <div class="card mt3">
-     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant API Endpoint</div>
-     <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Custom URL for AI Chat assistant (overrides config default)</div>
-     <input class="inp" type="url" placeholder="https://..." value="${escAttr(getAiEndpoint())}" onchange="setAiEndpoint(this.value)"/>
-   </div>
-   <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Get Android App</div><button class="btn bp" style="width:100%;" onclick="downloadApk()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Smart Milking APK</button></div>
+   ${devToolsCardHtml()}
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
   const pages=DB.pages().filter(p=>!p.trashed);
   html+=`<div class="card mt4"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div><div class="sg2"><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.length}</div><div class="ssub">Total Pages</div></div><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>p.locked).length}</div><div class="ssub">Cleared</div></div></div></div></div>`;
-  html+=`<div id="app-version-mark" class="${versionMarkShown?'show':''}"><div>${APP_VERSION}</div><div>Storage: ${localStorageUsageStr()}</div></div>`;
+  html+=`<div id="app-version-mark" class="${versionMarkShown?'show':''}" onclick="bumpVersionTap()" style="cursor:pointer;"><div>${APP_VERSION}${devMode?' · DEV':''}</div><div>Storage: ${localStorageUsageStr()}</div></div>`;
   el.innerHTML=html;
+}
+// Developer-only controls, rendered in the Profile tab only once developer
+// mode is on (7 taps on the version watermark).
+function devToolsCardHtml(){
+  if (!devMode) return '';
+  return `<div class="card mt3" style="border:1px dashed var(--accent, #2f6fed);">
+     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant API Endpoint <span style="font-size:10px;color:var(--muted);font-weight:700;">DEVELOPER</span></div>
+     <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Custom URL for AI Chat assistant (overrides config default)</div>
+     <input class="inp" type="url" placeholder="https://..." value="${escAttr(getAiEndpoint())}" onchange="setAiEndpoint(this.value)"/>
+     <button class="btn bg bsm mt3" style="width:100%;" onclick="disableDevMode()">Turn off developer mode</button>
+   </div>`;
+}
+// 7 taps on the version watermark toggles developer mode on.
+function bumpVersionTap(){
+  if (devMode) return;
+  versionTapCount++;
+  if (versionTapTimer) clearTimeout(versionTapTimer);
+  versionTapTimer = setTimeout(() => { versionTapCount = 0; }, 2000);
+  const left = 7 - versionTapCount;
+  if (left <= 0) {
+    versionTapCount = 0;
+    devMode = true;
+    try { localStorage.setItem('mdn_dev_mode', '1'); } catch(e){}
+    showToast('Developer mode enabled', true, 'light');
+    versionMarkShown = true; renderMe();
+  } else if (left <= 4) {
+    showToast(`${left} more tap${left === 1 ? '' : 's'} for developer mode`, true, 'light');
+  }
+}
+function disableDevMode(){
+  devMode = false; versionTapCount = 0;
+  try { localStorage.removeItem('mdn_dev_mode'); } catch(e){}
+  showToast('Developer mode off', true, 'light');
+  renderMe();
 }
 function revealVersionMark(){
   versionMarkShown = true;
@@ -5546,7 +5453,6 @@ const updateCpBtn = bindRequiredFields('cp-btn', [['cp-amount', v => parseFloat(
 const updateNpBtn = bindRequiredFields('np-btn', [['mnp-date', v => !!v]]);
 
 initApp();
-checkForPasswordResetLink();
 
 // ══════════════════════════════════════════════════════════════════
 //  AI ASSISTANT (Graphs tab)
@@ -5717,7 +5623,7 @@ async function aiAsk(question){
   <script type="module">
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, sendEmailVerification, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
+  import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
 
   // Load Firebase configuration from external config or fallback
@@ -5740,23 +5646,28 @@ async function aiAsk(question){
   // thin wrappers on window instead of the raw SDK objects, so the main
   // script never needs its own Firestore imports.
   window.CloudAuth = {
-    signUp: (email, password) => createUserWithEmailAndPassword(auth, email, password),
-    signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
-    signOutUser: () => signOut(auth),
-    // `url` here is what Firebase's own hosted reset page links to as "Continue".
-    // For the reset email to point straight at THIS app instead of Firebase's
-    // generic page, the action URL must also be customized once in the
-    // Firebase Console (Authentication → Templates → Password reset → pencil
-    // icon → Customize action URL) — that's a one-time Console setting, not
-    // something this client-side call alone can control. It's set here, and
-    // must be set in the Console, to app.html specifically (NOT the bare
-    // /Dairy/ root) — the landing page (index.html) has no idea what an
-    // oobCode is; checkForPasswordResetLink() below only exists in this file.
-    resetPassword: (email) => sendPasswordResetEmail(auth, email, { url: 'https://imasyyyyy5.github.io/Dairy/app.html', handleCodeInApp: false }),
-    sendVerification: () => auth.currentUser ? sendEmailVerification(auth.currentUser) : Promise.resolve(),
-    verifyResetCode: (code) => verifyPasswordResetCode(auth, code),
-    confirmReset: (code, newPassword) => confirmPasswordReset(auth, code, newPassword)
+    // Google is the only sign-in method. Try a popup first; if the browser
+    // can't open one (in-app browsers, some installed PWAs), fall back to a
+    // full-page redirect — that resolves through getRedirectResult() below,
+    // so this call returns null and the caller shows no "signed in" toast.
+    signInGoogle: async () => {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      try {
+        return await signInWithPopup(auth, provider);
+      } catch (e) {
+        const code = (e && e.code) || '';
+        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+          await signInWithRedirect(auth, provider);
+          return null;
+        }
+        throw e;
+      }
+    },
+    signOutUser: () => signOut(auth)
   };
+  // Completes a redirect-based sign-in after the page comes back from Google.
+  getRedirectResult(auth).catch((e) => console.error('Google redirect sign-in failed', e));
   window.CloudDB = {
     async setDoc(pathSegs, data) { await setDoc(doc(db, ...pathSegs), data); },
     async getDoc(pathSegs) { const snap = await getDoc(doc(db, ...pathSegs)); return snap.exists() ? snap.data() : null; },
