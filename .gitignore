@@ -1,0 +1,7 @@
+# Configuration file containing sensitive API keys & credentials
+config.js
+
+# OS & Environment
+.DS_Store
+*.log
+node_modules/
