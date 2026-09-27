@@ -511,6 +511,39 @@ svg.chart{display:block;width:100%;overflow:visible;}
   .full-overlay { padding: 10px 20px; } .pc { padding: 0 15px 70px; }
 }
 </style>
+
+<!-- ══════ AI ASSISTANT (Graphs tab) ══════ -->
+<style>
+.gwrap{display:flex;flex-direction:column;height:100%;}
+.gscroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.aic{margin:0;border:none;border-radius:0;background:var(--bg1);display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+.aic-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);flex:0 0 auto;}
+.aic-t{font-weight:700;font-size:14px;color:var(--fg);}
+.aic-s{font-size:11px;color:var(--sub);margin-top:2px;}
+.aic-new{font-size:11px;color:var(--sub);background:transparent;border:1px solid var(--border);border-radius:999px;padding:5px 10px;flex:0 0 auto;}
+.aic-log{background:var(--bg);padding:12px 14px;flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;}
+.aic-b{max-width:88%;padding:9px 12px;border-radius:14px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.aic-u{align-self:flex-end;background:var(--invbg);color:var(--invfg);border-bottom-right-radius:4px;}
+.aic-a{align-self:flex-start;background:var(--bg2);color:var(--text);border-bottom-left-radius:4px;}
+.aic-err{align-self:flex-start;background:rgba(224,51,51,.12);color:var(--danger);}
+.aic-hint{font-size:12px;color:var(--sub);text-align:center;padding:10px 4px;}
+.aic-chips{display:flex;gap:8px;overflow-x:auto;padding:0 14px 10px;flex:0 0 auto;}
+.aic-chip{flex:0 0 auto;font-size:11.5px;border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:999px;padding:6px 11px;white-space:nowrap;}
+.aic-f{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);align-items:flex-end;flex:0 0 auto;}
+.aic-in{flex:1;resize:none;max-height:96px;font:inherit;font-size:14px;color:var(--text);background:transparent;border:1px solid var(--border);border-radius:14px;padding:10px 12px;outline:none;}
+.aic-send{flex:0 0 auto;width:40px;height:40px;border-radius:50%;border:none;background:var(--invbg);color:var(--invfg);font-size:16px;}
+.aic-send:disabled{opacity:.45;}
+.aic-dots span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:currentColor;opacity:.4;animation:aicb 1s infinite;}
+.aic-dots span:nth-child(2){animation-delay:.15s}.aic-dots span:nth-child(3){animation-delay:.3s}
+@keyframes aicb{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.aic-mini{flex:0 0 auto;margin:10px 15px;margin-bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:8px;padding:6px 6px 6px 16px;border:1px solid var(--border);border-radius:999px;background:var(--bg1);}
+.aic-mini-in{flex:1;min-width:0;border:none;background:transparent;outline:none;font:inherit;font-size:14px;color:var(--text);}
+.aic-mini-in::placeholder{color:var(--sub);}
+.aic-mini-send{flex:0 0 auto;width:36px;height:36px;border-radius:50%;border:none;background:var(--invbg);color:var(--invfg);font-size:15px;}
+.aic-back{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--fg);font-size:13px;line-height:1;padding:0;}
+.gview,.aic-enter{animation:aicMorph .32s cubic-bezier(.2,.8,.2,1);}
+@keyframes aicMorph{from{opacity:0;transform:translateY(10px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
+</style>
 </head>
 <body>
 <noscript>
@@ -521,7 +554,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
   <div style="font-size:50px; margin-bottom:20px;">⚠️</div>
   <h2 class="ptitle mb2" style="color:var(--danger);">App Failed to Load</h2>
   <p id="error-reason" style="color:var(--muted); font-size:14px; margin-bottom:30px;">The initialization took too long or encountered an error.</p>
-  <button class="btn bp" style="padding:15px 20px; font-size:15px; width:100%; max-width:300px;" onclick="if(confirm('Are you sure you want to reset all app data? This cannot be undone.')){ localStorage.clear(); location.reload(); }">Reset App Data & Reload</button>
+  <button class="btn bp" style="padding:15px 20px; font-size:15px; width:100%; max-width:300px;" onclick="localStorage.clear(); location.reload();">Reset App Data & Reload</button>
 </div>
 
 <div id="toast-container"></div>
@@ -1969,7 +2002,7 @@ const fmtD=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(d
 const fmtDS=d=>{if(!d)return'—';const dt=new Date(d+'T00:00:00');return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});};
 const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
 const fmtTimeOnly=ts=>{const d=new Date(ts);return isNaN(d)?'':d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});};
-const escAttr=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const escAttr=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
 // Persisted once per install/browser. Prefixing every id with this means two
 // devices creating records around the same moment (e.g. right after a
 // cloud-sync merge) can never produce a colliding id — plain Date.now()+random
@@ -1984,7 +2017,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.19.2-security-fixes';
+const APP_VERSION = 'v1.20.2-ai-chat-fullbleed';
 
 const today=()=>{
   const d=new Date();
@@ -3934,7 +3967,7 @@ function renderHomeContent(el){
   const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   let html=`
    <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
-    <div><div class="eyebrow">My Dairy</div><div class="ptitle">${escAttr(profile.name)}</div></div>
+    <div><div class="eyebrow">My Dairy</div><div class="ptitle">${profile.name}</div></div>
     <div class="row gap2">${trash.length?`<button class="btn bg bsm" onclick="openTrash()">🗑 ${trash.length}</button>`:''}<button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button></div>
    </div>
    <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
@@ -4181,9 +4214,21 @@ function updCell(pageId,rowId,colId,value,colName,colType,assignedDate,rowIndex)
   document.getElementById('table-container').innerHTML = buildCompactTable(freshPage, DB.profile(), today(), currentTableFilter);
 }
 
+let _aiPrevExpanded = false;
 function renderGraphs(){
-  const el = document.getElementById('p-graphs'); const cache = Store.get('mdn_analytics_cache');
-  if(!cache || cache.periods.length === 0) { el.innerHTML = `<div class="ph"><div class="ptitle">Graphs</div></div><div class="empty"><div class="esub">No data to display yet.</div></div>`; return; }
+  const el = document.getElementById('p-graphs');
+  const justSwitched = (aiExpanded !== _aiPrevExpanded);
+  _aiPrevExpanded = aiExpanded;
+
+  if(aiExpanded){
+    el.innerHTML = `<div class="gwrap${justSwitched?' gview':''}">${aiChatHtml(false)}</div>`;
+    aiRenderLog();
+    if(justSwitched){ const box = document.getElementById('aic-in'); if(box) box.focus(); }
+    return;
+  }
+
+  const cache = Store.get('mdn_analytics_cache');
+  if(!cache || cache.periods.length === 0) { el.innerHTML = `<div class="gwrap${justSwitched?' gview':''}"><div class="gscroll"><div class="ph"><div class="ptitle">Graphs</div></div><div class="empty"><div class="esub">No data to display yet.</div></div></div>${aiChatHtml(false)}</div>`; return; }
 
   let baseTabs = [
     {k:'profit', l:'💰 Net Profit'},
@@ -4222,7 +4267,7 @@ function renderGraphs(){
   const filterDropdown = (gChartType === 'profit' || gChartType === 'compare') ?
     `<button class="btn bd-trigger mb3 w-100" onclick="openThemedSelect('Select Source', [{value:'all', label:'All Sources'}, {value:'milkmen', label:'Milkmen Only'}, {value:'households', label:'Households Only'}], gSourceFilter, (val)=>{ setGSourceFilter(val); })">${gSourceFilter==='all'?'All Sources':gSourceFilter==='milkmen'?'Milkmen Only':'Households Only'}</button>` : '';
 
-  el.innerHTML = `<div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div>${filterDropdown}<div class="gtab-scroll mb3">${tabs.map(t=>`<button class="ppill ${gChartType===t.k?'on':''}" onclick="setGChart('${t.k}', this)">${t.l}</button>`).join('')}<button class="ppill" onclick="openGraphOrderModal()" style="border:1px dashed var(--border);background:transparent;">⚙️ Order</button></div>${showHorizon?`<div class="gh-scroll mb3">${horizons.map(h=>`<button class="ppill sm ${gHorizon===h.k?'on':''}" onclick="setGHorizon('${h.k}', this)">${h.l}</button>`).join('')}</div>`:''}<div id="graph-container" style="padding:0 15px 90px; position:relative;"></div>`;
+  el.innerHTML = `<div class="gwrap${justSwitched?' gview':''}"><div class="gscroll"><div class="ph row" style="justify-content:space-between; align-items:flex-start;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Visualizations</div></div></div>${filterDropdown}<div class="gtab-scroll mb3">${tabs.map(t=>`<button class="ppill ${gChartType===t.k?'on':''}" onclick="setGChart('${t.k}', this)">${t.l}</button>`).join('')}<button class="ppill" onclick="openGraphOrderModal()" style="border:1px dashed var(--border);background:transparent;">⚙️ Order</button></div>${showHorizon?`<div class="gh-scroll mb3">${horizons.map(h=>`<button class="ppill sm ${gHorizon===h.k?'on':''}" onclick="setGHorizon('${h.k}', this)">${h.l}</button>`).join('')}</div>`:''}<div id="graph-container" style="padding:0 15px 10px; position:relative;"></div></div>${aiChatHtml(false)}</div>`;
   drawSelectedGraph();
 }
 
@@ -4786,7 +4831,7 @@ function renderMe(){
     el.innerHTML=html; restoreFocus(); return;
   }
 
-  html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${escAttr(profile.name)}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
+  html+=`<div class="pc sp4"><div class="card"><div class="row gap3"><div style="width:50px;height:50px;border-radius:12px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🌾</div><div class="f1"><div class="row gap2"><span style="font-size:17px;font-weight:800;" id="me-name">${profile.name}</span><button class="bic" style="width:26px;height:26px;font-size:12px;" onclick="editName()">✎</button></div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Farmer</div></div></div></div>`;
   html+=cloudSyncCardHtml();
 
   html+=`<div class="card"><div class="row gap2 mb3" style="justify-content:space-between;"><span style="font-size:13px;font-weight:700;">My Animals</span><button class="btn bp bsm" onclick="openAnimalModal('new')">+ Animal</button></div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Milking animals auto-generate AM/PM columns in new records.</div><div class="sp2">`;
@@ -5460,6 +5505,164 @@ const updateNpBtn = bindRequiredFields('np-btn', [['mnp-date', v => !!v]]);
 
 initApp();
 checkForPasswordResetLink();
+
+// ══════════════════════════════════════════════════════════════════
+//  AI ASSISTANT (Graphs tab)
+//  A small chat box under the graphs that answers questions about the
+//  user's own records. The model never sees derived/cached analytics —
+//  only the PRIMARY data (profile, pages, households, payments,
+//  expenses). Everything else (totals, dues, profit, trends) is worked
+//  out by the model from those raw records, so an answer can never be
+//  stale relative to what's actually stored. Nothing is persisted: the
+//  transcript lives in memory only and starts fresh on every app open.
+// ══════════════════════════════════════════════════════════════════
+const AI_ENDPOINT = 'https://project--e3bbb5e8-f2af-49e5-bbe8-894fd50b6efe.lovable.app/api/public/dairy-chat';
+const AI_SUGGESTIONS = [
+  'How much milk this month?',
+  'Who owes me the most money?',
+  'My profit in the current period?',
+  'Which animal gives the most milk?'
+];
+let aiMessages = [];   // [{role:'user'|'assistant', content}]
+let aiBusy = false;
+let aiExpanded = false; // false = compact "Ask anything" bar under the graphs; true = the tab is taken over by the full chat
+
+function aiEsc(t){ return String(t==null?'':t).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function aiChatHtml(animate){
+  const cls = animate ? ' aic-enter' : '';
+  if(!aiExpanded){
+    return `<div class="aic-mini${cls}">
+      <input class="aic-mini-in" id="aic-mini-in" placeholder="Ask anything" onkeydown="aiMiniKey(event)" onfocus="if(aiMessages.length){ aiExpand(); }">
+      <button class="aic-mini-send" id="aic-mini-send" onclick="aiMiniSend()" aria-label="Ask">➤</button>
+    </div>`;
+  }
+  return `<div class="aic${cls}">
+    <div class="aic-h">
+      <button class="aic-back" onclick="aiCollapse()" aria-label="Back to graphs">←</button>
+      <div class="f1 mw0"><div class="aic-t">🤖 Ask about your data</div><div class="aic-s">Answers come from your own records</div></div>
+      <button class="aic-new" onclick="aiNewChat()">New chat</button>
+    </div>
+    <div class="aic-log" id="aic-log"></div>
+    ${!aiMessages.length ? `<div class="aic-chips">${AI_SUGGESTIONS.map(q=>`<button class="aic-chip" onclick="aiAsk(this.textContent)">${aiEsc(q)}</button>`).join('')}</div>` : ''}
+    <div class="aic-f">
+      <textarea class="aic-in" id="aic-in" rows="1" placeholder="Ask anything about your milk, customers or money…" oninput="aiGrow(this)" onkeydown="aiKey(event)"></textarea>
+      <button class="aic-send" id="aic-send" onclick="aiSend()">➤</button>
+    </div>
+  </div>`;
+}
+
+function aiGrow(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,96)+'px'; }
+function aiKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); aiSend(); } }
+function aiNewChat(){ aiMessages = []; aiBusy = false; aiRenderLog(); }
+
+// Compact bar under the graphs: typing a question here and hitting send/Enter
+// converts the whole Graphs tab into the full chat view (with an entrance animation).
+function aiExpand(){ if(aiExpanded) return; aiExpanded = true; renderGraphs(); }
+function aiCollapse(){ if(!aiExpanded) return; aiExpanded = false; renderGraphs(); }
+function aiMiniKey(e){ if(e.key==='Enter'){ e.preventDefault(); aiMiniSend(); } }
+function aiMiniSend(){
+  const box = document.getElementById('aic-mini-in'); if(!box) return;
+  const q = box.value.trim(); if(!q) return;
+  box.value = '';
+  aiExpanded = true;
+  renderGraphs();
+  aiAsk(q);
+}
+
+function aiRenderLog(){
+  const log = document.getElementById('aic-log'); if(!log) return;
+  if(!aiMessages.length && !aiBusy){
+    log.innerHTML = `<div class="aic-hint">Ask a question about your milk records, customers, dues or expenses.</div>`;
+    return;
+  }
+  let html = aiMessages.map(m=>`<div class="aic-b ${m.role==='user'?'aic-u':(m.error?'aic-err':'aic-a')}">${aiEsc(m.content)}</div>`).join('');
+  if(aiBusy && (!aiMessages.length || aiMessages[aiMessages.length-1].role==='user')){
+    html += `<div class="aic-b aic-a aic-dots"><span></span><span></span><span></span></div>`;
+  }
+  log.innerHTML = html;
+  log.scrollTop = log.scrollHeight;
+}
+
+// Only PRIMARY, user-entered data goes out — no analytics cache, no logs,
+// no trash. Pages are capped newest-first so a very old diary can't blow
+// up the request size; the model is told when older periods were omitted.
+function aiBuildPrimaryData(){
+  const profile = DB.profile() || {};
+  const pagesAll = (DB.pages() || []).slice();
+  const sortKey = pg => (pg && pg.rows && pg.rows.length ? (pg.rows[pg.rows.length-1].date || '') : (pg && pg.created) || '');
+  pagesAll.sort((a,b)=> sortKey(a) < sortKey(b) ? 1 : -1);
+  let budget = 160000, pages = [], omitted = 0;
+  for(const pg of pagesAll){
+    const slim = { name: pg.name, locked: !!pg.locked, cols: pg.cols, rows: pg.rows };
+    const size = JSON.stringify(slim).length;
+    if(size > budget){ omitted++; continue; }
+    budget -= size; pages.push(slim);
+  }
+  return {
+    today: (typeof today==='function' ? today() : new Date().toISOString().slice(0,10)),
+    profile: { name: profile.name, role: profile.role, periodLength: profile.periodLength, shiftTime: profile.shiftTime, animals: profile.animals || [] },
+    pages,
+    olderPeriodsOmitted: omitted,
+    households: (DB.households() || []).filter(h=>!h.deleted),
+    payments: (DB.payments() || []).filter(p=>!p.deleted),
+    expenses: (Store.get('mdn_expenses') || []).filter(e=>!e.deleted)
+  };
+}
+
+function aiSend(){
+  const box = document.getElementById('aic-in'); if(!box) return;
+  const q = box.value.trim(); if(!q) return;
+  box.value=''; box.style.height='auto';
+  aiAsk(q);
+}
+
+async function aiAsk(question){
+  if(aiBusy) return;
+  question = String(question||'').trim(); if(!question) return;
+  aiMessages.push({ role:'user', content: question });
+  aiBusy = true; aiRenderLog();
+  const sendBtn = document.getElementById('aic-send'); if(sendBtn) sendBtn.disabled = true;
+  try{
+    const res = await fetch(AI_ENDPOINT, {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({
+        messages: aiMessages.map(m=>({role:m.role, content:m.content})),
+        data: aiBuildPrimaryData()
+      })
+    });
+    if(!res.ok){
+      const txt = (await res.text()) || 'The assistant could not answer right now.';
+      aiMessages.push({ role:'assistant', content: txt.slice(0,300), error:true });
+      aiBusy=false; aiRenderLog(); return;
+    }
+    // Stream the answer in as it is written, so a longer reply still feels instant.
+    const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+    const msg = { role:'assistant', content:'' };
+    aiMessages.push(msg);
+    if(reader){
+      const dec = new TextDecoder();
+      while(true){
+        const { value, done } = await reader.read();
+        if(done) break;
+        msg.content += dec.decode(value, { stream:true });
+        aiRenderLog();
+      }
+    } else {
+      msg.content = await res.text();
+    }
+    if(!msg.content.trim()){ msg.content = 'No answer came back — please try again.'; msg.error = true; }
+  }catch(e){
+    aiMessages.push({ role:'assistant', content:'Could not reach the assistant. Check your internet connection and try again.', error:true });
+  }finally{
+    aiBusy = false;
+    const b = document.getElementById('aic-send'); if(b) b.disabled = false;
+    aiRenderLog();
+  }
+}
+
+
 </script>
   <script type="module">
   // Import the functions you need from the SDKs you need
