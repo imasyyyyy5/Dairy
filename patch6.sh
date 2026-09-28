@@ -1,0 +1,1 @@
+sed -i 's/function deleteExpense(id) {/async function deleteExpense(id) {\n    const agreed = await appConfirmDelete('\''Delete Expense?'\'', '\''Are you sure you want to delete this expense?'\''); if(!agreed) return;/g' app.html
