@@ -7,5 +7,6 @@ window.APP_CONFIG = {
     messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
     appId: "YOUR_APP_ID"
   },
-  aiEndpoint: "YOUR_AI_CHAT_ENDPOINT_URL"
+  aiEndpoint: "YOUR_AI_CHAT_ENDPOINT_URL",
+  aiKey: "YOUR_GEMINI_API_KEY"
 };

@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.1-gemini-only';
+const APP_VERSION = 'v1.25.2-gemini-config-key';
 
 const today=()=>{
   const d=new Date();
@@ -5477,8 +5477,10 @@ initApp();
 //  transcript lives in memory only and starts fresh on every app open.
 // ══════════════════════════════════════════════════════════════════
 function getAiKey(){
-  if (!devMode) return '';
-  return localStorage.getItem('mdn_custom_ai_key') || '';
+  if (devMode && localStorage.getItem('mdn_custom_ai_key')) {
+    return localStorage.getItem('mdn_custom_ai_key');
+  }
+  return (window.APP_CONFIG && window.APP_CONFIG.aiKey) || '';
 }
 function setAiKey(key){
   if (!devMode) return;
@@ -5626,8 +5628,7 @@ async function aiAsk(question){
         'gemini-3.5-flash-lite',
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
-        'gemini-2.5-pro',
-        'gemini-3.8-flash',
+        'gemini-1.5-flash',
         'gemini-flash-latest'
       ];
 
