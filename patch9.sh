@@ -1,0 +1,1 @@
+sed -i 's/appConfirm('\''Remove Shared Hisaab?'\'', '\''This only removes it from your device — it does not affect the sender\\'\''s data.'\'').then(ok=>{/appConfirmDelete('\''Remove Shared Hisaab?'\'', '\''This only removes it from your device — it does not affect the sender\\'\''s data.'\'').then(ok=>{/g' app.html

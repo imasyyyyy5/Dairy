@@ -1,0 +1,1 @@
+sed -i 's/function removeHHChange(householdId, dateStr){/async function removeHHChange(householdId, dateStr){\n  const agreed = await appConfirmDelete('\''Remove Change?'\'', '\''Are you sure you want to remove this change?'\''); if(!agreed) return;/g' app.html

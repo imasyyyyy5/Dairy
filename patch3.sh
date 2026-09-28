@@ -1,0 +1,1 @@
+sed -i 's/function submitAppConfirm(result) { cm('\''m-confirm'\''); if(confirmResolution) { confirmResolution(result); confirmResolution = null; } }/function submitAppConfirm(result) { cm('\''m-confirm'\''); if(confirmTimer){clearInterval(confirmTimer);confirmTimer=null;} if(confirmResolution) { confirmResolution(result); confirmResolution = null; } }/' app.html
