@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.2-gemini-config-key';
+const APP_VERSION = 'v1.25.3-gemini-parts-fix';
 
 const today=()=>{
   const d=new Date();
@@ -5624,10 +5624,10 @@ async function aiAsk(question){
       }
 
       const GEMINI_MODELS = [
-        'gemini-3.5-flash',
         'gemini-3.5-flash-lite',
-        'gemini-2.5-flash',
+        'gemini-3.5-flash',
         'gemini-2.5-flash-lite',
+        'gemini-2.5-flash',
         'gemini-1.5-flash',
         'gemini-flash-latest'
       ];
@@ -5646,8 +5646,11 @@ async function aiAsk(question){
           });
           const d = await res.json().catch(() => null);
           if(res.ok && d && d.candidates && d.candidates.length){
-            data = d;
-            break;
+            const pts = d.candidates[0].content && d.candidates[0].content.parts;
+            if(pts && pts.length){
+              data = d;
+              break;
+            }
           }
           if(d && d.error && d.error.message){
             lastErr = d.error.message;
@@ -5663,11 +5666,12 @@ async function aiAsk(question){
         aiBusy = false; aiRenderLog(); return;
       }
 
-      const reply = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
-      if(!reply.trim()){
+      const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+      const reply = parts.map(p => p.text || '').join('\n').trim();
+      if(!reply){
         aiMessages.push({ role:'assistant', content: 'No answer came back from Gemini — please try again.', error: true });
       } else {
-        aiMessages.push({ role:'assistant', content: reply.trim() });
+        aiMessages.push({ role:'assistant', content: reply });
       }
     } else {
       const res = await fetch(getAiEndpoint(), {
