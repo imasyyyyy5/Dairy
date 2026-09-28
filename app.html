@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.3-gemini-parts-fix';
+const APP_VERSION = 'v1.25.4-placeholder-key-fix';
 
 const today=()=>{
   const d=new Date();
@@ -5477,10 +5477,15 @@ initApp();
 //  transcript lives in memory only and starts fresh on every app open.
 // ══════════════════════════════════════════════════════════════════
 function getAiKey(){
+  let key = '';
   if (devMode && localStorage.getItem('mdn_custom_ai_key')) {
-    return localStorage.getItem('mdn_custom_ai_key');
+    key = localStorage.getItem('mdn_custom_ai_key');
+  } else {
+    key = (window.APP_CONFIG && window.APP_CONFIG.aiKey) || '';
   }
-  return (window.APP_CONFIG && window.APP_CONFIG.aiKey) || '';
+  key = String(key||'').trim();
+  if(!key || key.includes('YOUR_')) return '';
+  return key;
 }
 function setAiKey(key){
   if (!devMode) return;
