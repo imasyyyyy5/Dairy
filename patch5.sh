@@ -1,0 +1,1 @@
+sed -i 's/function removeHHException(householdId, dateStr){/async function removeHHException(householdId, dateStr){\n  const agreed = await appConfirmDelete('\''Remove Exception?'\'', '\''Are you sure you want to remove this exception?'\''); if(!agreed) return;/g' app.html

@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.4-placeholder-key-fix';
+const APP_VERSION = 'v1.25.5-confirm-delete';
 
 const today=()=>{
   const d=new Date();
@@ -2167,6 +2167,7 @@ function scheduleCoach(id, findTargetFn, text, side, delay, triesLeft){
 
 let confirmResolution = null, alertResolution = null, promptResolution = null;
 
+let confirmTimer = null;
 function appConfirm(title, body) {
   return new Promise((resolve) => {
     confirmResolution = resolve;
@@ -2175,7 +2176,30 @@ function appConfirm(title, body) {
     om('m-confirm');
   });
 }
-function submitAppConfirm(result) { cm('m-confirm'); if(confirmResolution) { confirmResolution(result); confirmResolution = null; } }
+function appConfirmDelete(title, body) {
+  return new Promise((resolve) => {
+    confirmResolution = resolve;
+    document.getElementById("mc-title").textContent = title;
+    document.getElementById("mc-body").textContent = body;
+    let timeLeft = 5;
+    const updateBtn = () => {
+      document.getElementById("mc-act").innerHTML = `<button class="btn bp" onclick="submitAppConfirm(false)">Cancel</button><button class="btn bg" disabled>Confirm (${timeLeft}s)</button>`;
+    };
+    updateBtn();
+    om("m-confirm");
+    confirmTimer = setInterval(() => {
+      timeLeft -= 1;
+      if (timeLeft <= 0) {
+        clearInterval(confirmTimer);
+        confirmTimer = null;
+        document.getElementById("mc-act").innerHTML = `<button class="btn bp" onclick="submitAppConfirm(false)">Cancel</button><button class="btn bd" onclick="submitAppConfirm(true)">Confirm</button>`;
+      } else {
+        updateBtn();
+      }
+    }, 1000);
+  });
+}
+function submitAppConfirm(result) { cm('m-confirm'); if(confirmTimer){clearInterval(confirmTimer);confirmTimer=null;} if(confirmResolution) { confirmResolution(result); confirmResolution = null; } }
 
 function appChoice(title, body, choices) {
   return new Promise((resolve) => {
@@ -2213,7 +2237,8 @@ function saveNewExpense() {
     const exps = Store.get('mdn_expenses') || [];
     exps.unshift({id: uid(), name, cost, date: dateStr}); Store.set('mdn_expenses', exps); AutoBackup.trigger(); cloudTouch('expenses', true); DB.log(`Added expense: ${name} for ₹${cost}`, 'create'); cm('m-expense'); renderCalc();
 }
-function deleteExpense(id) {
+async function deleteExpense(id) {
+    const agreed = await appConfirmDelete('Delete Expense?', 'Are you sure you want to delete this expense?'); if(!agreed) return;
     const exps = Store.get('mdn_expenses') || []; Store.set('mdn_expenses', exps.filter(e => e.id !== id)); AutoBackup.trigger(); cloudTouch('expenses', true); renderCalc();
 }
 
@@ -4845,7 +4870,7 @@ function renderSharedHisaabList(el, headerHtml=''){
 }
 
 function confirmDeleteSharedHisaab(shareId){
-  appConfirm('Remove Shared Hisaab?', 'This only removes it from your device — it does not affect the sender\'s data.').then(ok=>{
+  appConfirmDelete('Remove Shared Hisaab?', 'This only removes it from your device — it does not affect the sender\'s data.').then(ok=>{
     if(!ok) return; deleteSharedHisaab(shareId); showToast('Removed.', true, 'light'); renderMe();
   });
 }
@@ -4994,7 +5019,8 @@ function renderHHHistoryList(h){
   }).join('') + `</div>`;
 }
 
-function removeHHChange(householdId, dateStr){
+async function removeHHChange(householdId, dateStr){
+  const agreed = await appConfirmDelete('Remove Change?', 'Are you sure you want to remove this change?'); if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===householdId); if (!h || !h.changes) return;
   h.changes = h.changes.filter(c=>c.date!==dateStr);
   DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
@@ -5133,7 +5159,7 @@ function saveMilkmenPayment() {
   cm('m-milkmen-payment'); renderCalc();
 }
 async function deleteMilkmenPayment(pId) {
-  const agreed = await appConfirm('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the milkmen balance due.');
+  const agreed = await appConfirmDelete('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the milkmen balance due.');
   if(!agreed) return;
   const payments = DB.payments();
   const p = payments.find(p => p.id === pId);
@@ -5173,7 +5199,7 @@ function saveCustomerPayment() {
 }
 
 async function deleteCustomerPayment(hId, pId) {
-  const agreed = await appConfirm('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the customer\'s balance.');
+  const agreed = await appConfirmDelete('Delete Payment?', 'Are you sure you want to remove this payment record? This will increase the customer\'s balance.');
   if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===hId); if(!h) return;
   const p = h.payments.find(p => p.id === pId);
@@ -5247,7 +5273,8 @@ async function saveHHException(){
   DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
 }
 
-function removeHHException(householdId, dateStr){
+async function removeHHException(householdId, dateStr){
+  const agreed = await appConfirmDelete('Remove Exception?', 'Are you sure you want to remove this exception?'); if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===householdId);
   if (!h || !h.exceptions || !h.exceptions[dateStr]) return; delete h.exceptions[dateStr];
   DB.saveHouseholds(households); DB.log(`Removed correction for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();

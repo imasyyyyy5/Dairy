@@ -1,0 +1,1 @@
+sed -i 's/const agreed = await appConfirm('\''Delete Payment?'\'', '\''Are you sure you want to remove this payment record? This will increase the customer\\'\''s balance.'\'');/const agreed = await appConfirmDelete('\''Delete Payment?'\'', '\''Are you sure you want to remove this payment record? This will increase the customer\\'\''s balance.'\'');/g' app.html
