@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.0-gemini-key';
+const APP_VERSION = 'v1.25.1-gemini-only';
 
 const today=()=>{
   const d=new Date();
@@ -4771,11 +4771,9 @@ function renderMe(){
 function devToolsCardHtml(){
   if (!devMode) return '';
   return `<div class="card mt3" style="border:1px dashed var(--accent, #2f6fed);">
-     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant Settings <span style="font-size:10px;color:var(--muted);font-weight:700;">DEVELOPER</span></div>
-     <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Gemini API Key</div>
+     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant Key <span style="font-size:10px;color:var(--muted);font-weight:700;">DEVELOPER</span></div>
+     <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Gemini API Key</div>
      <input class="inp" type="password" placeholder="Enter Gemini API Key (e.g. AIzaSy...)" value="${escAttr(getAiKey())}" onchange="setAiKey(this.value)"/>
-     <div style="font-size:11px;color:var(--muted);margin-top:8px;margin-bottom:4px;">Custom API URL (optional)</div>
-     <input class="inp" type="url" placeholder="https://... (optional)" value="${escAttr(getAiEndpoint())}" onchange="setAiEndpoint(this.value)"/>
      <button class="btn bg bsm mt3" style="width:100%;" onclick="disableDevMode()">Turn off developer mode</button>
    </div>`;
 }
@@ -5623,19 +5621,43 @@ async function aiAsk(question){
         });
       }
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`;
-      const res = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: sysInstruction }] },
-          contents: contents
-        })
-      });
+      const GEMINI_MODELS = [
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-pro',
+        'gemini-3.8-flash',
+        'gemini-flash-latest'
+      ];
 
-      const data = await res.json().catch(() => null);
-      if(!res.ok || !data){
-        const errTxt = (data && data.error && data.error.message) || 'Gemini API request failed. Please check your API key.';
+      let data = null, lastErr = '';
+      for(const model of GEMINI_MODELS){
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+        try{
+          const res = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: sysInstruction }] },
+              contents: contents
+            })
+          });
+          const d = await res.json().catch(() => null);
+          if(res.ok && d && d.candidates && d.candidates.length){
+            data = d;
+            break;
+          }
+          if(d && d.error && d.error.message){
+            lastErr = d.error.message;
+          }
+        }catch(e){
+          lastErr = e.message || 'Network request failed';
+        }
+      }
+
+      if(!data){
+        const errTxt = lastErr || 'Gemini API request failed. Please check your API key.';
         aiMessages.push({ role:'assistant', content: errTxt, error:true });
         aiBusy = false; aiRenderLog(); return;
       }
