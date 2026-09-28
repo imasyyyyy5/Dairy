@@ -1014,7 +1014,12 @@ const AutoBackup = {
       if (!('indexedDB' in window)) return reject();
       const req = indexedDB.open('dairy-notebook-db', 1);
       req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains('backups')) req.result.createObjectStore('backups', { keyPath: 'id' }); };
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onversionchange = () => { try { db.close(); } catch(e){} };
+        resolve(db);
+      };
+      req.onerror = () => reject(req.error);
     });
   },
   async saveToIndexedDB(payloadStr) {
@@ -1023,7 +1028,9 @@ const AutoBackup = {
       await new Promise((resolve, reject) => {
         const tx = db.transaction('backups', 'readwrite');
         tx.objectStore('backups').put({ id: 'auto', data: payloadStr, savedAt: new Date().toISOString() });
-        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+        tx.oncomplete = () => { try { db.close(); } catch(e){} resolve(); };
+        tx.onerror = () => { try { db.close(); } catch(e){} reject(tx.error); };
+        tx.onabort = () => { try { db.close(); } catch(e){} reject(tx.error); };
       });
     } catch (e) { }
   }
@@ -1625,6 +1632,10 @@ function cloudFriendlyError(e){
   };
   const known = map[(e && e.code) || ''];
   if (known) return known;
+  const msg = ((e && e.message) || '').toLowerCase();
+  if (msg.includes('database') && msg.includes('closing')) {
+    return 'Database connection was busy — please try signing in again.';
+  }
   // Unrecognized error — show the raw code/message rather than a dead-end
   // generic line, so it's actually possible to diagnose from the screen.
   const detail = (e && e.code) || (e && e.message) || 'unknown error';
@@ -1927,7 +1938,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.24.1-google-signin';
+const APP_VERSION = 'v1.24.2-google-signin-idb-fix';
 
 const today=()=>{
   const d=new Date();
@@ -5665,9 +5676,17 @@ async function aiAsk(question){
         return await signInWithPopup(auth, provider);
       } catch (e) {
         const code = (e && e.code) || '';
+        const msg = ((e && e.message) || '').toLowerCase();
         if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
           await signInWithRedirect(auth, provider);
           return null;
+        }
+        if (msg.includes('database') && msg.includes('closing')) {
+          try {
+            return await signInWithPopup(auth, provider);
+          } catch (retryErr) {
+            throw retryErr;
+          }
         }
         throw e;
       }
