@@ -1927,7 +1927,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.5-confirm-delete';
+const APP_VERSION = 'v1.25.6-ai-signin-fix';
 
 const today=()=>{
   const d=new Date();
@@ -5522,9 +5522,10 @@ function setAiKey(key){
   showToast('AI Key saved');
 }
 function getAiEndpoint(){
-  if (!devMode) return (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://project--e3bbb5e8-f2af-49e5-bbe8-894fd50b6efe.lovable.app/api/public/dairy-chat';
-  return localStorage.getItem('mdn_custom_ai_endpoint') || (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://project--e3bbb5e8-f2af-49e5-bbe8-894fd50b6efe.lovable.app/api/public/dairy-chat';
+  if (!devMode) return (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://dairy-ai-proxy.amtojsidhu47.workers.dev';
+  return localStorage.getItem('mdn_custom_ai_endpoint') || (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://dairy-ai-proxy.amtojsidhu47.workers.dev';
 }
+
 function setAiEndpoint(url){
   if (!devMode) return;
   url = String(url||'').trim();
@@ -5710,7 +5711,7 @@ async function aiAsk(question){
         method:'POST',
         headers:{'content-type':'application/json'},
         body: JSON.stringify({
-          messages: aiMessages.map(m=>({role:m.role, content:m.content})),
+          messages: aiMessages.filter(m=>!m.error && m.content && m.content.trim()).map(m=>({role:m.role, content:m.content})),
           data: aiBuildPrimaryData()
         })
       });
@@ -5779,11 +5780,17 @@ async function aiAsk(question){
     signInGoogle: async () => {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
+      // Installed apps (home-screen PWA) and in-app browsers (WhatsApp,
+      // Instagram, Facebook) can't reliably open popups — go straight to redirect.
+      const ua = navigator.userAgent || '';
+      const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+      const inApp = /FBAN|FBAV|Instagram|Line\/|WhatsApp|; wv\)/i.test(ua);
+      if (standalone || inApp) { await signInWithRedirect(auth, provider); return null; }
       try {
         return await signInWithPopup(auth, provider);
       } catch (e) {
         const code = (e && e.code) || '';
-        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment' || code === 'auth/web-storage-unsupported' || code === 'auth/internal-error') {
           await signInWithRedirect(auth, provider);
           return null;
         }
@@ -5793,7 +5800,12 @@ async function aiAsk(question){
     signOutUser: () => signOut(auth)
   };
   // Completes a redirect-based sign-in after the page comes back from Google.
-  getRedirectResult(auth).catch((e) => console.error('Google redirect sign-in failed', e));
+  getRedirectResult(auth).then((r) => {
+    if (r && r.user && typeof showToast === 'function') showToast('Signed in with Google', true, 'light');
+  }).catch((e) => {
+    console.error('Google redirect sign-in failed', e);
+    try { if (typeof cloudShowError === 'function') cloudShowError(cloudFriendlyError(e), 'signin'); } catch (_) {}
+  });
   window.CloudDB = {
     async setDoc(pathSegs, data) { await setDoc(doc(db, ...pathSegs), data); },
     async getDoc(pathSegs) { const snap = await getDoc(doc(db, ...pathSegs)); return snap.exists() ? snap.data() : null; },
@@ -5807,5 +5819,7 @@ async function aiAsk(question){
     window.dispatchEvent(new CustomEvent('cloud-auth-change', { detail: user }));
   });
   </script>
+</body>
+</html></script>
 </body>
 </html>
