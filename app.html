@@ -1611,6 +1611,9 @@ function cloudFriendlyError(e){
     'auth/missing-email': 'Enter your email address first.',
     'auth/wrong-password': 'Incorrect password.',
     'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/in-app-browser': 'Google sign-in does not work inside this app\'s browser. Tap ⋮ and choose "Open in Chrome" (or Safari), then sign in.',
+    'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site and tap Sign in again.',
+    'auth/popup-closed-by-user': 'Sign-in window was closed before finishing. Please try again.',
     'auth/network-request-failed': 'Network error — check your connection.',
     'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
     'auth/configuration-not-found': 'Email/Password sign-in isn\'t enabled for this project yet (Firebase Console → Authentication → Sign-in method).',
@@ -1927,7 +1930,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.25.7-ai-signin-fix';
+const APP_VERSION = 'v1.26.0-ai-luna-signin';
 
 const today=()=>{
   const d=new Date();
@@ -4804,8 +4807,9 @@ function devToolsCardHtml(){
   if (!devMode) return '';
   return `<div class="card mt3" style="border:1px dashed var(--accent, #2f6fed);">
      <div style="font-size:13px;font-weight:700;margin-bottom:6px;">AI Assistant Key <span style="font-size:10px;color:var(--muted);font-weight:700;">DEVELOPER</span></div>
-     <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">OpenAI / Anthropic / Gemini API Key</div>
-     <input class="inp" type="password" placeholder="Enter API Key (sk-..., sk-ant-..., AIza...)" value="${escAttr(getAiKey())}" onchange="setAiKey(this.value)"/>
+     <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Paste any key (OpenAI, Claude, Gemini, Groq, OpenRouter, Grok, DeepSeek, Mistral…). Leave empty to use the built-in GPT-6 Luna.</div>
+     <input class="inp" type="password" placeholder="Paste API key" value="${escAttr(getAiKey())}" onchange="setAiKey(this.value)"/>
+     <div id="ai-key-status" style="font-size:12px;margin-top:6px;">${aiKeyStatusHtml()}</div>
      <button class="btn bg bsm mt3" style="width:100%;" onclick="disableDevMode()">Turn off developer mode</button>
    </div>`;
 }
@@ -4832,6 +4836,7 @@ function disableDevMode(){
     localStorage.removeItem('mdn_dev_mode');
     localStorage.removeItem('mdn_custom_ai_endpoint');
     localStorage.removeItem('mdn_custom_ai_key');
+    localStorage.removeItem('mdn_custom_ai_status');
   } catch(e){}
   showToast('Developer mode off', true, 'light');
   renderMe();
@@ -5526,11 +5531,12 @@ function setAiKey(key){
   key = String(key||'').trim();
   if(!key){ localStorage.removeItem('mdn_custom_ai_key'); }
   else { localStorage.setItem('mdn_custom_ai_key', key); }
-  showToast('AI Key saved');
+  showToast(key ? 'Checking key…' : 'Key removed — using GPT-6 Luna', true, 'light');
+  aiVerifyKey(key);
 }
 function getAiEndpoint(){
-  if (!devMode) return (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://dairy-ai-proxy.amtojsidhu47.workers.dev';
-  return localStorage.getItem('mdn_custom_ai_endpoint') || (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://dairy-ai-proxy.amtojsidhu47.workers.dev';
+  if (!devMode) return (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://data-whisperer-845.lovable.app/api/public/dairy-chat';
+  return localStorage.getItem('mdn_custom_ai_endpoint') || (window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || 'https://data-whisperer-845.lovable.app/api/public/dairy-chat';
 }
 
 function setAiEndpoint(url){
@@ -5540,6 +5546,118 @@ function setAiEndpoint(url){
   else { localStorage.setItem('mdn_custom_ai_endpoint', url); }
   showToast('AI Endpoint saved');
 }
+// ── Developer "bring your own key": auto-detects which AI service a key
+// belongs to, verifies it live, and talks to that service directly. ──
+const AI_PROVIDERS = {
+  anthropic:  { name:'Anthropic Claude', kind:'anthropic', base:'https://api.anthropic.com/v1', models:['claude-sonnet-4-5','claude-3-5-haiku-latest'] },
+  openrouter: { name:'OpenRouter', kind:'openai', base:'https://openrouter.ai/api/v1', models:['openai/gpt-4o-mini','google/gemini-2.5-flash','meta-llama/llama-3.3-70b-instruct'] },
+  groq:       { name:'Groq (Llama)', kind:'openai', base:'https://api.groq.com/openai/v1', models:['llama-3.3-70b-versatile','llama-3.1-8b-instant'] },
+  xai:        { name:'xAI Grok', kind:'openai', base:'https://api.x.ai/v1', models:['grok-3-mini','grok-2-latest'] },
+  perplexity: { name:'Perplexity', kind:'openai', base:'https://api.perplexity.ai', models:['sonar'], noList:true },
+  openai:     { name:'OpenAI', kind:'openai', base:'https://api.openai.com/v1', models:['gpt-4o-mini','gpt-4.1-mini'] },
+  deepseek:   { name:'DeepSeek', kind:'openai', base:'https://api.deepseek.com/v1', models:['deepseek-chat'] },
+  mistral:    { name:'Mistral', kind:'openai', base:'https://api.mistral.ai/v1', models:['mistral-small-latest'] },
+  together:   { name:'Together AI', kind:'openai', base:'https://api.together.xyz/v1', models:['meta-llama/Llama-3.3-70B-Instruct-Turbo'] },
+  gemini:     { name:'Google Gemini', kind:'gemini', base:'https://generativelanguage.googleapis.com/v1beta', models:['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-flash-latest'] }
+};
+// Most likely provider first, based on the key's shape; the rest are tried after.
+function aiProviderCandidates(key){
+  const order = [];
+  if (key.startsWith('sk-ant-')) order.push('anthropic');
+  else if (key.startsWith('sk-or-')) order.push('openrouter');
+  else if (key.startsWith('gsk_')) order.push('groq');
+  else if (key.startsWith('xai-')) order.push('xai');
+  else if (key.startsWith('pplx-')) order.push('perplexity');
+  else if (key.startsWith('AIza')) order.push('gemini');
+  else if (key.startsWith('sk-')) order.push('openai','deepseek');
+  else if (/^[a-f0-9]{64}$/i.test(key)) order.push('together');
+  else if (/^[A-Za-z0-9]{32}$/.test(key)) order.push('mistral');
+  Object.keys(AI_PROVIDERS).forEach(id => { if (!order.includes(id)) order.push(id); });
+  return order;
+}
+function aiProviderHeaders(id, key){
+  const p = AI_PROVIDERS[id];
+  if (p.kind === 'anthropic') return { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'content-type': 'application/json' };
+  if (p.kind === 'gemini') return { 'x-goog-api-key': key, 'content-type': 'application/json' };
+  return { 'authorization': 'Bearer ' + key, 'content-type': 'application/json' };
+}
+// Cheap, free check: does this service accept the key? (lists models, no tokens used)
+async function aiProbeProvider(id, key){
+  const p = AI_PROVIDERS[id];
+  if (p.noList) {
+    const r = await fetch(p.base + '/chat/completions', { method:'POST', headers: aiProviderHeaders(id, key), body: JSON.stringify({ model: p.models[0], messages:[{role:'user',content:'hi'}], max_tokens:1 }) });
+    return r.ok;
+  }
+  const r = await fetch(p.base + '/models', { headers: aiProviderHeaders(id, key) });
+  return r.ok;
+}
+async function aiDetectProvider(key){
+  const quick = aiProviderCandidates(key);
+  for (const id of quick) {
+    try { if (await aiProbeProvider(id, key)) return id; } catch(e) {}
+  }
+  return null;
+}
+function getAiKeyStatus(){
+  try { return JSON.parse(localStorage.getItem('mdn_custom_ai_status') || 'null'); } catch(e){ return null; }
+}
+function aiKeyStatusHtml(){
+  const s = getAiKeyStatus();
+  if (!getAiKey()) return '<span style="color:var(--muted);">No key — using built-in assistant (GPT-6 Luna)</span>';
+  if (!s) return '<span style="color:var(--muted);">Not checked yet</span>';
+  if (s.state === 'checking') return '<span style="color:var(--muted);">Checking key…</span>';
+  if (s.state === 'ok') return `<span style="color:#16a34a;font-weight:700;">✓ ${aiEsc(AI_PROVIDERS[s.provider] ? AI_PROVIDERS[s.provider].name : s.provider)}</span>`;
+  return '<span style="color:#dc2626;font-weight:700;">✗ Failed — key not working</span>';
+}
+function aiPaintKeyStatus(){ const el = document.getElementById('ai-key-status'); if (el) el.innerHTML = aiKeyStatusHtml(); }
+async function aiVerifyKey(key){
+  if (!key) { localStorage.removeItem('mdn_custom_ai_status'); aiPaintKeyStatus(); return null; }
+  localStorage.setItem('mdn_custom_ai_status', JSON.stringify({ state:'checking' })); aiPaintKeyStatus();
+  const provider = await aiDetectProvider(key);
+  if (getAiKey() !== key) return null; // key changed while checking
+  localStorage.setItem('mdn_custom_ai_status', JSON.stringify(provider ? { state:'ok', provider, key: key.slice(-6) } : { state:'fail', key: key.slice(-6) }));
+  aiPaintKeyStatus();
+  return provider;
+}
+// Calls one provider/model; returns the reply text or throws with a readable message.
+async function aiCallProvider(id, model, key, system, history){
+  const p = AI_PROVIDERS[id];
+  let url, body;
+  if (p.kind === 'anthropic') {
+    url = p.base + '/messages';
+    body = { model, max_tokens: 1024, system, messages: history };
+  } else if (p.kind === 'gemini') {
+    url = `${p.base}/models/${model}:generateContent`;
+    body = { system_instruction:{ parts:[{ text: system }] }, contents: history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts:[{ text: m.content }] })) };
+  } else {
+    url = p.base + '/chat/completions';
+    body = { model, messages: [{ role:'system', content: system }, ...history] };
+  }
+  const res = await fetch(url, { method:'POST', headers: aiProviderHeaders(id, key), body: JSON.stringify(body) });
+  const d = await res.json().catch(() => null);
+  if (!res.ok) { const e = new Error((d && d.error && (d.error.message || d.error)) || ('HTTP ' + res.status)); e.status = res.status; throw e; }
+  let text = '';
+  if (p.kind === 'anthropic') text = ((d && d.content) || []).map(x => x.text || '').join('\n');
+  else if (p.kind === 'gemini') text = ((d && d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts) || []).map(x => x.text || '').join('\n');
+  else text = (d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+  return String(text).trim();
+}
+async function aiDirectAsk(key, system, history){
+  let s = getAiKeyStatus();
+  let provider = (s && s.state === 'ok' && s.key === key.slice(-6)) ? s.provider : null;
+  if (!provider) provider = await aiVerifyKey(key);
+  if (!provider) throw new Error('This API key is not working with any supported AI service. Check it in Developer settings.');
+  let lastErr = null;
+  for (const model of AI_PROVIDERS[provider].models) {
+    try { const t = await aiCallProvider(provider, model, key, system, history); if (t) return t; }
+    catch(e) {
+      lastErr = e;
+      if (e.status === 401 || e.status === 403) { localStorage.removeItem('mdn_custom_ai_status'); break; }
+    }
+  }
+  throw new Error('Assistant is busy right now. Please try again in a moment.' + (lastErr && lastErr.message ? ' (' + String(lastErr.message).slice(0,120) + ')' : ''));
+}
+
 const AI_SUGGESTIONS = [
   'How much milk this month?',
   'Who owes me the most money?',
@@ -5661,151 +5779,13 @@ Expenses: ${JSON.stringify(primaryData.expenses)}${primaryData.olderPeriodsOmitt
 Note: ${primaryData.olderPeriodsOmitted} older notebook pages were omitted.` : ''}
 Be concise, direct, and helpful.`;
 
-      let data = null, lastErr = '';
-
-      if (key.startsWith('sk-ant-')) {
-        // Anthropic Claude API
-        const contents = [];
-        for(const m of aiMessages){
-          if(m.error) continue;
-          contents.push({
-            role: m.role,
-            content: m.content
-          });
-        }
-
-        try {
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'x-api-key': key,
-              'anthropic-version': '2023-06-01',
-              'anthropic-dangerous-direct-browser-access': 'true'
-            },
-            body: JSON.stringify({
-              model: 'claude-3-haiku-20240307',
-              max_tokens: 1024,
-              system: sysInstruction,
-              messages: contents
-            })
-          });
-          const d = await res.json().catch(() => null);
-          if (res.ok && d && d.content && d.content.length > 0) {
-            data = d;
-          } else if (d && d.error && d.error.message) {
-            lastErr = d.error.message;
-          } else {
-            lastErr = 'Anthropic API request failed';
-          }
-        } catch(e) {
-          lastErr = e.message || 'Network request failed';
-        }
-
-      } else if (key.startsWith('sk-')) {
-        // OpenAI API
-        const contents = [{role: 'system', content: sysInstruction}];
-        for(const m of aiMessages){
-          if(m.error) continue;
-          contents.push({
-            role: m.role,
-            content: m.content
-          });
-        }
-
-        try {
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'authorization': `Bearer ${key}`
-            },
-            body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              messages: contents
-            })
-          });
-          const d = await res.json().catch(() => null);
-          if (res.ok && d && d.choices && d.choices.length > 0) {
-            data = d;
-          } else if (d && d.error && d.error.message) {
-            lastErr = d.error.message;
-          } else {
-            lastErr = 'OpenAI API request failed';
-          }
-        } catch(e) {
-          lastErr = e.message || 'Network request failed';
-        }
-      } else {
-        // Gemini API
-        const contents = [];
-        for(const m of aiMessages){
-          if(m.error) continue;
-          contents.push({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-          });
-        }
-
-        const GEMINI_MODELS = [
-          'gemini-3.5-flash-lite',
-          'gemini-3.5-flash',
-          'gemini-2.5-flash-lite',
-          'gemini-2.5-flash',
-          'gemini-1.5-flash',
-          'gemini-flash-latest'
-        ];
-
-        for(const model of GEMINI_MODELS){
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-          try{
-            const res = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({
-                system_instruction: { parts: [{ text: sysInstruction }] },
-                contents: contents
-              })
-            });
-            const d = await res.json().catch(() => null);
-            if(res.ok && d && d.candidates && d.candidates.length){
-              const pts = d.candidates[0].content && d.candidates[0].content.parts;
-              if(pts && pts.length){
-                data = d;
-                break;
-              }
-            }
-            if(d && d.error && d.error.message){
-              lastErr = d.error.message;
-            }
-          }catch(e){
-            lastErr = e.message || 'Network request failed';
-          }
-        }
-      }
-
-      if(!data){
-        const errTxt = lastErr || 'API request failed. Please check your API key.';
-        aiMessages.push({ role:'assistant', content: errTxt, error:true });
-        aiBusy = false; aiRenderLog(); return;
-      }
-
-      let reply = '';
-      if (key.startsWith('sk-ant-')) {
-        reply = data.content.map(p => p.text || '').join('\n').trim();
-      } else if (key.startsWith('sk-')) {
-        reply = data.choices[0].message.content.trim();
-      } else {
-        const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
-        reply = parts.map(p => p.text || '').join('\n').trim();
-      }
-
-      if(!reply){
-        aiMessages.push({ role:'assistant', content: 'No answer came back — please try again.', error: true });
-      } else {
+      const history = aiMessages.filter(m=>!m.error && m.content && m.content.trim()).map(m=>({role:m.role, content:m.content}));
+      try {
+        const reply = await aiDirectAsk(key, sysInstruction, history);
         aiMessages.push({ role:'assistant', content: reply });
+      } catch(err) {
+        aiMessages.push({ role:'assistant', content: String(err.message||err), error:true });
       }
-
     } else {
       const res = await fetch(getAiEndpoint(), {
         method:'POST',
@@ -5885,12 +5865,15 @@ Be concise, direct, and helpful.`;
       const ua = navigator.userAgent || '';
       const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
       const inApp = /FBAN|FBAV|Instagram|Line\/|WhatsApp|; wv\)/i.test(ua);
-      if (standalone || inApp) { await signInWithRedirect(auth, provider); return null; }
+      // Redirect sign-in loops on github.io (browsers block the cross-site
+      // storage it needs), so popups are used everywhere they can open.
+      if (inApp) { const e = new Error('in-app'); e.code = 'auth/in-app-browser'; throw e; }
+      void standalone;
       try {
         return await signInWithPopup(auth, provider);
       } catch (e) {
         const code = (e && e.code) || '';
-        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment' || code === 'auth/web-storage-unsupported' || code === 'auth/internal-error') {
+        if (code === 'auth/operation-not-supported-in-this-environment') {
           await signInWithRedirect(auth, provider);
           return null;
         }
@@ -5919,7 +5902,5 @@ Be concise, direct, and helpful.`;
     window.dispatchEvent(new CustomEvent('cloud-auth-change', { detail: user }));
   });
   </script>
-</body>
-</html></script>
 </body>
 </html>
