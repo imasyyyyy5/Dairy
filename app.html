@@ -1930,7 +1930,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.26.0-ai-luna-signin';
+const APP_VERSION = 'v1.26.1-ai-smart';
 
 const today=()=>{
   const d=new Date();
@@ -5670,6 +5670,39 @@ let aiExpanded = false; // false = compact "Ask anything" bar under the graphs; 
 
 function aiEsc(t){ return String(t==null?'':t).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// Core instructions shared by every AI path (built-in Luna and developer keys),
+// so answers behave the same no matter which service answers.
+const AI_CORE_PROMPT = `You are the assistant inside "Smart Milking", a dairy diary app for Indian dairy farmers. You answer questions about the user's own records and guide them around the app. Everything must be derived from the raw data given to you.
+
+APP GUIDE (so you can tell the user where to tap):
+- Home tab: daily milk logging, AM/PM entries for each animal.
+- Graphs tab: charts plus this assistant.
+- Calc tab: "Ongoing Period Dashboard", "Main Dairy Ledger (Milkmen)" (Total Billed from locked periods, Ongoing not-yet-due, Total Received, Total Expenses, Milkmen Net Balance, Payment History with Add Payment), "Local Customers Ledger" (tap a customer to log a payment), "General Expenses", "Quick Calc", and Share buttons that export a hisaab PDF.
+- Profile tab: cloud sync sign-in with Google, My Animals, Settings (haptics, evening shift start time, default record period length, Appearance theme: System/Light/Dark), Share/Import Backup, activity Logs (swipe a row to undo), Shared hisaabs.
+- If asked HOW or WHERE to do something in the app, answer in one or two lines naming the tab and the exact place (light mode: Profile tab -> Settings -> Appearance).
+
+HOW MONEY IS COUNTED (must match the app exactly):
+- MILKMEN NET BALANCE (due) = revenue of LOCKED pages only − total milkmen payments received. The ongoing unlocked period is NOT yet due.
+- SETTLEMENT IS FIFO (oldest first): apply payments (oldest first) against locked periods (oldest first) to see what each payment covered and which periods remain unpaid. Name the periods a payment covers, e.g. "covers 1-10 Sep fully and part of 11-20 Sep".
+- If the user is confused why the due doesn't match recent revenue, explain the carry-forward chain: prior billed − prior paid, plus what the recent days added, equals the new due.
+- CUSTOMER dues are all-time: billed − payments received; payments settle their oldest days first ("paid up to <date>").
+- Expenses are a separate ledger; never mix them into dues.
+
+ANSWERING:
+- When asked "how", "show me" or "why", show the working as a short bullet chain with the actual numbers.
+- Formatting: put the key figure in **bold** on the first line, then short lines with "-" bullets and **bold** labels. Never use markdown tables, # headings or code blocks.
+- Amounts in ₹, milk in litres (L). Simple farmer-friendly language. Match the user's language (English, Hindi or Punjabi, including Roman script).
+- Answer only from the given data; say so plainly if it lacks the answer. Never invent names, dates or amounts.`;
+
+// Turns the model's light markdown into clean chat HTML: **bold** -> real bold,
+// "- " bullets -> "• ", everything else stays escaped plain text.
+function aiFmt(t){
+  let h = aiEsc(t);
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="font-weight:800;">$1</strong>');
+  h = h.split('\n').map(line => /^\s*[-•]\s+/.test(line) ? line.replace(/^\s*[-•]\s+/, '• ') : line).join('\n');
+  return h;
+}
+
 function aiChatHtml(animate){
   const cls = animate ? ' aic-enter' : '';
   if(!aiExpanded){
@@ -5717,7 +5750,11 @@ function aiRenderLog(){
     log.innerHTML = `<div class="aic-hint">Ask a question about your milk records, customers, dues or expenses.</div>`;
     return;
   }
-  let html = aiMessages.map(m=>`<div class="aic-b ${m.role==='user'?'aic-u':(m.error?'aic-err':'aic-a')}">${aiEsc(m.content)}</div>`).join('');
+  let html = aiMessages.map(m=>{
+    const cls = m.role==='user' ? 'aic-u' : (m.error ? 'aic-err' : 'aic-a');
+    const body = m.role==='assistant' && !m.error ? aiFmt(m.content) : aiEsc(m.content);
+    return `<div class="aic-b ${cls}">${body}</div>`;
+  }).join('');
   if(aiBusy && (!aiMessages.length || aiMessages[aiMessages.length-1].role==='user')){
     html += `<div class="aic-b aic-a aic-dots"><span></span><span></span><span></span></div>`;
   }
@@ -5735,7 +5772,7 @@ function aiBuildPrimaryData(){
   pagesAll.sort((a,b)=> sortKey(a) < sortKey(b) ? 1 : -1);
   let budget = 160000, pages = [], omitted = 0;
   for(const pg of pagesAll){
-    const slim = { name: pg.name, locked: !!pg.locked, cols: pg.cols, rows: pg.rows };
+    const slim = { name: pg.name, label: pg.label, startDate: pg.startDate, endDate: pg.endDate, locked: !!pg.locked, cols: pg.cols, rows: pg.rows };
     const size = JSON.stringify(slim).length;
     if(size > budget){ omitted++; continue; }
     budget -= size; pages.push(slim);
@@ -5769,15 +5806,12 @@ async function aiAsk(question){
   try{
     if(key){
       const primaryData = aiBuildPrimaryData();
-      const sysInstruction = `You are a helpful dairy assistant answering questions about the user's dairy records. Answers must be based strictly on the user's raw records provided below.
-Today: ${primaryData.today}
-Profile: ${JSON.stringify(primaryData.profile)}
-Pages (Milk records): ${JSON.stringify(primaryData.pages)}
-Households: ${JSON.stringify(primaryData.households)}
-Payments: ${JSON.stringify(primaryData.payments)}
-Expenses: ${JSON.stringify(primaryData.expenses)}${primaryData.olderPeriodsOmitted ? `
-Note: ${primaryData.olderPeriodsOmitted} older notebook pages were omitted.` : ''}
-Be concise, direct, and helpful.`;
+      const sysInstruction = `${AI_CORE_PROMPT}
+
+TODAY: ${primaryData.today}
+USER PRIMARY DATA (JSON):
+${JSON.stringify(primaryData)}${primaryData.olderPeriodsOmitted ? `
+Note: ${primaryData.olderPeriodsOmitted} older notebook pages were omitted.` : ''}`;
 
       const history = aiMessages.filter(m=>!m.error && m.content && m.content.trim()).map(m=>({role:m.role, content:m.content}));
       try {
