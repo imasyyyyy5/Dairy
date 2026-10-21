@@ -4584,7 +4584,7 @@ function renderCalc(){
      ${milkmenPending > 0 ? `<div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div class="f1"><div style="font-weight:700;">Ongoing (Not Yet Due)</div><div style="font-size:10px;color:var(--muted);">From unlocked period(s) — excluded above</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenPending)}</span></div>` : ''}
      <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenReceived)}</span></div>
      <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
-     <div class="payrow" style="border:1px solid var(--border2);"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h18"/></svg><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;text-align:right;flex:1;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
+     <div class="payrow" style="border:1px solid var(--border2);"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h18"/></svg><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};margin-right:8px;">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span><button class="btn bs bsm" onclick="event.stopPropagation();shareHisaabForMilkmen()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button></div>
     </div>
     <div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px; margin-top:10px;">
      <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcMilkmenPayExpand()">
@@ -4593,10 +4593,7 @@ function renderCalc(){
      </div>
      ${milkmenPayExpanded ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
       ${milkmenPaymentListHtml}
-      <div class="row gap2" style="margin-top:8px;">
-        <button class="btn bp bsm f1" style="justify-content:center;" onclick="event.stopPropagation();openMilkmenPaymentModal()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>Add Payment</button>
-        <button class="btn bs bsm f1" style="justify-content:center;" onclick="event.stopPropagation();shareHisaabForMilkmen()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share PDF</button>
-      </div>
+      <button class="btn bp bsm w-100" style="margin-top:8px;justify-content:center;" onclick="event.stopPropagation();openMilkmenPaymentModal()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>Add Payment</button>
      </div>` : ''}
     </div>
    </div>
@@ -5695,49 +5692,7 @@ ANSWERING:
 - When asked "how", "show me" or "why", show the working as a short bullet chain with the actual numbers.
 - Formatting: put the key figure in **bold** on the first line, then short lines with "-" bullets and **bold** labels. Never use markdown tables, # headings or code blocks.
 - Amounts in ₹, milk in litres (L). Simple farmer-friendly language. Match the user's language (English, Hindi or Punjabi, including Roman script).
-- Answer only from the given data; say so plainly if it lacks the answer. Never invent names, dates or amounts.
-
-APP ACTIONS (CRITICAL):
-You can trigger specific app actions when the user asks you to do something (like generating a PDF, changing theme, or turning off haptics).
-To do so, output exactly: [ACTION: functionName() | Button Label]
-You are ONLY permitted to use the following allowed functions:
-1. `viewHisaabForMilkmen()` - Generates and opens the Milkmen Ledger PDF directly in the app.
-2. `aiSetThemeMode('light')`, `aiSetThemeMode('dark')`, `aiSetThemeMode('system')` - Changes the app appearance theme.
-3. `aiSetHaptics(true)`, `aiSetHaptics(false)` - Turns haptic feedback on or off.
-4. `openSettings()` - Opens the settings menu.
-
-Example: If the user asks for the milkmen PDF, output: "Here is the PDF: [ACTION: viewHisaabForMilkmen() | Open Milkmen PDF]"
-Example: If the user asks to switch to dark mode, output: "[ACTION: aiSetThemeMode('dark') | Enable Dark Mode]"`;
-
-
-async function viewHisaabForMilkmen() {
-  const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
-  const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
-  if (!lockedPages.length && !milkmenPayments.length) return appAlert('No Entries', 'There are no locked periods or received payments to share.');
-  showToast('Preparing hisaab PDF...', true);
-  try {
-    const file = await canvasesToPdfFile(await buildHisaabPages_Milkmen(), `Hisaab_Milkmen_${today()}.pdf`, buildShareData_Milkmen());
-    const url = URL.createObjectURL(file);
-    window.open(url, '_blank');
-  } catch (e) {
-    appAlert('Error', 'Could not generate PDF.');
-  }
-}
-
-function aiSetThemeMode(mode) {
-  setThemePref(mode);
-}
-
-function aiSetHaptics(enabled) {
-  setHapticsPref(enabled);
-}
-
-function openSettings() {
-  goTab('me');
-  // settings is already visible in the 'me' tab
-  showToast('Settings opened in Profile tab.', true, 'light');
-}
-
+- Answer only from the given data; say so plainly if it lacks the answer. Never invent names, dates or amounts.`;
 
 // Turns the model's light markdown into clean chat HTML: **bold** -> real bold,
 // "- " bullets -> "• ", everything else stays escaped plain text.
@@ -5745,12 +5700,6 @@ function aiFmt(t){
   let h = aiEsc(t);
   h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="font-weight:800;">$1</strong>');
   h = h.split('\n').map(line => /^\s*[-•]\s+/.test(line) ? line.replace(/^\s*[-•]\s+/, '• ') : line).join('\n');
-  h = h.replace(/\[ACTION:\s*([^|]+?)\s*\|\s*([^\]]+?)\]/g, (match, func, label) => {
-    func = func.trim();
-    let funcDecoded = func.replace(/&#39;/g, "'").replace(/&quot;/g, '"');
-    if (!/^(viewHisaabForMilkmen\(\)|openSettings\(\)|aiSetThemeMode\('(light|dark|system)'\)|aiSetHaptics\((true|false)\))$/.test(funcDecoded)) return match;
-    return `<button class="btn bs bsm" style="margin-top:8px; display:inline-flex; align-items:center;" onclick="${aiEsc(funcDecoded)}">${label.trim()}</button>`;
-  });
   return h;
 }
 
