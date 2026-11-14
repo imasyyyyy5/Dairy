@@ -63,7 +63,7 @@
 </script>
 
 <script src="config.js"></script>
-<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<!-- pdf-lib dynamically loaded on demand -->
 <link rel="manifest" href="manifest.json"/>
 <meta name="theme-color" content="#000000"/>
 <meta name="background-color" content="#000000"/>
@@ -135,8 +135,8 @@ html[data-theme="light"]{
 #app { z-index: 10; }
 #bnav { z-index: 100; position: relative; }
 #onboarding, #quick-entry { z-index: 1000 !important; }
-#m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-graph-order { z-index: 2000 !important; }
-#m-calendar-sheet, #m-select-sheet { z-index: 3000 !important; }
+#m-hisaab-range, #m-newpage, #m-animal, #m-filter-sheet, #m-install-guide, #m-household, #m-hh-exception, #m-customer-payment, #m-milkmen-payment, #m-cloudsync, #m-shared-view, #m-expense, #m-graph-order { z-index: 2000 !important; }
+#m-calendar-sheet, #m-select-sheet, #m-wheel-sheet { z-index: 3000 !important; }
 #m-confirm, #m-prompt, #m-alert { z-index: 4000 !important; }
 #toast-container { z-index: 9998 !important; }
 #splash, #error-screen { z-index: 9999 !important; }
@@ -513,6 +513,30 @@ svg.chart{display:block;width:100%;overflow:visible;}
 }
 </style>
 
+<style>
+/* ══════ DRUM / WHEEL DATE PICKER ══════ */
+.wheel-wrap{position:relative;height:200px;margin:4px 0 10px;border-radius:var(--rl);background:var(--bg2);border:1px solid var(--border);overflow:hidden;}
+.wheel-hl{position:absolute;left:8px;right:8px;top:50%;height:44px;transform:translateY(-50%);border-radius:12px;background:var(--bg3);border:1px solid var(--border2);pointer-events:none;}
+.wheel-cols{position:relative;display:grid;grid-template-columns:.8fr 1.1fr 1fr;height:100%;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 30%,#000 70%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 30%,#000 70%,transparent 100%);}
+.wheel{height:100%;overflow-y:auto;padding:78px 0;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;text-align:center;}
+.wheel::-webkit-scrollbar{display:none;}
+.wheel-item{height:44px;line-height:44px;scroll-snap-align:center;scroll-snap-stop:always;font-size:18px;font-weight:700;color:var(--sub);cursor:pointer;-webkit-user-select:none;user-select:none;will-change:transform,opacity;}
+.wheel-item.cur{color:var(--fg);font-weight:800;}
+.wheel-readout{text-align:center;font-size:12px;font-weight:700;color:var(--sub);margin-bottom:4px;letter-spacing:.02em;}
+/* Hisaab date-range sheet */
+.hr-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px;}
+.hr-range{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;margin-bottom:10px;}
+.hr-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:9px 8px 8px;min-width:0;}
+.hr-lab{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 5px 4px;}
+.wheel-wrap.compact{height:108px;margin:0;border-radius:10px;background:var(--bg1);}
+.wheel-wrap.compact .wheel-hl{left:3px;right:3px;height:34px;border-radius:9px;}
+.wheel-wrap.compact .wheel{padding:37px 0;}
+.wheel-wrap.compact .wheel-item{height:34px;line-height:34px;font-size:14px;}
+.wheel-wrap.compact .wheel-cols{grid-template-columns:.7fr 1fr 1.05fr;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 28%,#000 72%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 28%,#000 72%,transparent 100%);}
+.hr-arrow{color:var(--muted);font-size:16px;}
+.hr-days{text-align:center;font-size:11.5px;font-weight:700;color:var(--sub);background:var(--bg2);border:1px solid var(--border);border-radius:999px;padding:5px 12px;width:fit-content;margin:0 auto 16px;}
+#hr-presets .rpill{padding:10px 6px;font-size:12.5px;}
+</style>
 <!-- ══════ AI ASSISTANT (Graphs tab) ══════ -->
 <style>
 .gwrap{display:flex;flex-direction:column;height:100%;}
@@ -720,6 +744,34 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div id="filter-sheet-options" style="display:flex; flex-direction:column; max-height:60vh; overflow-y:auto; padding-bottom:10px;"></div>
 </div></div>
 
+
+<div class="moverlay" id="m-hisaab-range" onclick="moi(event,'m-hisaab-range')"><div class="mbox">
+ <div class="mh"><span class="mt" id="hr-modal-title">Select Date Range</span><button type="button" class="mx" onclick="closeHisaabRangeModal()"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+ <div class="hr-desc" id="hr-modal-desc">Pick the period to include in the PDF. Any amount due before the start date is carried forward as Prior Due.</div>
+ <div class="hr-range">
+  <div class="hr-card"><div class="hr-lab">From</div><div id="hr-from-wheel"></div></div>
+  <div class="hr-arrow">→</div>
+  <div class="hr-card"><div class="hr-lab">To</div><div id="hr-to-wheel"></div></div>
+ </div>
+ <input type="hidden" id="hr-from"/><input type="hidden" id="hr-to"/>
+ <div class="hr-days" id="hr-days"></div>
+ <div class="slabel">Quick select</div>
+ <div class="rgrid mb3" id="hr-presets">
+  <button type="button" class="rpill" data-preset="15d" onclick="setHisaabPreset('15d')">Last 15 days</button>
+  <button type="button" class="rpill" data-preset="30d" onclick="setHisaabPreset('30d')">Last 30 days</button>
+  <button type="button" class="rpill" data-preset="month" onclick="setHisaabPreset('month')">This month</button>
+  <button type="button" class="rpill" data-preset="prev_month" onclick="setHisaabPreset('prev_month')">Last month</button>
+ </div>
+ <div class="mact"><button type="button" class="btn bp" onclick="submitHisaabRangeModal()">Generate PDF</button></div>
+</div></div>
+
+<div class="moverlay" id="m-wheel-sheet" onclick="moi(event,'m-wheel-sheet')"><div class="mbox">
+ <div class="mh"><span class="mt">Select Date</span><button type="button" class="mx" onclick="cm('m-wheel-sheet')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+ <div class="wheel-readout" id="wh-readout"></div>
+ <div id="wh-mount"></div>
+ <div class="mact"><button type="button" class="btn bs" onclick="wheelSheet.today()">Today</button><button type="button" class="btn bp" onclick="wheelConfirm()">Done</button></div>
+</div></div>
+
 <div class="moverlay" id="m-calendar-sheet" onclick="moi(event,'m-calendar-sheet')"><div class="mbox">
  <div class="mh">
    <span class="mt" id="cal-month-title">Select Date</span>
@@ -897,13 +949,40 @@ svg.chart{display:block;width:100%;overflow:visible;}
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => { console.warn('Service worker registration failed:', err); }); });
 }
+// Ask the browser to treat this app's data as permanent so Android won't wipe it when phone storage runs low.
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 
 // ══════════════════════════════════════════════════════════════════
 //  REPOSITORY PATTERN & OPFS BACKUP
 // ══════════════════════════════════════════════════════════════════
 const Store={
-  get(k){try{const r=localStorage.getItem(k);return r?JSON.parse(r):null;}catch(e){return null;}},
-  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}},
+  _cache: {},
+  get(k){
+    if(this._cache[k] !== undefined){
+      try{ return (typeof structuredClone === 'function') ? structuredClone(this._cache[k]) : JSON.parse(JSON.stringify(this._cache[k])); }catch(e){ return this._cache[k]; }
+    }
+    try{
+      const r=localStorage.getItem(k);
+      const val = r ? JSON.parse(r) : null;
+      if(val !== null) this._cache[k] = val;
+      return val ? ((typeof structuredClone === 'function') ? structuredClone(val) : JSON.parse(r)) : null;
+    }catch(e){ return null; }
+  },
+  set(k,v){
+    try{
+      this._cache[k] = (typeof structuredClone === 'function') ? structuredClone(v) : JSON.parse(JSON.stringify(v));
+      localStorage.setItem(k,JSON.stringify(v));
+      return true;
+    }catch(e){ return false; }
+  },
+  remove(k){
+    delete this._cache[k];
+    try{ localStorage.removeItem(k); }catch(e){}
+  },
+  invalidate(k){
+    if(k) delete this._cache[k];
+    else this._cache = {};
+  }
 };
 
 // Dev-only diagnostic (surfaced next to the hidden version mark — see
@@ -1077,6 +1156,14 @@ const AutoBackup = {
   }
 };
 
+// Activity log limits: keep the newest LOG_CAP entries; only the newest LOG_UNDO_KEEP keep their undo details (the bulky part).
+const LOG_CAP = 500, LOG_UNDO_KEEP = 200;
+function trimLogs(l){
+  if (l.length > LOG_CAP) l.length = LOG_CAP;
+  for (let i = LOG_UNDO_KEEP; i < l.length; i++) { if (l[i] && l[i].undoOp) delete l[i].undoOp; }
+  return l;
+}
+
 const DB={
   profile:()=>Store.get('mdn_profile')||{name:'My Dairy',role:'farmer',animals:[], onboarded:false, shiftTime:15, periodLength:10, hapticsEnabled:true},
   // Every save* returns the AutoBackup promise (local write is already
@@ -1098,7 +1185,7 @@ const DB={
   // actually surfaces as a rejected promise instead of silently pretending
   // the save happened — this is what lets Quick Entry refuse to show the
   // ✅ screen when the write genuinely didn't land.
-  savePages:(p,opts)=>{ if(!Store.set('mdn_pages',p)) return Promise.reject(new Error('local storage write failed')); AnalyticsEngine.build(); cloudTouch('pages', opts&&opts.immediate); return AutoBackup.trigger(); },
+  savePages:(p,opts)=>{ if(!Store.set('mdn_pages',p)) return Promise.reject(new Error('local storage write failed')); AnalyticsEngine.markDirty(); cloudTouch('pages', opts&&opts.immediate); return AutoBackup.trigger(); },
   payments:()=>Store.get('mdn_payments')||[],
   savePayments:(p,opts)=>{ if(!Store.set('mdn_payments',p)) return Promise.reject(new Error('local storage write failed')); cloudTouch('payments', opts&&opts.immediate); return AutoBackup.trigger(); },
   trash:()=>Store.get('mdn_trash')||[],
@@ -1133,7 +1220,9 @@ const DB={
   logs:()=>{
     const rawLogs = Store.get('mdn_logs')||[];
     const cleanLogs = rawLogs.filter(l => l && l.text && l.text !== 'undefined' && l.text.trim() !== '');
-    if (cleanLogs.length !== rawLogs.length) Store.set('mdn_logs', cleanLogs); 
+    const tooLong = cleanLogs.length > LOG_CAP;
+    if (tooLong) trimLogs(cleanLogs);
+    if (tooLong || cleanLogs.length !== rawLogs.length) Store.set('mdn_logs', cleanLogs); 
     return cleanLogs;
   },
   // Logs are local-first, append-only history — see mergeLogs above. A sync
@@ -1145,7 +1234,7 @@ const DB={
     const entry = {id:'l'+Date.now()+Math.random().toString(36).slice(2), text, type, ts:new Date().toISOString()};
     if(undoOp) entry.undoOp = undoOp;
     l.unshift(entry);
-    if(l.length>3000)l.splice(3000); Store.set('mdn_logs',l); cloudTouch('logs'); AutoBackup.trigger();
+    trimLogs(l); Store.set('mdn_logs',l); cloudTouch('logs'); AutoBackup.trigger();
     // Covers most save-confirmation haptics for free, keyed off the log type
     // almost every meaningful action already passes in. A call site can
     // still override the tier (e.g. Quick Entry's save is `light`, lighter
@@ -1333,7 +1422,7 @@ function mergeLogs(localLogs, remoteLogs){
   (localLogs||[]).forEach(l=>{ if(l && l.id!=null && !seen.has(l.id)){ seen.add(l.id); merged.push(l); } });
   (remoteLogs||[]).forEach(l=>{ if(l && l.id!=null && !seen.has(l.id)){ seen.add(l.id); merged.push(l); } });
   merged.sort((a,b)=> new Date(b.ts||0) - new Date(a.ts||0));
-  if(merged.length>3000) merged.length=3000;
+  trimLogs(merged);
   return merged;
 }
 
@@ -1510,7 +1599,7 @@ async function cloudInitialMerge(){
         }
       });
       await Promise.all(pushes);
-      if (pulledAny) { applyTheme(getThemePref()); AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe(); showToast('Synced from cloud', true, 'light'); }
+      if (pulledAny) { applyTheme(getThemePref()); AnalyticsEngine.build(); if (isSensitiveEditingOpen()) { cloudDeferredRefresh = true; } else { refreshTabs(); showToast('Synced from cloud', true, 'light'); } }
       cloudSyncStatus = 'synced';
       cloudSetLastUid(cloudUser.uid);
       maybeSkipOnboardingAfterSync();
@@ -1549,7 +1638,7 @@ let cloudDeferredRefresh = false;
 function flushDeferredCloudRefresh(){
   if (!cloudDeferredRefresh || isSensitiveEditingOpen()) return;
   cloudDeferredRefresh = false;
-  AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe();
+  AnalyticsEngine.build(); refreshTabs();
   showToast('Updated from another device', true, 'light');
 }
 
@@ -1592,7 +1681,7 @@ function attachCloudListeners(){
       if (changedFromRemote) cloudPushOne(key); // remote/other devices are missing what we just merged in — let them catch up
       if (!changedFromLocal) return; // nothing actually changed on this device — no need to re-render or notify
       if (isSensitiveEditingOpen()) { cloudDeferredRefresh = true; return; }
-      AnalyticsEngine.build(); renderHome(); renderGraphs(); renderCalc(); renderMe();
+      AnalyticsEngine.build(); refreshTabs();
       showToast('Updated from another device', true, 'light');
     });
     cloudListeners.push(unsub);
@@ -1903,7 +1992,7 @@ function toggleLogUndo(id){
     Store.set('mdn_logs', freshLogs);
     Haptics.fire('medium');
     showToast(goingToUndo ? 'Action undone.' : 'Action redone.');
-    renderHome(); renderGraphs(); renderCalc(); renderMe();
+    refreshTabs();
   });
 }
 
@@ -1932,7 +2021,10 @@ function generateLivestockColor(key) {
 }
 
 const AnalyticsEngine = {
+  _dirty: false,
+  markDirty(){ this._dirty = true; },
   build: function() {
+    this._dirty = false;
      const pages = Store.get('mdn_pages') || [];
      const pAnimals = (Store.get('mdn_profile') || {}).animals || [];
      let cache = { daily: {}, periods: [], allTime: { milk:0, rev:0, byCategory: {}, byName: {} }, animalNames: [] };
@@ -2007,7 +2099,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.29.0-signin-prompt';
+const APP_VERSION = 'v1.32.0-wheel-date-picker';
 
 const today=()=>{
   const d=new Date();
@@ -2281,11 +2373,11 @@ function appConfirmDelete(title, body) {
 }
 function submitAppConfirm(result) { cm('m-confirm'); if(confirmTimer){clearInterval(confirmTimer);confirmTimer=null;} if(confirmResolution) { confirmResolution(result); confirmResolution = null; } }
 
-function appChoice(title, body, choices) {
+function appChoice(title, body, choices, opts) {
   return new Promise((resolve) => {
     confirmResolution = resolve;
     document.getElementById('mc-title').textContent = title; document.getElementById('mc-body').textContent = body;
-    document.getElementById('mc-act').innerHTML = choices.map((c, i) => `<button class="btn ${i === choices.length - 1 ? 'bd' : 'bs'}" onclick="submitAppConfirm('${c.value}')">${c.label}</button>`).join('');
+    document.getElementById('mc-act').innerHTML = choices.map((c, i) => `<button class="btn ${opts && opts.neutral ? (i === 0 ? 'bp' : 'bs') : (i === choices.length - 1 ? 'bd' : 'bs')}" onclick="submitAppConfirm('${c.value}')">${c.label}</button>`).join('');
     om('m-confirm');
   });
 }
@@ -2325,6 +2417,7 @@ async function deleteExpense(id) {
 async function shareBackup() {
     showToast("Preparing secure document... Please wait.", true);
     try {
+        await loadPdfLib();
         const payloadStr = await buildBackupPayload(true);
         if (typeof PDFLib === 'undefined') return appAlert("Error", "PDF library is not loaded.");
         const { PDFDocument, StandardFonts, rgb } = PDFLib;
@@ -2461,6 +2554,7 @@ let calendarOnSelectCallback = null;
 let calMultiMode = false; let calSelectedDates = new Set(); let calDragging = false; let calDragAnchor = null; let calEdgeNavTimer = null; let calDrawScheduled = false;
 
 function openThemedCalendar(targetHiddenInputId, minDate = null, onSelect = null, multi = false) {
+  if (!multi) { openWheelDatePicker(targetHiddenInputId, minDate, onSelect); return; } // single dates use the drum picker; multi-select keeps the calendar grid
   activeCalendarTargetInputId = targetHiddenInputId; activeCalendarMinDate = minDate; calendarOnSelectCallback = onSelect;
   calMultiMode = !!multi; calSelectedDates = new Set();
   const currentVal = document.getElementById(targetHiddenInputId).value || minDate || today();
@@ -2558,6 +2652,118 @@ function openThemedSelect(title, options, currentValue, onPick){
 function pickThemedSelect(value){
   cm('m-select-sheet');
   if (themedSelectOnPick) { const cb = themedSelectOnPick; themedSelectOnPick = null; cb(value); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  DRUM / WHEEL DATE PICKER (iOS style) — three snapping columns: day, month, year.
+//  createWheel() builds an instance inside any container (the standalone sheet and the
+//  Hisaab range popup both use it). Multi-date selection keeps the calendar grid.
+// ══════════════════════════════════════════════════════════════════
+const WHEEL_ITEM_H = 44;
+const WHEEL_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function createWheel(mount, onChange, compact){
+  const IH = compact ? 34 : 44;
+  mount.innerHTML = '<div class="wheel-wrap' + (compact ? ' compact' : '') + '"><div class="wheel-hl"></div><div class="wheel-cols"><div class="wheel"></div><div class="wheel"></div><div class="wheel"></div></div></div>';
+  const [dEl, mEl, yEl] = mount.querySelectorAll('.wheel');
+  const user = {d:false,m:false,y:false};
+  const st = { y:2000, m:1, d:1, minDate:null, minYear:2000, timers:{} };
+  const iso = () => `${st.y}-${String(st.m).padStart(2,'0')}-${String(st.d).padStart(2,'0')}`;
+  const fill = (el, labels) => { el.innerHTML = labels.map((l,i)=>`<div class="wheel-item" data-i="${i}">${l}</div>`).join(''); };
+  const idx = el => Math.max(0, Math.min(el.children.length - 1, Math.round(el.scrollTop / IH)));
+  const go = (el, i, smooth) => el.scrollTo({ top: i * IH, behavior: smooth ? 'smooth' : 'auto' });
+  // Fades/shrinks items by distance from the centre line so the drum looks curved.
+  const paint = el => {
+    const c = el.scrollTop / IH;
+    for (let i = 0; i < el.children.length; i++) {
+      const it = el.children[i], d = Math.abs(i - c);
+      if (d > 3.2) { it.style.opacity = '0'; continue; }
+      it.style.opacity = String(Math.max(0.15, 1 - d * 0.33));
+      it.style.transform = `scale(${Math.max(0.78, 1 - d * 0.08)})`;
+      it.classList.toggle("cur", d < 0.5);
+    }
+  };
+  const dim = () => new Date(st.y, st.m, 0).getDate();
+  const buildDays = () => {
+    const n = dim(); if (st.d > n) st.d = n;
+    if (dEl.children.length !== n) fill(dEl, Array.from({length:n}, (_,i)=>String(i+1)));
+    go(dEl, st.d - 1, false); paint(dEl);
+  };
+  const readScroll = () => { st.m = idx(mEl) + 1; st.y = st.minYear + idx(yEl); st.d = Math.min(idx(dEl) + 1, dim()); };
+  const clampMin = () => {
+    if (!st.minDate || iso() >= st.minDate) return false;
+    const [y,m,d] = st.minDate.split('-').map(Number); st.y = y; st.m = m; st.d = d; return true;
+  };
+  const applyAll = smooth => { buildDays(); go(mEl, st.m - 1, smooth); go(yEl, st.y - st.minYear, smooth); go(dEl, st.d - 1, smooth); };
+  const settle = key => {
+    if (!user[key]) return; user[key] = false; // ignore scrolls we triggered ourselves
+    readScroll(); if (key !== 'd') buildDays();
+    if (clampMin()) applyAll(true);
+    if (onChange) onChange(iso());
+  };
+  const api = {
+    iso,
+    // Load a date (and optional minimum) without firing onChange.
+    set(val, minDate, floorDate){
+      user.d = user.m = user.y = false;
+      const ty = parseInt(today().slice(0,4), 10);
+      if (minDate && val < minDate) val = minDate;
+      const [y,m,d] = val.split('-').map(Number);
+      st.minDate = minDate || null; st.y = y; st.m = m; st.d = d;
+      const fl = floorDate || minDate; st.minYear = Math.min(fl ? parseInt(fl.slice(0,4), 10) : ty - 6, y);
+      const maxYear = Math.max(ty + 3, y);
+      fill(mEl, WHEEL_MONTHS);
+      fill(yEl, Array.from({length: maxYear - st.minYear + 1}, (_,i)=>String(st.minYear + i)));
+      fill(dEl, Array.from({length: dim()}, (_,i)=>String(i+1)));
+      applyAll(false); [dEl, mEl, yEl].forEach(paint);
+    },
+    today(){
+      const [y,m,d] = today().split('-').map(Number);
+      if (y < st.minYear || y > st.minYear + yEl.children.length - 1) return;
+      st.y = y; st.m = m; st.d = d; clampMin(); Haptics.fire('tick'); applyAll(true);
+      if (onChange) onChange(iso());
+    },
+    setMin(m){ st.minDate = m || null; },
+    // Read what is currently centred (also cancels pending settle timers).
+    read(){ Object.values(st.timers).forEach(clearTimeout); readScroll(); clampMin(); return iso(); }
+  };
+  [['d',dEl],['m',mEl],['y',yEl]].forEach(([k, el]) => {
+    let raf = 0, ut = 0;
+    const mark = () => { user[k] = true; clearTimeout(ut); ut = setTimeout(() => { user[k] = false; }, 2500); };
+    ['touchstart','pointerdown','wheel','click'].forEach(ev => el.addEventListener(ev, mark, {passive:true}));
+    el.addEventListener('scroll', () => {
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; paint(el); const i = idx(el); if (i !== el._li) { el._li = i; Haptics.fire('tick'); } });
+      clearTimeout(st.timers[k]); st.timers[k] = setTimeout(() => settle(k), 120);
+    }, {passive:true});
+    el.addEventListener('click', e => { const it = e.target.closest('.wheel-item'); if (it) go(el, parseInt(it.dataset.i, 10), true); });
+  });
+  return api;
+}
+
+// Standalone sheet (every single-date field except the Hisaab range, which embeds its own wheel)
+const wheelSheetState = { targetId:null, cb:null };
+let wheelSheet = null;
+function wheelSheetReadout(){
+  const r = document.getElementById('wh-readout'); if (!r || !wheelSheet) return;
+  const dt = new Date(wheelSheet.iso() + 'T00:00:00');
+  r.textContent = dt.toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+}
+function openWheelDatePicker(targetId, minDate, onSelect){
+  if (!wheelSheet) wheelSheet = createWheel(document.getElementById('wh-mount'), wheelSheetReadout);
+  const inp = document.getElementById(targetId);
+  let val = (inp && inp.value) || today(); if (minDate && val < minDate) val = minDate;
+  Object.assign(wheelSheetState, { targetId, cb: onSelect || null });
+  om('m-wheel-sheet');
+  requestAnimationFrame(() => { wheelSheet.set(val, minDate || null); wheelSheetReadout(); });
+}
+function wheelConfirm(){
+  const iso = wheelSheet.read();
+  const inp = document.getElementById(wheelSheetState.targetId);
+  if (inp) { inp.value = iso; inp.dispatchEvent(new Event('input', {bubbles:true})); }
+  const trig = document.getElementById(wheelSheetState.targetId + '-trigger'); if (trig) trig.textContent = fmtD(iso);
+  window.calendarOnCancelCallback = null;
+  const cb = wheelSheetState.cb; wheelSheetState.cb = null;
+  cm('m-wheel-sheet');
+  if (cb) cb(iso);
 }
 
 (function setupCalendarDrag(){
@@ -2829,18 +3035,32 @@ function householdStatusLabel(h, stats = null){
 // ══════════════════════════════════════════════════════════════════
 //  HISAAB SHARE — Indian-notebook-style ledger images for milkmen & customers
 // ══════════════════════════════════════════════════════════════════
-const HISAAB_ROWS_PER_PAGE = 28;
 
 // Full day-one-to-stopped ledger for a household (not limited to a single period page)
-function householdFullLedger(h, customEndDate){
-  const out = []; const end = customEndDate || ((h.stopped && h.stopDate) ? h.stopDate : today());
-  let d = h.startDate; if(!d || d > end) return out; let guard = 0;
+function householdFullLedger(h, customEndDate, customStartDate = null){
+  const out = [];
+  const start = customStartDate || h.startDate;
+  const end = customEndDate || ((h.stopped && h.stopDate) ? h.stopDate : today());
+  let d = start; if(!d || d > end) return out; let guard = 0;
   while(d <= end && guard < 3660){
     const e = getHouseholdDayEntry(h, d);
     if((e.qty||0) > 0) out.push({date: d, qty: e.qty||0, rate: e.rate||0, amount: parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2)), isException: e.isException});
     d = addDays(d,1); guard++;
   }
   return out;
+}
+
+function getHouseholdPriorDue(h, startDate){
+  if(!startDate || startDate <= h.startDate) return 0;
+  let priorBilled = 0; let d = h.startDate; let guard = 0;
+  const endPrior = addDays(startDate, -1);
+  while(d <= endPrior && guard < 3660){
+    const e = getHouseholdDayEntry(h, d);
+    if((e.qty||0) > 0) priorBilled += parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2));
+    d = addDays(d, 1); guard++;
+  }
+  const priorPaid = (h.payments||[]).filter(p=>!p.deleted && p.date < startDate).reduce((s,p)=> s + (parseFloat(p.amount)||0), 0);
+  return parseFloat((priorBilled - priorPaid).toFixed(2));
 }
 
 // Resolves the ₹/L rate that applies to one animal's column on one row,
@@ -2885,230 +3105,214 @@ function pageDailyLedger(page){
   }).filter(r=>r.qty>0 || r.amount>0);
 }
 
-// Builds the plain-data snapshot embedded (as hidden JSON) inside a shared
-// hisaab PDF for a single record-period page. Deliberately a flat, simple
-// {headers, rows} shape — independent of the live column/animal config —
-// so a *different* device/app-install can render it read-only with zero
-// knowledge of the sender's animals, rates, etc.
-function buildShareData_Page(page){
-  const ledger = pageDailyLedger(page); const t = pageSummary(page);
-  const rows = ledger.map(r=>[fmtD(r.date), r.am ? (r.am+' L') : '—', r.pm ? (r.pm+' L') : '—', fmt(r.qty)+' L', '₹'+fmt(r.amount)]);
-  return {
-    kind: 'period',
-    title: `Record Period: ${page.label}`,
-    subtitle: `${fmtD(page.startDate)} – ${fmtD(page.endDate)}`,
-    headers: ['Date','AM','PM','Total Milk','Amount'],
-    rows,
-    totals: [{label:'Total Milk', value: fmt(t.milk)+' L'}, {label:'Total Amount', value: '₹'+fmt(t.rev)}]
-  };
+// Draws a clean, simple, and professional PDF ledger statement:
+// crisp white background, clear typography, structured column headers,
+// subtle row dividing lines, distinct green payments, clear totals & watermarks.
+const NB_FF = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+// Sets the font at `size`, shrinking (down to minSize) so `text` fits in maxW — keeps long names/amounts inside the PDF page.
+function nbFitFont(ctx, weight, size, text, maxW, minSize){
+  let sz = size; ctx.font = `${weight} ${sz}px ${NB_FF}`;
+  const w = ctx.measureText(String(text)).width;
+  if (w > maxW) { sz = Math.max(minSize, Math.floor(size * maxW / w * 10) / 10); ctx.font = `${weight} ${sz}px ${NB_FF}`; }
+  return sz;
 }
-
-// Same idea as buildShareData_Page but for a household/customer's full
-// ledger, including any payments received against it.
-function buildShareData_Milkmen(){
-  const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
-  const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
-
-  let ledger = [];
-  lockedPages.forEach(p => {
-    const rev = pageSummary(p).rev;
-    ledger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0 });
-  });
-  milkmenPayments.forEach(p => {
-    ledger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: parseFloat(p.amount) || 0 });
-  });
-
-  ledger.sort((a, b) => a.date.localeCompare(b.date));
-
-  let runningBalance = 0;
-  const rows = ledger.map(r => {
-    runningBalance += r.billed - r.paid;
-    return [
-      fmtDS(r.date),
-      truncateHisaabText(r.desc, 30),
-      r.billed ? '₹' + fmt(r.billed) : '—',
-      r.paid ? '₹' + fmt(r.paid) : '—',
-      runningBalance === 0 ? 'Settled' : (runningBalance > 0 ? '₹' + fmt(runningBalance) + ' due' : 'Overpaid ₹' + fmt(-runningBalance))
-    ];
-  });
-
-  let totalBilled = 0, totalPaid = 0;
-  ledger.forEach(r => { totalBilled += r.billed; totalPaid += r.paid; });
-  const finalBalance = totalBilled - totalPaid;
-
-  return {
-    kind: 'milkmen',
-    title: `Main Dairy Ledger (Milkmen)`,
-    subtitle: `As of ${fmtD(today())}`,
-    headers: ['Date', 'Description', 'Billed ₹', 'Paid ₹', 'Balance ₹'],
-    rows,
-    totals: [
-      {label: 'Total Billed', value: '₹' + fmt(totalBilled)},
-      {label: 'Total Paid', value: '₹' + fmt(totalPaid)},
-      {label: 'Net Balance', value: finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : finalBalance < 0 ? 'Overpaid ₹' + fmt(-finalBalance) : 'Settled'}
-    ]
-  };
+function nbTrunc(ctx, text, maxW){
+  text = String(text);
+  if (ctx.measureText(text).width <= maxW) return text;
+  while (text.length > 1 && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+  return text + '…';
 }
-
-function buildShareData_Household(h, customEndDate){
-  const ledger = householdFullLedger(h, customEndDate);
-  const rows = ledger.map(r=>[fmtD(r.date), fmt(r.qty)+' L', '₹'+fmt(r.rate)+'/L', '₹'+fmt(r.amount)]);
-  const totalQty = ledger.reduce((s,r)=>s+r.qty,0); const totalAmt = ledger.reduce((s,r)=>s+r.amount,0);
-  const filteredPayments = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate));
-  const paid = filteredPayments.reduce((s,p)=>s+(p.amount||0),0);
-  const paymentRows = filteredPayments.map(p=>[fmtD(p.date), '₹'+fmt(p.amount), p.note||'—']);
-  return {
-    kind: 'household',
-    title: h.name,
-    subtitle: `${fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}`,
-    headers: ['Date','Milk','Rate','Amount'],
-    rows,
-    totals: [{label:'Total Milk', value: fmt(totalQty)+' L'}, {label:'Total Billed', value:'₹'+fmt(totalAmt)}, {label:'Total Paid', value:'₹'+fmt(paid)}, {label:'Outstanding', value:'₹'+fmt(totalAmt-paid)}],
-    paymentHeaders: ['Date','Amount','Note'],
-    paymentRows
-  };
+function nbColMaxW(cols, i, leftMargin, rightEdge){
+  const c = cols[i], n = cols[i+1], p = cols[i-1];
+  if ((c.align || 'left') === 'right') { const lb = p ? (p.align === 'right' ? p.x + 12 : p.x + 60) : leftMargin; return Math.max(40, c.x - lb); }
+  const rb = n ? (n.align === 'right' ? n.x - 70 : n.x - 12) : rightEdge; return Math.max(40, rb - c.x);
 }
-
-function chunkArr(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
-function truncateHisaabText(t, n){ t = t || '—'; return t.length > n ? t.slice(0, n-1) + '…' : t; }
-
-// Loads icon-192.png (sits next to index.html in the repo root) once and
-// caches the result so every notebook page reuses the same Image instead of
-// re-fetching. Resolves to null on failure so callers can fall back gracefully
-// (e.g. offline, or the file getting moved/renamed).
-let _dairyWatermarkIconPromise = null;
-function loadDairyWatermarkIcon(){
-  if(!_dairyWatermarkIconPromise){
-    _dairyWatermarkIconPromise = new Promise(resolve=>{
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => resolve(null);
-      img.src = 'icon-192.png';
-    });
-  }
-  return _dairyWatermarkIconPromise;
-}
-
-// Draws a single Indian-notebook-page-style ledger sheet: cream ruled paper,
-// red left margin line, black headings/labels/columns, blue data entries.
-// `heading` is the big top-line title (who this sheet is for/about),
-// `subheading` is a smaller line under it (what this sheet is), `columns`
-// controls the table layout so the same drawer works for milk entries or payments.
 async function drawNotebookPage({heading, subheading, subtitle, columns, rows, footerLines, pageNum, totalPages, footNote}){
   const W = 900, H = 1272;
-  const canvas = document.createElement('canvas'); canvas.width=W; canvas.height=H;
+  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = '#faf3df'; ctx.fillRect(0,0,W,H);
-  const shade = ctx.createLinearGradient(0,0,W,0);
-  shade.addColorStop(0,'rgba(0,0,0,0.04)'); shade.addColorStop(0.05,'rgba(0,0,0,0)');
-  shade.addColorStop(0.95,'rgba(0,0,0,0)'); shade.addColorStop(1,'rgba(0,0,0,0.04)');
-  ctx.fillStyle = shade; ctx.fillRect(0,0,W,H);
+  // Clean, crisp white sheet with subtle border
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(16, 16, W - 32, H - 32);
 
-  const marginX = 78, topStart = 158, lineGap = 34, rightEdge = W - 44;
-  ctx.strokeStyle = 'rgba(50,85,190,0.30)'; ctx.lineWidth = 1.3;
-  for(let y = topStart; y < H - 70; y += lineGap){ ctx.beginPath(); ctx.moveTo(26,y); ctx.lineTo(W-26,y); ctx.stroke(); }
-  ctx.strokeStyle = 'rgba(195,35,35,0.55)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(marginX,18); ctx.lineTo(marginX,H-18); ctx.stroke();
-  ctx.strokeStyle = 'rgba(0,0,0,0.14)'; ctx.lineWidth = 3; ctx.strokeRect(8,8,W-16,H-16);
+  const leftMargin = 56, rightEdge = W - 56, contentW = rightEdge - leftMargin;
 
-  ctx.fillStyle = '#141414'; ctx.font = '900 32px Georgia, "Times New Roman", serif';
-  ctx.fillText(heading, marginX+14, 62);
-  if(subheading){ ctx.fillStyle = '#1c1c1c'; ctx.font = '700 22px Georgia, serif'; ctx.fillText(subheading, marginX+14, 96); }
-  if(subtitle){ ctx.fillStyle = '#3a3a3a'; ctx.font = '400 16px Georgia, serif'; ctx.fillText(subtitle, marginX+14, 120); }
-  if(totalPages > 1){
-    ctx.textAlign='right'; ctx.fillStyle='#555'; ctx.font='600 14px Georgia, serif';
-    ctx.fillText(`Page ${pageNum}/${totalPages}`, rightEdge, 62); ctx.textAlign='left';
+  // Header Title & Meta
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '800 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  { const hw = contentW - (totalPages > 1 ? 120 : 0); nbFitFont(ctx, '800', 28, heading, hw, 16); ctx.fillText(nbTrunc(ctx, heading, hw), leftMargin, 66); }
+
+  if(subheading){
+    ctx.fillStyle = '#334155';
+    ctx.font = '600 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    nbFitFont(ctx, '600', 17, subheading, contentW, 11); ctx.fillText(nbTrunc(ctx, subheading, contentW), leftMargin, 96);
   }
 
-  let y = topStart - 8;
-  ctx.fillStyle = '#111'; ctx.font = '800 16px Georgia, serif';
-  columns.forEach(c=>{ ctx.textAlign = c.align||'left'; ctx.fillText(c.label, c.x, y); });
+  if(subtitle){
+    ctx.fillStyle = '#64748b';
+    ctx.font = '500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    nbFitFont(ctx, '500', 13, subtitle, contentW, 9); ctx.fillText(nbTrunc(ctx, subtitle, contentW), leftMargin, 122);
+  }
+
+  if(totalPages > 1){
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#64748b';
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    ctx.fillText(`Page ${pageNum} of ${totalPages}`, rightEdge, 66);
+    ctx.textAlign = 'left';
+  }
+
+  // Header divider
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(leftMargin, 138);
+  ctx.lineTo(rightEdge, 138);
+  ctx.stroke();
+
+  // Table Header Bar
+  const headY = 152, headH = 32;
+  ctx.fillStyle = '#f8fafc';
+  if(ctx.roundRect){
+    ctx.beginPath(); ctx.roundRect(leftMargin, headY, contentW, headH, 6); ctx.fill();
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.stroke();
+  } else {
+    ctx.fillRect(leftMargin, headY, contentW, headH);
+  }
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '700 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+  const labelY = headY + 21;
+  columns.forEach(c => {
+    ctx.textAlign = c.align || 'left';
+    ctx.fillText(c.label, c.x, labelY);
+  });
   ctx.textAlign = 'left';
 
-  ctx.font = '600 16px Georgia, serif'; y = topStart + lineGap - 8;
-  // A cell value is normally a plain string (drawn in the default blue).
-  // It can also be an array of {text,color} segments — used to show a
-  // shift total as separate colored pieces (e.g. "2 + 8 L") when it blends
-  // more than one animal's rate, instead of one flattened number.
-  rows.forEach(r=>{
-    columns.forEach((c,ci)=>{
-      ctx.textAlign = c.align||'left';
-      const cell = r[ci];
+  // Table Data Rows
+  const rowStart = 196, lineGap = 33;
+  let y = rowStart;
+  ctx.font = '500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+
+  rows.forEach((r, ri) => {
+    // Subtle row divider line
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(leftMargin, y + 9);
+    ctx.lineTo(rightEdge, y + 9);
+    ctx.stroke();
+
+    columns.forEach((c, ci) => {
+      ctx.textAlign = c.align || 'left';
+      let cell = r[ci];
+      { const mw = nbColMaxW(columns, ci, leftMargin, rightEdge); nbFitFont(ctx, '500', 13, Array.isArray(cell) ? cell.map(sg => sg.text).join('') : String(cell), mw, 9); if (!Array.isArray(cell)) cell = nbTrunc(ctx, cell, mw); }
       if (Array.isArray(cell)) {
         if (c.align === 'right') {
-          const totalW = cell.reduce((s,seg)=>s+ctx.measureText(seg.text).width,0);
-          let cx = c.x - totalW; ctx.textAlign = 'left';
-          cell.forEach(seg=>{ ctx.fillStyle = seg.color || '#1a3fb0'; ctx.fillText(seg.text, cx, y); cx += ctx.measureText(seg.text).width; });
+          const totalW = cell.reduce((s, seg) => s + ctx.measureText(seg.text).width, 0);
+          let cx = c.x - totalW;
+          ctx.textAlign = 'left';
+          cell.forEach(seg => {
+            ctx.fillStyle = seg.color || '#0f172a';
+            ctx.fillText(seg.text, cx, y);
+            cx += ctx.measureText(seg.text).width;
+          });
         } else {
           let cx = c.x;
-          cell.forEach(seg=>{ ctx.fillStyle = seg.color || '#1a3fb0'; ctx.fillText(seg.text, cx, y); cx += ctx.measureText(seg.text).width; });
+          cell.forEach(seg => {
+            ctx.fillStyle = seg.color || '#0f172a';
+            ctx.fillText(seg.text, cx, y);
+            cx += ctx.measureText(seg.text).width;
+          });
         }
       } else {
-        ctx.fillStyle = '#1a3fb0'; ctx.fillText(cell, c.x, y);
+        ctx.fillStyle = (c.align === 'right') ? '#0f172a' : '#1e293b';
+        ctx.fillText(cell, c.x, y);
       }
     });
     ctx.textAlign = 'left';
     y += lineGap;
   });
+
   if(!rows.length){
-    ctx.fillStyle = '#888'; ctx.font = 'italic 16px Georgia, serif'; ctx.fillText('— No entries —', marginX+14, y);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'italic 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    ctx.fillText('— No entries for this period —', leftMargin + 8, rowStart + 10);
   }
 
+  // Summary / Footer Card
   if(footerLines && footerLines.length){
-    // Extra footer lines (e.g. a rate-color legend) push the whole block
-    // upward so the last line keeps its usual distance from the watermark.
     const extraLines = Math.max(0, footerLines.length - 2);
-    const footY = H - (footNote ? 118 : 96) - extraLines*29;
-    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1.6;
-    ctx.beginPath(); ctx.moveTo(26,footY-26); ctx.lineTo(W-26,footY-26); ctx.stroke();
-    ctx.font='900 21px Georgia, serif';
-    footerLines.forEach((line,i)=>{
-      const ly = footY + i*29;
+    const footCardH = 46 + extraLines * 30;
+    const footY = H - (footNote ? 122 : 96) - extraLines * 30;
+
+    ctx.fillStyle = '#f8fafc';
+    if(ctx.roundRect){
+      ctx.beginPath(); ctx.roundRect(leftMargin, footY - 26, contentW, footCardH, 8); ctx.fill();
+      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1.5; ctx.stroke();
+    } else {
+      ctx.fillRect(leftMargin, footY - 26, contentW, footCardH);
+    }
+
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    footerLines.forEach((line, i) => {
+      const ly = footY + i * 28;
+      nbFitFont(ctx, '700', 15, Array.isArray(line) ? line.map(sg => sg.text).join('') : String(line), contentW - 32, 10);
       if (Array.isArray(line)) {
-        let cx = marginX+14;
-        line.forEach(seg=>{ ctx.fillStyle = seg.color || '#111'; ctx.fillText(seg.text, cx, ly); cx += ctx.measureText(seg.text).width; });
+        let cx = leftMargin + 16;
+        line.forEach(seg => {
+          ctx.fillStyle = seg.color || '#0f172a';
+          ctx.fillText(seg.text, cx, ly);
+          cx += ctx.measureText(seg.text).width;
+        });
       } else {
-        ctx.fillStyle='#111'; ctx.fillText(line, marginX+14, ly);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(line, leftMargin + 16, ly);
       }
     });
   }
-  if(footNote){ ctx.fillStyle='#777'; ctx.font='italic 13px Georgia, serif'; ctx.fillText(footNote, marginX+14, H-34); }
 
-  // "Made with Smart Milking" watermark — bottom-right, right-aligned so it
-  // never collides with footNote/footerLines (which are left-aligned). Made
-  // clickable in the actual PDF by canvasesToPdfFile, which reads
-  // canvas._watermark and adds a real link annotation over this same box.
+  if(footNote){
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '500 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    nbFitFont(ctx, '500', 11.5, footNote, contentW - 260, 8); ctx.fillText(nbTrunc(ctx, footNote, contentW - 260), leftMargin, H - 34);
+  }
+
+  // Clickable Smart Milking Watermark
   const wmIcon = await loadDairyWatermarkIcon();
-  const wmY1 = H - 32;
-  const wmY2 = H - 16;
+  const wmY1 = H - 34, wmY2 = H - 18;
+  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+  let wmStartX, wmWidth1;
 
-  ctx.font = '600 13px Georgia, serif';
   if(wmIcon){
-    // Mixed text+image can't be right-aligned directly, so measure the two
-    // text halves first, then lay out icon-and-text as a block from the right.
     const preText = 'Made with ', postText = ' Smart Milking';
     ctx.textAlign = 'left';
-    const preWidth = ctx.measureText(preText).width;
-    const postWidth = ctx.measureText(postText).width;
-    const iconSize = 15;
-    const totalWidth = preWidth + iconSize + postWidth;
-    const startX = rightEdge - totalWidth;
-    ctx.fillStyle = 'rgba(70,90,140,0.6)';
-    ctx.fillText(preText, startX, wmY1);
-    ctx.drawImage(wmIcon, startX + preWidth, wmY1 - iconSize + 3, iconSize, iconSize);
-    ctx.fillText(postText, startX + preWidth + iconSize, wmY1);
-    var wmWidth1 = totalWidth, wmStartX = startX;
+    const preW = ctx.measureText(preText).width;
+    const postW = ctx.measureText(postText).width;
+    const iconSize = 14;
+    const totalW = preW + iconSize + postW;
+    wmStartX = rightEdge - totalW;
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(preText, wmStartX, wmY1);
+    ctx.drawImage(wmIcon, wmStartX + preW, wmY1 - iconSize + 2, iconSize, iconSize);
+    ctx.fillText(postText, wmStartX + preW + iconSize, wmY1);
+    wmWidth1 = totalW;
   } else {
-    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(70,90,140,0.6)';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#64748b';
     const wmLine1 = 'Made with Smart Milking';
     ctx.fillText(wmLine1, rightEdge, wmY1);
-    var wmWidth1 = ctx.measureText(wmLine1).width, wmStartX = rightEdge - wmWidth1;
+    wmWidth1 = ctx.measureText(wmLine1).width;
+    wmStartX = rightEdge - wmWidth1;
   }
 
   ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(100,100,100,0.5)';
-  ctx.font = '400 9px Georgia, serif';
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '400 9px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
   const wmLine2 = 'Install directly from Chrome';
   ctx.fillText(wmLine2, rightEdge, wmY2);
   const wmWidth2 = ctx.measureText(wmLine2).width;
@@ -3126,45 +3330,37 @@ async function drawNotebookPage({heading, subheading, subtitle, columns, rows, f
   return canvas;
 }
 
+const HISAAB_ROWS_PER_PAGE = 26;
+
 const HISAAB_ENTRY_COLS = [
-  {label:'Date', x:92, align:'left'},
-  {label:'Milk (L)', x:420, align:'left'},
-  {label:'Rate ₹/L', x:570, align:'left'},
-  {label:'Amount ₹', x:856, align:'right'}
+  {label:'Date', x:68, align:'left'},
+  {label:'Milk (L)', x:410, align:'left'},
+  {label:'Rate ₹/L', x:560, align:'left'},
+  {label:'Amount ₹', x:832, align:'right'}
 ];
-// Milkmen/page hisaab shows both shift entries instead of one blended daily
-// total — same row count as HISAAB_ENTRY_COLS, just AM/PM in place of a
-// single Milk (L) + derived average Rate.
 const HISAAB_ENTRY_COLS_PAGE = [
-  {label:'Date', x:92, align:'left'},
-  {label:'AM (L)', x:380, align:'left'},
-  {label:'PM (L)', x:560, align:'left'},
-  {label:'Amount ₹', x:856, align:'right'}
+  {label:'Date', x:68, align:'left'},
+  {label:'AM (L)', x:360, align:'left'},
+  {label:'PM (L)', x:540, align:'left'},
+  {label:'Amount ₹', x:832, align:'right'}
 ];
 const HISAAB_MILKMEN_COLS = [
-  {label:'Date', x:92, align:'left'},
-  {label:'Description', x:180, align:'left'},
-  {label:'Billed ₹', x:560, align:'right'},
-  {label:'Paid ₹', x:700, align:'right'},
-  {label:'Balance ₹', x:856, align:'right'}
+  {label:'Date', x:68, align:'left'},
+  {label:'Description', x:160, align:'left'},
+  {label:'Billed ₹', x:540, align:'right'},
+  {label:'Paid ₹', x:680, align:'right'},
+  {label:'Balance ₹', x:832, align:'right'}
 ];
 const HISAAB_PAYMENT_COLS = [
-  {label:'Date', x:92, align:'left'},
-  {label:'Amount ₹', x:490, align:'right'},
-  {label:'Remark', x:560, align:'left'}
+  {label:'Date', x:68, align:'left'},
+  {label:'Amount ₹', x:480, align:'right'},
+  {label:'Remark', x:550, align:'left'}
 ];
 
-// Colors assigned (in order) to the distinct rates that get blended into a
-// single shift total, so a reader can tell "2 + 8 L" apart by eye and match
-// each piece back to its rate via the legend.
-const HISAAB_RATE_COLORS = ['#1f9d55','#c99a1f','#1a6fb0','#c2410c','#8347c9','#c9375f','#0f8f8f'];
+const HISAAB_RATE_COLORS = ['#10b981','#d97706','#2563eb','#ea580c','#7c3aed','#db2777','#0d9488'];
 
 async function buildHisaabPages_Page(page){
   const profile = DB.profile(); const ledger = pageDailyLedger(page);
-
-  // Only rates that actually get blended together into one shift total (2+
-  // different animal rates summed into the same AM or PM figure) need a
-  // color/legend — a shift with just one rate behind it stays a plain number.
   const ratesNeedingColor = new Set();
   ledger.forEach(r=>{
     if(r.amBreakdown.length>1) r.amBreakdown.forEach(g=>ratesNeedingColor.add(g.rate));
@@ -3178,10 +3374,10 @@ async function buildHisaabPages_Page(page){
     if(breakdown.length<=1) return totalQty>0 ? fmt(totalQty)+' L' : '—';
     const segs = [];
     breakdown.forEach((g,i)=>{
-      if(i>0) segs.push({text:' + ', color:'#1a3fb0'});
-      segs.push({text: fmt(g.qty), color: rateColorMap[g.rate.toFixed(2)] || '#1a3fb0'});
+      if(i>0) segs.push({text:' + ', color:'#64748b'});
+      segs.push({text: fmt(g.qty), color: rateColorMap[g.rate.toFixed(2)] || '#0f172a'});
     });
-    segs.push({text:' L', color:'#1a3fb0'});
+    segs.push({text:' L', color:'#64748b'});
     return segs;
   }
 
@@ -3193,11 +3389,11 @@ async function buildHisaabPages_Page(page){
     if(idx===chunkList.length-1){
       footerLines = [ `Total Milk: ${fmt(totalAM+totalPM)} L  (AM ${fmt(totalAM)} + PM ${fmt(totalPM)})`, `Total Amount: ₹${fmt(totalAmt)}` ];
       if(rateColorList.length){
-        const legendSegs = [{text:'Rate Key:  ', color:'#111'}];
+        const legendSegs = [{text:'Rate Key:  ', color:'#0f172a'}];
         rateColorList.forEach((rate,i)=>{
-          if(i>0) legendSegs.push({text:'    ', color:'#111'});
+          if(i>0) legendSegs.push({text:'    ', color:'#0f172a'});
           legendSegs.push({text:'● ', color: rateColorMap[rate.toFixed(2)]});
-          legendSegs.push({text:`₹${fmt(rate)}/L`, color:'#111'});
+          legendSegs.push({text:`₹${fmt(rate)}/L`, color:'#0f172a'});
         });
         footerLines.push(legendSegs);
       }
@@ -3206,144 +3402,271 @@ async function buildHisaabPages_Page(page){
   }));
 }
 
-// Household hisaab: heading is the household's own name (this sheet is *for*
-// them, so their name — not the dairy's or any animal's — leads), followed by
-// the daily milk entries, and then a dedicated payments ledger with remarks so
-// they can see exactly when they paid, how much, and what's still outstanding.
-async function buildHisaabPages_Milkmen(){
+// Milkmen Payment History & Ledger PDF:
+// Intelligently starts from the nearest hisaab that settled (or nearly settled) the dues,
+// carries the prior balance forward at the top, preserves exact math so negligible amounts
+// add up cleanly, and always guarantees at least the latest 5 entries.
+async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = null, mode = 'all'){
   const profile = DB.profile();
   const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
   const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
 
-  let ledger = [];
+  let fullLedger = [];
   lockedPages.forEach(p => {
     const rev = pageSummary(p).rev;
-    ledger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0 });
+    fullLedger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0 });
   });
   milkmenPayments.forEach(p => {
-    ledger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: parseFloat(p.amount) || 0 });
+    fullLedger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: parseFloat(p.amount) || 0 });
   });
 
-  ledger.sort((a, b) => a.date.localeCompare(b.date));
+  fullLedger.sort((a, b) => a.date.localeCompare(b.date));
 
-  let runningBalance = 0;
-  const ledgerRows = ledger.map(r => {
-    runningBalance += r.billed - r.paid;
+  let openingDate = null;
+  let openingBalance = 0;
+  let visibleLedger = [];
 
-    // Use multi-colored text to make payments green
-    const dateCell = r.paid ? [{ text: fmtDS(r.date), color: '#1f9d55' }] : fmtDS(r.date);
-    const descCell = r.paid ? [{ text: truncateHisaabText(r.desc, 30), color: '#1f9d55' }] : truncateHisaabText(r.desc, 30);
+  if (mode === 'range' && customStartDate) {
+    const end = customEndDate || today();
+    fullLedger.forEach(r => {
+      if (r.date < customStartDate) {
+        openingBalance += r.billed - r.paid;
+      } else if (r.date <= end) {
+        visibleLedger.push(r);
+      }
+    });
+    openingDate = customStartDate;
+  } else {
+    visibleLedger = fullLedger;
+    openingBalance = 0;
+  }
+
+  let currentRunning = openingBalance;
+  let ledgerRows = [];
+
+  // Show previous balance / prior due at the top of the table if cutoff or range was applied
+  if (openingDate) {
+    const priorText = openingBalance === 0 ? 'Settled' : (openingBalance > 0 ? '₹' + fmt(openingBalance) + ' due' : 'Overpaid ₹' + fmt(-openingBalance));
+    ledgerRows.push([
+      fmtDS(openingDate),
+      [{ text: 'Prior Due (Carried Forward)', color: '#64748b' }],
+      '—',
+      '—',
+      [{ text: priorText, color: openingBalance > 0 ? '#d97706' : openingBalance < 0 ? '#2563eb' : '#10b981' }]
+    ]);
+  }
+
+  let periodBilled = 0, periodPaid = 0;
+  visibleLedger.forEach(r => {
+    periodBilled += r.billed;
+    periodPaid += r.paid;
+    currentRunning += r.billed - r.paid;
+
+    const dateCell = r.paid ? [{ text: fmtDS(r.date), color: '#10b981' }] : fmtDS(r.date);
+    const descCell = r.paid ? [{ text: truncateHisaabText(r.desc, 32), color: '#10b981' }] : truncateHisaabText(r.desc, 32);
     const billedCell = r.billed ? '₹' + fmt(r.billed) : '—';
-    const paidCell = r.paid ? [{ text: '₹' + fmt(r.paid), color: '#1f9d55' }] : '—';
-    const balCell = runningBalance === 0 ? 'Settled' : (runningBalance > 0 ? '₹' + fmt(runningBalance) + ' due' : 'Overpaid ₹' + fmt(-runningBalance));
+    const paidCell = r.paid ? [{ text: '₹' + fmt(r.paid), color: '#10b981' }] : '—';
+    const balText = currentRunning === 0 ? 'Settled' : (currentRunning > 0 ? '₹' + fmt(currentRunning) + ' due' : 'Overpaid ₹' + fmt(-currentRunning));
+    const balColor = currentRunning === 0 ? '#10b981' : (currentRunning > 0 ? '#0f172a' : '#2563eb');
 
-    const finalBalCell = r.paid ? [{ text: balCell, color: '#1f9d55' }] : balCell;
-
-    return [
+    ledgerRows.push([
       dateCell,
       descCell,
       billedCell,
       paidCell,
-      finalBalCell
-    ];
+      [{ text: balText, color: balColor }]
+    ]);
   });
 
-  const chunks = chunkArr(ledgerRows, HISAAB_ROWS_PER_PAGE); const chunkList = chunks.length ? chunks : [[]];
-  let totalBilled = 0, totalPaid = 0;
-  ledger.forEach(r => { totalBilled += r.billed; totalPaid += r.paid; });
-  const finalBalance = totalBilled - totalPaid;
+  const finalBalance = currentRunning;
+  const chunks = chunkArr(ledgerRows, HISAAB_ROWS_PER_PAGE);
+  const chunkList = chunks.length ? chunks : [[]];
+
+  let subtitle = `As of ${fmtD(today())}`;
+  if (openingDate) {
+    const sStr = fmtDS(openingDate);
+    const eStr = visibleLedger.length ? fmtDS(visibleLedger[visibleLedger.length - 1].date) : fmtDS(today());
+    subtitle = `Period: ${sStr} – ${eStr}  •  Prior Due: ${openingBalance === 0 ? 'Settled' : '₹' + fmt(openingBalance)}`;
+  }
 
   const pages = await Promise.all(chunkList.map(async (chunk, idx) => {
     const isLast = idx === chunkList.length - 1;
-    const footerLines = isLast ? [
-      `Total Billed: ₹${fmt(totalBilled)}`,
-      `Total Paid: ₹${fmt(totalPaid)}   Net Balance: ${finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : finalBalance < 0 ? 'Overpaid ₹' + fmt(-finalBalance) : 'Settled'}`
-    ] : null;
+    let footerLines = null;
+    if (isLast) {
+      footerLines = [
+        openingDate && openingBalance !== 0
+          ? `Prior Due: ₹${fmt(openingBalance)}   Period Billed: ₹${fmt(periodBilled)}   Period Paid: ₹${fmt(periodPaid)}`
+          : `Period Billed: ₹${fmt(periodBilled)}   Period Paid: ₹${fmt(periodPaid)}`,
+        `Net Balance: ${finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : finalBalance < 0 ? 'Overpaid ₹' + fmt(-finalBalance) : 'Settled'}`
+      ];
+    }
+
     return await drawNotebookPage({
       heading: profile.name || 'Dairy Hisaab',
       subheading: 'Main Dairy Ledger (Milkmen)',
-      subtitle: `As of ${fmtD(today())}`,
+      subtitle,
       columns: HISAAB_MILKMEN_COLS,
       rows: chunk,
       footerLines,
       pageNum: idx + 1,
       totalPages: chunkList.length,
-      footNote: `Milkmen Net Balance`
+      footNote: `Milkmen Net Balance Statement`
     });
   }));
   return pages;
 }
 
-async function buildHisaabPages_Household(h, customEndDate){
-  const profile = DB.profile(); const ledger = householdFullLedger(h, customEndDate);
-  const entryChunks = chunkArr(ledger, HISAAB_ROWS_PER_PAGE); const entryChunkList = entryChunks.length?entryChunks:[[]];
-  const stats = getCustomerStats(h, customEndDate);
+// Household hisaab with Date Range & Prior Due support
+async function buildHisaabPages_Household(h, customEndDate, customStartDate = null, mode = 'all'){
+  const profile = DB.profile();
+  let effStartDate = customStartDate || null;
 
-  let accumulated = 0;
-  let paidUptoDateStr = null;
-  if (stats.totalPaid > 0) {
-    const fullLedger = householdFullLedger(h);
-    for (const entry of fullLedger) {
-      if (accumulated + entry.amount <= stats.totalPaid + 0.01) {
-        accumulated += entry.amount;
-        paidUptoDateStr = entry.date;
-      } else {
-        break;
-      }
-    }
+  const ledger = householdFullLedger(h, customEndDate, effStartDate);
+  const priorDue = effStartDate ? getHouseholdPriorDue(h, effStartDate) : 0;
+  const filteredPayments = (h.payments || []).filter(p => !p.deleted && (!customEndDate || p.date <= customEndDate) && (!effStartDate || p.date >= effStartDate)).slice().sort((a,b) => a.date.localeCompare(b.date));
+
+  const periodMilkValue = ledger.reduce((s, r) => s + r.amount, 0);
+  const periodMilkQty = ledger.reduce((s, r) => s + r.qty, 0);
+  const periodPaid = filteredPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+  const netDue = priorDue + periodMilkValue - periodPaid;
+
+  let displayRows = [];
+  if (effStartDate && priorDue !== 0) {
+    displayRows.push([
+      [{ text: fmtDS(effStartDate), color: '#64748b' }],
+      [{ text: '—', color: '#64748b' }],
+      [{ text: 'Prior Due', color: '#64748b' }],
+      [{ text: '₹' + fmt(priorDue), color: priorDue > 0 ? '#d97706' : '#10b981' }]
+    ]);
   }
 
-  const period = `${fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}`;
-  const payments = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate)).slice().sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
-  const paymentChunks = chunkArr(payments, HISAAB_ROWS_PER_PAGE); const paymentChunkList = paymentChunks.length?paymentChunks:[[]];
+  ledger.forEach(r => {
+    const isException = r.isException;
+    const dateColor = isException ? '#d97706' : '#0f172a';
+    displayRows.push([
+      [{ text: fmtDS(r.date), color: dateColor }],
+      [{ text: fmt(r.qty) + ' L', color: '#0f172a' }],
+      [{ text: fmt(r.rate), color: '#0f172a' }],
+      [{ text: '₹' + fmt(r.amount), color: '#0f172a' }]
+    ]);
+  });
+
+  const entryChunks = chunkArr(displayRows, HISAAB_ROWS_PER_PAGE);
+  const entryChunkList = entryChunks.length ? entryChunks : [[]];
+  const paymentChunks = chunkArr(filteredPayments, HISAAB_ROWS_PER_PAGE);
+  const paymentChunkList = paymentChunks.length ? paymentChunks : [[]];
   const totalPages = entryChunkList.length + paymentChunkList.length;
-  const footNote = `Milk supplied by ${profile.name||'Dairy'}`;
+  const footNote = `Milk supplied by ${profile.name || 'Dairy'}`;
 
-  const entryPages = await Promise.all(entryChunkList.map((chunk, idx)=>{
-    const rows = chunk.map(r=>{
-      const isPaid = paidUptoDateStr && r.date <= paidUptoDateStr;
-      const isException = r.isException;
-      const dateColor = isException ? '#d97706' : '#1a3fb0';
-      const textCol = isPaid ? '#10b981' : '#1a3fb0';
+  const periodLabel = `${effStartDate ? fmtD(effStartDate) : fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}${effStartDate && priorDue !== 0 ? `  •  Prior Due: ₹${fmt(priorDue)}` : ''}`;
 
-      return [
-        [{text: fmtDS(r.date), color: dateColor}],
-        [{text: fmt(r.qty)+' L', color: textCol}],
-        [{text: fmt(r.rate), color: textCol}],
-        [{text: '₹'+fmt(r.amount), color: textCol}]
-      ];
-    });
-
-    const legendLine = [
-       {text:'Paid ', color:'#10b981'}, {text:'  Unpaid ', color:'#1a3fb0'}, {text:'  Exceptions ', color:'#d97706'}
-    ];
-
+  const entryPages = await Promise.all(entryChunkList.map((chunk, idx) => {
     let footerLines = null;
-    if (idx===entryChunkList.length-1) {
-       footerLines = [
-         legendLine,
-         `Total Milk: ${fmt(stats.totalLiters)} L`,
-         `Total Amount: ₹${fmt(stats.totalMilkValue)}`,
-         `Total Paid: ₹${fmt(stats.totalPaid)}   Balance Due: ₹${fmt(stats.currentDue)}`
-       ];
-    } else {
-       footerLines = [ legendLine ];
+    if (idx === entryChunkList.length - 1) {
+      footerLines = [
+        effStartDate && priorDue !== 0
+          ? `Prior Due: ₹${fmt(priorDue)}   Period Milk: ₹${fmt(periodMilkValue)}   Paid: ₹${fmt(periodPaid)}`
+          : `Total Milk: ${fmt(periodMilkQty)} L   Total Amount: ₹${fmt(periodMilkValue)}`,
+        `Balance Due: ₹${fmt(netDue)}`
+      ];
     }
-
-    return drawNotebookPage({ heading:`${h.name}`, subheading:'Milk Hisaab', subtitle:period, columns: HISAAB_ENTRY_COLS, rows, footerLines, pageNum: idx+1, totalPages, footNote });
+    return drawNotebookPage({
+      heading: `${h.name}`,
+      subheading: 'Milk Hisaab',
+      subtitle: periodLabel,
+      columns: HISAAB_ENTRY_COLS,
+      rows: chunk,
+      footerLines,
+      pageNum: idx + 1,
+      totalPages,
+      footNote
+    });
   }));
 
-  const paymentPages = await Promise.all(paymentChunkList.map((chunk, idx)=>{
-    const rows = chunk.map(p=>[ fmtDS(p.date), '₹'+fmt(p.amount), truncateHisaabText(p.note, 26) ]);
-    const isLast = idx===paymentChunkList.length-1;
-    const footerLines = isLast ? [ `Total Billed: ₹${fmt(stats.totalMilkValue)}`, `Total Paid: ₹${fmt(stats.totalPaid)}   Balance Due: ₹${fmt(stats.currentDue)}` ] : null;
-    return drawNotebookPage({ heading:`${h.name}`, subheading:'Payments Received', subtitle:period, columns: HISAAB_PAYMENT_COLS, rows, footerLines, pageNum: entryChunkList.length+idx+1, totalPages, footNote });
+  const paymentPages = await Promise.all(paymentChunkList.map((chunk, idx) => {
+    const rows = chunk.map(p => [ fmtDS(p.date), '₹' + fmt(p.amount), truncateHisaabText(p.note, 26) ]);
+    const isLast = idx === paymentChunkList.length - 1;
+    const footerLines = isLast ? [
+      `Total Payments: ₹${fmt(periodPaid)}   Balance Due: ₹${fmt(netDue)}`
+    ] : null;
+    return drawNotebookPage({
+      heading: `${h.name}`,
+      subheading: 'Payments Received',
+      subtitle: periodLabel,
+      columns: HISAAB_PAYMENT_COLS,
+      rows,
+      footerLines,
+      pageNum: entryChunkList.length + idx + 1,
+      totalPages,
+      footNote
+    });
   }));
 
   return [...entryPages, ...paymentPages];
 }
 
+function buildShareData_Page(page){
+  const ledger = pageDailyLedger(page); const t = pageSummary(page);
+  const rows = ledger.map(r=>[fmtD(r.date), r.am ? (r.am+' L') : '—', r.pm ? (r.pm+' L') : '—', fmt(r.qty)+' L', '₹'+fmt(r.amount)]);
+  return {
+    kind: 'period',
+    title: `Record Period: ${page.label}`,
+    subtitle: `${fmtD(page.startDate)} – ${fmtD(page.endDate)}`,
+    headers: ['Date','AM','PM','Total Milk','Amount'],
+    rows,
+    totals: [{label:'Total Milk', value: fmt(t.milk)+' L'}, {label:'Total Amount', value: '₹'+fmt(t.rev)}]
+  };
+}
+
+function buildShareData_Milkmen(customStartDate = null, customEndDate = null, mode = 'all'){
+  return {
+    kind: 'milkmen',
+    title: `Main Dairy Ledger (Milkmen)`,
+    subtitle: `As of ${fmtD(today())}`,
+    headers: ['Date', 'Description', 'Billed ₹', 'Paid ₹', 'Balance ₹']
+  };
+}
+
+function buildShareData_Household(h, customEndDate, customStartDate = null, mode = 'all'){
+  return {
+    kind: 'household',
+    title: h.name,
+    subtitle: `${customStartDate ? fmtD(customStartDate) : fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}`,
+    headers: ['Date','Milk','Rate','Amount']
+  };
+}
+
+function chunkArr(arr, size){ const out=[]; for(let i=0;i<arr.length;i+=size) out.push(arr.slice(i,i+size)); return out; }
+function truncateHisaabText(t, n){ t = t || '—'; return t.length > n ? t.slice(0, n-1) + '…' : t; }
+
+let _dairyWatermarkIconPromise = null;
+function loadDairyWatermarkIcon(){
+  if(!_dairyWatermarkIconPromise){
+    _dairyWatermarkIconPromise = new Promise(resolve=>{
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = 'icon-192.png';
+    });
+  }
+  return _dairyWatermarkIconPromise;
+}
+
+function loadPdfLib(){
+  if(typeof PDFLib !== 'undefined') return Promise.resolve(PDFLib);
+  if(window._pdfLibPromise) return window._pdfLibPromise;
+  window._pdfLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+    s.onload = () => resolve(window.PDFLib);
+    s.onerror = () => { window._pdfLibPromise = null; reject(new Error('PDF library failed to load')); };
+    document.head.appendChild(s);
+  });
+  return window._pdfLibPromise;
+}
+
 async function canvasesToPdfFile(canvases, filename, shareData){
+  await loadPdfLib();
   if(typeof PDFLib === 'undefined') throw new Error('PDF library not loaded');
   const { PDFDocument } = PDFLib;
   const pdfDoc = await PDFDocument.create();
@@ -3354,18 +3677,12 @@ async function canvasesToPdfFile(canvases, filename, shareData){
     page.drawImage(img, { x:0, y:0, width:canvas.width, height:canvas.height });
     if(canvas._watermark){
       const wm = canvas._watermark;
-      // Canvas coords are top-left/y-down; PDF coords are bottom-left/y-up —
-      // flip using the page height so the clickable box lands exactly on
-      // top of the drawn watermark text.
       const rect = [ wm.x, canvas.height - (wm.y + wm.height), wm.x + wm.width, canvas.height - wm.y ];
       addLinkAnnotation(pdfDoc, page, wm.url, rect);
     }
   }
   const pdfBytes = await pdfDoc.save();
   if(shareData){
-    // Hidden data appended after the PDF's own bytes — PDF readers stop at
-    // %%EOF and ignore trailing bytes, but this app can find the marker by
-    // reading the file as text. Same trick as the full-backup PDF.
     const payload = { format: SHARE_FORMAT, version: SHARE_VERSION, shareId: uid(), senderName: (DB.profile().name || 'A Smart Milking user'), createdAt: new Date().toISOString(), ...shareData };
     const hiddenWrapper = `\n###DAIRY_SHARE_BEGIN###\n${JSON.stringify(payload)}\n###DAIRY_SHARE_END###\n`;
     const finalBlob = new Blob([pdfBytes, new TextEncoder().encode(hiddenWrapper)], { type: 'application/pdf' });
@@ -3374,9 +3691,6 @@ async function canvasesToPdfFile(canvases, filename, shareData){
   return new File([pdfBytes], filename, { type: 'application/pdf' });
 }
 
-// Adds a clickable URI link annotation over `rect` ([x1,y1,x2,y2], bottom-left
-// origin, PDF points) — this is what makes the watermark actually tappable
-// rather than just a picture of a link.
 function addLinkAnnotation(pdfDoc, page, url, rect){
   const { PDFName, PDFArray, PDFString } = PDFLib;
   const linkAnnotation = pdfDoc.context.register(
@@ -3393,9 +3707,6 @@ function addLinkAnnotation(pdfDoc, page, url, rect){
   else { page.node.set(PDFName.of('Annots'), pdfDoc.context.obj([linkAnnotation])); }
 }
 
-// Shares a single combined PDF via the native share sheet only — never
-// auto-downloads. If the device/browser can't share files, we say so instead
-// of silently dropping files onto disk.
 async function shareHisaabCanvases(canvases, baseName, shareData){
   showToast('Preparing hisaab PDF...', true);
   try{
@@ -3417,43 +3728,130 @@ async function shareHisaabForPage(pageId){
 async function shareHisaabForHousehold(hhId){
   const h = DB.households().find(x=>x.id===hhId); if(!h) return;
 
-  const choice = await appChoice('Share Options', 'Share the hisaab up to which date?', [
-    {label: 'Up to Today', value: 'today'},
-    {label: 'Specific Date', value: 'specific'},
-    {label: 'Cancel', value: 'cancel'}
-  ]);
+  const choice = await appChoice('Share Customer Hisaab', 'Choose which part of the ledger to include in the PDF.', [
+    {label: 'Custom Range', value: 'range'},
+    {label: 'All Records', value: 'all'}
+  ], {neutral: true});
 
-  if (!choice || choice === 'cancel' || choice === 'false') return;
+  if (!choice || choice === 'false') return;
 
-  let endDate = null;
-  if (choice === 'specific') {
-    endDate = await new Promise(res => {
-      window.calendarOnCancelCallback = () => { res(null); };
-      const dummyInputId = 'cp-date'; // Need a valid ID for calendar target
-      if(!document.getElementById(dummyInputId)){
-        const input = document.createElement('input');
-        input.type = 'hidden'; input.id = dummyInputId;
-        document.body.appendChild(input);
-      }
-      openThemedCalendar(dummyInputId, h.startDate, (selectedDate) => {
-        window.calendarOnCancelCallback = null;
-        res(selectedDate);
-      });
-    });
-    if(!endDate) return;
+  let startDate = null, endDate = null;
+  if (choice === 'range') {
+    const range = await promptHisaabDateRange(`Date Range: ${h.name}`, addDays(today(), -29), today(), h.startDate);
+    if (!range) return;
+    startDate = range.start;
+    endDate = range.end;
   }
 
-  if(!householdFullLedger(h, endDate).length && !(h.payments||[]).filter(p=>!p.deleted && (!endDate || p.date <= endDate)).length) return appAlert('No Entries','This customer has no recorded milk entries or payments in this period to share.');
-  await shareHisaabCanvases(await buildHisaabPages_Household(h, endDate), `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h, endDate));
+  showToast('Preparing customer hisaab PDF...', true);
+  const canvases = await buildHisaabPages_Household(h, endDate, startDate, choice);
+  await shareHisaabCanvases(canvases, `Hisaab_${h.name.replace(/[^\w]+/g,'_')}`, buildShareData_Household(h, endDate, startDate, choice));
 }
 
 async function shareHisaabForMilkmen() {
   const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
   const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
   if (!lockedPages.length && !milkmenPayments.length) return appAlert('No Entries', 'There are no locked periods or received payments to share.');
-  await shareHisaabCanvases(await buildHisaabPages_Milkmen(), `Hisaab_Milkmen_${today()}`, buildShareData_Milkmen());
+
+  const choice = await appChoice('Milkmen Hisaab PDF', 'Choose which part of the ledger to include in the PDF.', [
+    {label: 'Custom Range', value: 'range'},
+    {label: 'All Records', value: 'all'}
+  ], {neutral: true});
+
+  if (!choice || choice === 'false') return;
+
+  let startDate = null, endDate = null;
+  if (choice === 'range') {
+    const range = await promptHisaabDateRange('Milkmen Ledger Date Range', addDays(today(), -29), today());
+    if (!range) return;
+    startDate = range.start;
+    endDate = range.end;
+  }
+
+  showToast('Preparing milkmen hisaab PDF...', true);
+  const canvases = await buildHisaabPages_Milkmen(startDate, endDate, choice);
+  await shareHisaabCanvases(canvases, `Hisaab_Milkmen_${today()}`, buildShareData_Milkmen(startDate, endDate, choice));
 }
 
+// Helper functions for Date Range Modal
+let hisaabRangeResolution = null;
+let hisaabRangeMinDate = null;
+
+function hisaabPresetRange(preset) {
+  const t = today(); let f = t, end = t;
+  if (preset === '15d') f = addDays(t, -14);
+  else if (preset === '30d') f = addDays(t, -29);
+  else if (preset === 'month') { const [y, m] = t.split('-').map(Number); f = `${y}-${String(m).padStart(2, '0')}-01`; }
+  else if (preset === 'prev_month') {
+    const [y, m] = t.split('-').map(Number);
+    const pd = new Date(y, m - 2, 1), py = pd.getFullYear(), pm = pd.getMonth() + 1, last = new Date(py, pm, 0).getDate();
+    f = `${py}-${String(pm).padStart(2, '0')}-01`; end = `${py}-${String(pm).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+  }
+  if (hisaabRangeMinDate && f < hisaabRangeMinDate) f = hisaabRangeMinDate;
+  return { f, end };
+}
+// Write the range, optionally pushing it into both wheels (not needed when a wheel itself changed it)
+let hrFromWheel = null, hrToWheel = null;
+function hrFloor() { return hisaabRangeMinDate || addDays(today(), -365 * 6); }
+function hisaabSetRange(f, end, reload = true) {
+  document.getElementById('hr-from').value = f; document.getElementById('hr-to').value = end;
+  if (reload && hrFromWheel) { hrFromWheel.set(f, hisaabRangeMinDate || null, hrFloor()); hrToWheel.set(end, f, hrFloor()); }
+  updateHisaabRangeSummary();
+}
+function hrFromChanged(iso) {
+  const t = document.getElementById('hr-to').value;
+  if (t < iso) { hisaabSetRange(iso, iso); hrToWheel.set(iso, iso, hrFloor()); return; }
+  hrToWheel.setMin(iso); hisaabSetRange(iso, t, false);
+}
+function hrToChanged(iso) { hisaabSetRange(document.getElementById('hr-from').value, iso, false); }
+function updateHisaabRangeSummary() {
+  const f = document.getElementById('hr-from').value, t = document.getElementById('hr-to').value;
+  const el = document.getElementById('hr-days');
+  if (el && f && t) { const n = Math.round((new Date(t + 'T00:00:00') - new Date(f + 'T00:00:00')) / 86400000) + 1; el.textContent = `${n} day${n === 1 ? '' : 's'} selected`; }
+  document.querySelectorAll('#hr-presets .rpill').forEach(b => { const r = hisaabPresetRange(b.dataset.preset); b.classList.toggle('on', r.f === f && r.end === t); });
+}
+
+function promptHisaabDateRange(title = 'Select Date Range', defaultFrom = null, defaultTo = null, minDate = null) {
+  return new Promise(resolve => {
+    hisaabRangeResolution = resolve;
+    hisaabRangeMinDate = minDate || null;
+    const t = today();
+    let fromVal = defaultFrom || addDays(t, -29);
+    if (hisaabRangeMinDate && fromVal < hisaabRangeMinDate) fromVal = hisaabRangeMinDate;
+    const titleEl = document.getElementById('hr-modal-title'); if (titleEl) titleEl.textContent = title;
+    if (!hrFromWheel) { hrFromWheel = createWheel(document.getElementById('hr-from-wheel'), hrFromChanged, true); hrToWheel = createWheel(document.getElementById('hr-to-wheel'), hrToChanged, true); }
+    hisaabSetRange(fromVal, defaultTo || t, false);
+    om('m-hisaab-range');
+    requestAnimationFrame(() => hisaabSetRange(fromVal, defaultTo || t));
+  });
+}
+
+function setHisaabPreset(preset) {
+  Haptics.fire('tick');
+  const r = hisaabPresetRange(preset); hisaabSetRange(r.f, r.end);
+}
+
+function submitHisaabRangeModal() {
+  const fromInput = document.getElementById('hr-from');
+  const toInput = document.getElementById('hr-to');
+  const start = fromInput ? fromInput.value : today();
+  const end = toInput ? toInput.value : today();
+  cm('m-hisaab-range');
+  if (hisaabRangeResolution) {
+    const res = hisaabRangeResolution;
+    hisaabRangeResolution = null;
+    res({ start, end });
+  }
+}
+
+function closeHisaabRangeModal() {
+  cm('m-hisaab-range');
+  if (hisaabRangeResolution) {
+    const res = hisaabRangeResolution;
+    hisaabRangeResolution = null;
+    res(null);
+  }
+}
 
 function createPage(startDate){
   const profile=DB.profile(); const pLen = profile.periodLength || 10;
@@ -3474,7 +3872,7 @@ function createPage(startDate){
 }
 
 let curTab='home',curDetailId=null;
-let meView='profile', gChartType='overall', gChartFilter='category', gHorizon='30';
+let meView='profile', gChartType='compare', gChartFilter='category', gHorizon='30';
 let versionMarkShown = false; // reset whenever the tab/menu changes — requires a fresh hard swipe each time
 // Developer mode: hidden behind 7 taps on the version watermark. Gates
 // developer-only controls (e.g. the AI Assistant API endpoint override).
@@ -3780,13 +4178,20 @@ KeyboardFit.init();
 function initApp() {
   try {
   applyTheme(getThemePref());
-  const minSplashEnd = Date.now() + 800;
+  // One-time housekeeping a few seconds after launch: trims an oversized activity log left from older versions.
+  setTimeout(() => { try { DB.logs(); } catch (e) {} }, 4000);
+  // Returning users (already set up on this device) get a short splash and no waiting on the network.
+  const _bootProfile = DB.profile(); const _returning = !!_bootProfile.onboarded;
+  const minSplashEnd = Date.now() + (_returning ? 50 : 350);
   function transitionTo(targetFunction) { const remaining = Math.max(0, minSplashEnd - Date.now()); setTimeout(() => { const splash = document.getElementById('splash'); if (splash) splash.style.opacity = '0'; setTimeout(() => { if (splash) splash.style.display = 'none'; targetFunction(); }, 300); }, remaining); }
 
   // Hold the "which screen?" decision until we know the real auth/sync state
   // — capped, so an offline device (or one that's never signed in) doesn't
   // sit on the splash screen waiting for a network call that'll never land.
-  const AUTH_BOOT_TIMEOUT_MS = 3500;
+  // Returning user who never signed in to cloud sync: nothing to wait for (0 ms).
+  // Returning + signed-in before: wait at most 1.2 s; the sync finishes in the background and refreshes the screen.
+  // Brand-new device: keep the old 3.5 s so a first-time cloud sign-in can restore data before the setup wizard.
+  const AUTH_BOOT_TIMEOUT_MS = !_returning ? 3500 : (cloudLocalMeta().lastUid ? 1200 : 0);
   Promise.race([authBootPromise, new Promise(res => setTimeout(res, AUTH_BOOT_TIMEOUT_MS))]).then(async () => {
     const p = DB.profile(); if (!p.shiftTime) { p.shiftTime = 15; } if (!p.periodLength) { p.periodLength = 10; } p.role = 'farmer'; DB.saveProfile(p);
     runAutoLockSweep();
@@ -3803,12 +4208,42 @@ function initApp() {
       const row = activePage.rows.find(r => r.assignedDate === td);
       if(row) shiftHasData = activePage.cols.filter(c => c.type === (new Date().getHours() >= p.shiftTime ? 'milk_pm' : 'milk_am')).some(c => parseFloat(row[c.id]) > 0);
     }
-    if (sharedHandled) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); }
-    else if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); transitionTo(() => checkInstallReminders(false)); } 
+    if (sharedHandled) { document.getElementById('app').style.display = 'flex'; renderHome(); transitionTo(() => checkInstallReminders(false)); }
+    else if (shiftHasData) { document.getElementById('app').style.display = 'flex'; renderHome(); transitionTo(() => checkInstallReminders(false)); } 
     else { document.getElementById('app').style.display = 'none'; transitionTo(() => openQuickEntry()); }
     appLoaded = true; clearTimeout(initWatchdog);
   }).catch(showStartupError);
   } catch (error) { console.error('Critical App Failure:', error); initError = error; appLoaded = false; }
+}
+
+
+const _tabDirty = { home: true, graphs: true, calc: true, me: true };
+const _tabRenderers = { home: renderHome, graphs: renderGraphs, calc: renderCalc, me: renderMe };
+
+function renderTab(id){
+  const target = id || curTab;
+  if (_tabRenderers[target]) {
+    _tabRenderers[target]();
+    _tabDirty[target] = false;
+  }
+}
+
+function refreshTabs(forceAll = false){
+  if (forceAll) {
+    Object.keys(_tabRenderers).forEach(k => {
+      _tabRenderers[k]();
+      _tabDirty[k] = false;
+    });
+  } else {
+    Object.keys(_tabDirty).forEach(k => {
+      if (k === curTab) {
+        _tabRenderers[k]?.();
+        _tabDirty[k] = false;
+      } else {
+        _tabDirty[k] = true;
+      }
+    });
+  }
 }
 
 function goTab(id,btn){
@@ -3817,9 +4252,14 @@ function goTab(id,btn){
   const prevIdx = TAB_ORDER.indexOf(curTab), nextIdx = TAB_ORDER.indexOf(id), prevTab = curTab;
   if(id === 'home') { curDetailId = null; }
   if(id !== 'me'){ versionMarkShown = false; }
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active')); document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
-  document.getElementById('p-'+id).classList.add('active'); btn.classList.add('on');curTab=id;
-  ({home:renderHome,graphs:renderGraphs,calc:renderCalc,me:renderMe})[id]?.();
+  btn = btn || tabBtn(id);
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  const p = document.getElementById('p-'+id);
+  if (p) p.classList.add('active');
+  if (btn) btn.classList.add('on');
+  curTab=id;
+  renderTab(id);
   if(prevIdx>-1 && nextIdx>-1 && nextIdx!==prevIdx) slideTransition('#p-'+id, nextIdx>prevIdx?'forward':'back');
   navPush('tab', {from: prevTab});
 }
@@ -3908,7 +4348,7 @@ function maybeSkipOnboardingAfterSync(){
   if (!DB.profile().onboarded) return;
   ob.classList.remove('active'); ob.style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  renderHome(); renderGraphs(); renderCalc(); renderMe();
+  refreshTabs();
   showToast('Welcome back — your data has been restored.', true, 'light');
 }
 function getActivePage() { const td = today(); return DB.pages().find(p => !p.locked && td >= p.startDate && td <= p.endDate) || null; }
@@ -4050,7 +4490,7 @@ async function saveQuickEntry() {
 
 function openFullApp() {
   const qe = document.getElementById('quick-entry'); qe.classList.remove('active', 'start-anim'); qe.style.display = 'none';
-  document.getElementById('app').style.display = 'flex'; renderHome(); renderGraphs(); renderCalc(); renderMe(); checkInstallReminders(justOnboarded); justOnboarded = false;
+  document.getElementById('app').style.display = 'flex'; refreshTabs(); checkInstallReminders(justOnboarded); justOnboarded = false;
   cloudDeferredRefresh = false; // the renders just above already cover it — don't double-toast right after
 }
 
@@ -4338,12 +4778,13 @@ function renderGraphs(){
     return;
   }
 
+  if(AnalyticsEngine._dirty || !Store.get('mdn_analytics_cache')){ AnalyticsEngine.build(); }
   const cache = Store.get('mdn_analytics_cache');
   if(!cache || cache.periods.length === 0) { el.innerHTML = `<div class="gwrap${justSwitched?' gview':''}"><div class="gscroll"><div class="ph"><div class="ptitle">Graphs</div></div><div class="empty"><div class="esub">No data to display yet.</div></div></div>${aiChatHtml(false)}</div>`; return; }
 
   let baseTabs = [
-    {k:'profit', l:'Net Profit'},
     {k:'compare', l:'Periods'},
+    {k:'profit', l:'Net Profit'},
     {k:'overall', l:'Production'},
     {k:'households', l:'Customer Dues'}
   ];
@@ -4484,7 +4925,7 @@ function gridLines(maxV, PAD, W, cW, cH, labelFmt, minV){
 }
 
 function drawSelectedGraph() {
-  const container = document.getElementById('graph-container'); const cache = Store.get('mdn_analytics_cache'); if(!cache) return;
+  const container = document.getElementById('graph-container'); if(AnalyticsEngine._dirty || !Store.get('mdn_analytics_cache')){ AnalyticsEngine.build(); } const cache = Store.get('mdn_analytics_cache'); if(!cache) return;
   const W=340, H=190, PAD={l:34,r:10,t:16,b:26}, cW=W-PAD.l-PAD.r, cH=H-PAD.t-PAD.b; let svg = '';
 
   // ─────────────────────────────────────────────────────────────
@@ -4698,19 +5139,52 @@ function renderCalc(){
   // Net balance reflects only what milkmen have earned vs what they've been paid —
   // farm expenses are a separate ledger and must never offset the milkmen balance.
   const milkmenNetBal = milkmenEarned - milkmenReceived;
-  const milkmenPayExpanded = calcMilkmenPayExpanded;
-  const milkmenPaymentsSorted = milkmenPayments.slice().sort((a,b) => b.date.localeCompare(a.date));
-  const milkmenPaymentListHtml = !milkmenPaymentsSorted.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : milkmenPaymentsSorted.map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`).join('');
+
+  // Payments ordered chronologically: older on top to latest on bottom near action buttons
+  const milkmenPaymentsSorted = milkmenPayments.slice().sort((a,b) => a.date.localeCompare(b.date));
+  const totalMilkmenPay = milkmenPaymentsSorted.length;
+  if(typeof window.calcMilkmenPayCount === 'undefined') window.calcMilkmenPayCount = 4;
+  const visibleMilkmenCount = Math.min(totalMilkmenPay, window.calcMilkmenPayCount);
+  const milkmenStartIndex = Math.max(0, totalMilkmenPay - visibleMilkmenCount);
+  const visibleMilkmenPayments = milkmenPaymentsSorted.slice(milkmenStartIndex);
+
+  let milkmenPaymentListHtml = '';
+  if(!totalMilkmenPay){
+    milkmenPaymentListHtml = `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>`;
+  } else {
+    let seeMoreHtml = '';
+    if(milkmenStartIndex > 0){
+      seeMoreHtml = `<button type="button" class="btn bs bsm w-100" style="margin-bottom:8px;justify-content:center;font-size:11px;padding:6px 10px;font-weight:600;" onclick="loadMoreMilkmenPayments()">▲ See more (${milkmenStartIndex} older payment${milkmenStartIndex>1?'s':''})</button>`;
+    }
+    const itemsHtml = visibleMilkmenPayments.map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:''}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteMilkmenPayment('${p.id}')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`).join('');
+    milkmenPaymentListHtml = seeMoreHtml + itemsHtml;
+  }
 
   // ── CUSTOMERS LEDGER ──
   const hhSummary = householdAllTimeSummary(); const households = DB.households();
   let totalHHOutstanding = 0;
+  if(!window.hhPayVisibleCounts) window.hhPayVisibleCounts = {};
   let hhBreakdownHTML = households.slice(0,8).map(h => {
       const stats = getCustomerStats(h); totalHHOutstanding += stats.currentDue;
       const isPaidUp = stats.currentDue <= 0;
       const payExpanded = calcHHExpandedId === h.id;
-      const activePayments = (h.payments||[]).filter(p=>!p.deleted);
-      const paymentListHtml = !activePayments.length ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>` : activePayments.slice().reverse().map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:``}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`).join('');
+      // Chronological order: older on top to latest on bottom near the Log Payment button
+      const activePayments = (h.payments||[]).filter(p=>!p.deleted).slice().sort((a,b)=>a.date.localeCompare(b.date));
+      const hhVis = window.hhPayVisibleCounts[h.id] || 4;
+      const totalHHPay = activePayments.length;
+      const hhStartIndex = Math.max(0, totalHHPay - hhVis);
+      const visibleHHPayments = activePayments.slice(hhStartIndex);
+
+      let paymentListHtml = '';
+      if(!totalHHPay){
+        paymentListHtml = `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>`;
+      } else {
+        let seeMoreHH = '';
+        if(hhStartIndex > 0){
+          seeMoreHH = `<button type="button" class="btn bs bsm w-100" style="margin-bottom:6px;justify-content:center;font-size:10px;padding:4px 8px;font-weight:600;" onclick="event.stopPropagation();loadMoreHHPayments('${h.id}')">▲ See more (${hhStartIndex} older payment${hhStartIndex>1?'s':''})</button>`;
+        }
+        paymentListHtml = seeMoreHH + visibleHHPayments.map(p=>`<div class="hh-row exc"><span class="f1">${fmtDS(p.date)} ${p.note?`<span style="color:var(--muted)">(${p.note})</span>`:``}</span><span style="font-weight:700;color:var(--success);">+ ₹${fmt(p.amount)}</span><button class="hh-mini-btn" style="color:var(--danger);" onclick="event.stopPropagation();deleteCustomerPayment('${h.id}','${p.id}')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`).join('');
+      }
       return `<div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px;">
        <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcHHExpand('${h.id}')">
         <div class="f1 mw0"><div class="trunc" style="font-weight:700;font-size:13px;">${h.name}${h.stopped?' <span style="color:var(--muted);font-weight:400;">(stopped)</span>':''}</div><div style="font-size:10px;color:var(--muted);">Paid: ₹${fmt(stats.totalPaid)}</div></div>
@@ -4749,17 +5223,16 @@ function renderCalc(){
      <div class="payrow" style="border:1px solid var(--border2);"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h18"/></svg><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;text-align:right;flex:1;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
     </div>
     <div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px; margin-top:10px;">
-     <div class="row gap2" style="align-items:center;cursor:pointer;" onclick="toggleCalcMilkmenPayExpand()">
-      <div class="f1"><div style="font-weight:700;font-size:13px;">Payment History</div><div style="font-size:10px;color:var(--muted);">${milkmenPayments.length} payment(s) logged</div></div>
-      <span style="font-size:10px;color:var(--sub);margin-left:8px;">${milkmenPayExpanded?'▲':'▼'}</span>
+     <div class="row gap2" style="align-items:center;margin-bottom:8px;">
+      <div class="f1"><div style="font-weight:700;font-size:13px;">Payment History</div><div style="font-size:10px;color:var(--muted);">${milkmenPayments.length} payment(s) logged • latest near buttons</div></div>
      </div>
-     ${milkmenPayExpanded ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+     <div style="padding-top:6px;border-top:1px solid var(--border);">
       ${milkmenPaymentListHtml}
       <div class="row gap2" style="margin-top:8px;">
         <button class="btn bp bsm f1" style="justify-content:center;" onclick="event.stopPropagation();openMilkmenPaymentModal()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>Add Payment</button>
         <button class="btn bs bsm f1" style="justify-content:center;" onclick="event.stopPropagation();shareHisaabForMilkmen()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share PDF</button>
       </div>
-     </div>` : ''}
+     </div>
     </div>
    </div>
 
@@ -4799,6 +5272,18 @@ function renderCalc(){
 
 function toggleCalcHHExpand(id){ calcHHExpandedId = (calcHHExpandedId===id) ? null : id; renderCalc(); }
 function toggleCalcMilkmenPayExpand(){ calcMilkmenPayExpanded = !calcMilkmenPayExpanded; renderCalc(); }
+
+function loadMoreMilkmenPayments(){
+  if(typeof window.calcMilkmenPayCount === 'undefined') window.calcMilkmenPayCount = 4;
+  window.calcMilkmenPayCount += 5;
+  renderCalc();
+}
+function loadMoreHHPayments(hhId){
+  if(!window.hhPayVisibleCounts) window.hhPayVisibleCounts = {};
+  window.hhPayVisibleCounts[hhId] = (window.hhPayVisibleCounts[hhId] || 4) + 5;
+  renderCalc();
+}
+
 function updCalc(){ const q=parseFloat(document.getElementById('cqty')?.value)||0; const r=parseFloat(document.getElementById('crate')?.value)||0; const el=document.getElementById('cresult'); if(el) el.textContent='₹'+(q*r).toFixed(2); }
 
 function openLogFromPicker(){
@@ -5100,7 +5585,7 @@ const THEME_LABELS = { system: 'System Default', light: 'Light', dark: 'Dark' };
 // persists normally via localStorage as usual.
 let themeMemory = null;
 function getThemePref(){ if (themeMemory) return themeMemory; return (Store.get('mdn_theme')) || 'system'; }
-function resolveTheme(pref){ return pref === 'system' ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : pref; }
+function resolveTheme(pref){ return pref === 'system' ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : pref; }
 function applyTheme(pref){
   const resolved = resolveTheme(pref);
   document.documentElement.setAttribute('data-theme', resolved);
@@ -5200,7 +5685,7 @@ async function removeHHChange(householdId, dateStr){
   const agreed = await appConfirmDelete('Remove Change?', 'Are you sure you want to remove this change?'); if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===householdId); if (!h || !h.changes) return;
   h.changes = h.changes.filter(c=>c.date!==dateStr);
-  DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); DB.log(`Removed permanent change for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; refreshTabs();
 }
 
 // The household modal's Save button has different requirements depending on
@@ -5295,7 +5780,7 @@ function doSaveHousehold(){
     const h = households.find(x=>x.id===editHouseholdId); if (h) { h.name = name; h.startDate = startDate; h.updatedAt = Date.now(); h.rev = (h.rev||0)+1; }
     DB.log(`Updated customer info: ${name}`, 'update');
   }
-  DB.saveHouseholds(households, {immediate:true}); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households, {immediate:true}); cm('m-household'); if(curDetailId) detailPageIdx = 1; refreshTabs();
 }
 
 async function toggleStopHousehold(){
@@ -5307,14 +5792,14 @@ async function toggleStopHousehold(){
     const agreed = await appConfirm('Stop Customer?', `Stop daily pouring for ${h.name}? Past records kept.`); if (!agreed) return;
     h.stopped = true; h.stopDate = addDays(today(), -1); h.updatedAt = Date.now(); h.rev = (h.rev||0)+1; DB.log(`Stopped service: ${h.name}`, 'delete');
   }
-  DB.saveHouseholds(households); cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); cm('m-household'); if(curDetailId) detailPageIdx = 1; refreshTabs();
 }
 
 async function deleteHousehold(){
   const households = DB.households(); const h = households.find(x=>x.id===editHouseholdId); if (!h) return;
   const agreed = await appConfirm('Delete Account?', `Permanently delete ALL records and payments for ${h.name}?`); if (!agreed) return;
   DB.saveHouseholds(households.filter(x=>x.id!==editHouseholdId)); DB.log(`Deleted customer account: ${h.name}`, 'delete');
-  cm('m-household'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  cm('m-household'); if(curDetailId) detailPageIdx = 1; refreshTabs();
 }
 
 // ── CUSTOMER PAYMENTS LOGIC ──
@@ -5429,7 +5914,7 @@ async function saveHHException(){
     hhExceptionTargetDates.forEach(d => { h.exceptions[d] = {qty, rate}; });
     DB.log(`Added milk corrections for ${h.name} on ${hhExceptionTargetDates.length} dates`, 'update');
     hhExceptionTargetDates = null;
-    DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+    DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; refreshTabs();
     return;
   }
 
@@ -5447,14 +5932,14 @@ async function saveHHException(){
     DB.log(`Updated regular daily milk amount for ${h.name} from ${fmtD(dateStr)}`, 'update');
   }
   hhExceptionTargetDates = null;
-  DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); cm('m-hh-exception'); if(curDetailId) detailPageIdx = 1; refreshTabs();
 }
 
 async function removeHHException(householdId, dateStr){
   const agreed = await appConfirmDelete('Remove Exception?', 'Are you sure you want to remove this exception?'); if(!agreed) return;
   const households = DB.households(); const h = households.find(x=>x.id===householdId);
   if (!h || !h.exceptions || !h.exceptions[dateStr]) return; delete h.exceptions[dateStr];
-  DB.saveHouseholds(households); DB.log(`Removed correction for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; renderHome(); renderCalc(); renderGraphs();
+  DB.saveHouseholds(households); DB.log(`Removed correction for ${h.name} on ${fmtD(dateStr)}`, 'delete'); if(curDetailId) detailPageIdx = 1; refreshTabs();
 }
 
 function openHouseholdsOverview(){
