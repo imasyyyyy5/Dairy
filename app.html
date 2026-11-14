@@ -262,11 +262,13 @@ html[data-theme="light"]{
 .ig-num{font-size:17px;flex-shrink:0;width:24px;text-align:center;}
 
 #bnav{display:flex;background:var(--bg1);border-top:1px solid var(--border);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0); z-index: 100;}
-.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px 7px;gap:3px;position:relative;}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px 7px;gap:3px;position:relative;min-height:52px;}
 .nb svg{width:21px;height:21px;stroke:var(--muted);transition:.15s;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:2;}
 .nb span{font-size:10px;font-weight:600;color:var(--muted);transition:.15s;letter-spacing:.3px;}
 .nb.on svg{stroke:var(--fg);}.nb.on span{color:var(--fg);}
 .nb.on::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:2px;background:var(--fg);border-radius:0 0 2px 2px;}
+.nb:focus-visible,.seg-btn:focus-visible,.btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){.trans-fwd,.trans-back,.splash-icon{animation:none!important;} .nb,.nb svg,.nb span,.btn{transition:none!important;}}
 
 .eyebrow{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);}
 .ptitle{font-size:21px;font-weight:800;color:var(--fg);line-height:1.1;}
@@ -511,6 +513,16 @@ svg.chart{display:block;width:100%;overflow:visible;}
   .nb { padding: 5px 4px; gap: 2px; } .nb svg { width: 18px; height: 18px; } .nb span { font-size: 9px; }
   .full-overlay { padding: 10px 20px; } .pc { padding: 0 15px 70px; }
 }
+
+/* ── CLEAN UI / SEGMENTED TABS & MOBILE OPTIMIZATIONS ── */
+.seg-tabs{display:flex;gap:4px;background:var(--bg1);padding:4px;border-radius:12px;border:1px solid var(--border);margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.seg-btn{flex:1;min-width:76px;padding:9px 10px;border-radius:8px;border:none;background:transparent;color:var(--sub);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;justify-content:center;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.seg-btn.on{background:var(--bg2);color:var(--fg);border:1px solid var(--border2);box-shadow:0 1px 4px rgba(0,0,0,0.25);}
+.seg-btn:active{transform:scale(0.97);}
+.dairy-hero-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);padding:14px;margin:0 15px 14px;}
+.dairy-stats-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;background:var(--bg2);padding:10px 12px;border-radius:var(--r);border:1px solid var(--border);text-align:center;align-items:center;}
+.calc-quick-preset{padding:6px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:999px;font-size:11px;font-weight:700;color:var(--sub);cursor:pointer;}
+.calc-quick-preset:hover, .calc-quick-preset:active{color:var(--fg);border-color:var(--border2);background:var(--bg1);}
 </style>
 
 <style>
@@ -629,7 +641,7 @@ svg.chart{display:block;width:100%;overflow:visible;}
 <div id="toast-container"></div>
 <input type="file" id="import-file" style="display:none;" onchange="importBackup(event)" accept=".json,.dat,.pdf" />
 
-<div id="splash" class="full-overlay active"><div class="splash-icon">✏️</div></div>
+<div id="splash" class="full-overlay active"><div class="splash-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m16 4 4 4L8 20l-5 1 1-5Z"/><path d="m14 6 4 4"/></svg></div></div>
 
 <div id="onboarding" class="full-overlay">
  <div class="ob-wrap">
@@ -704,14 +716,14 @@ svg.chart{display:block;width:100%;overflow:visible;}
  <div id="main">
   <div id="p-home" class="panel active"></div>
   <div id="p-graphs" class="panel"></div>
-  <div id="p-calc" class="panel"><div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Analytics</div><div class="ptitle">Dashboard</div></div></div><div style="padding:0 15px 90px;" id="cledger"></div></div>
+  <div id="p-calc" class="panel"><div class="ph row" style="justify-content:space-between;"><div><div class="eyebrow">Accounts & Dues</div><div class="ptitle">Dairy Khata</div></div></div><div style="padding:0 15px 90px;" id="cledger"></div></div>
   <div id="p-me" class="panel"></div>
  </div>
- <nav id="bnav">
-  <button class="nb on" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
-  <button class="nb" onclick="goTab('graphs',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Graphs</span></button>
-  <button class="nb" onclick="goTab('calc',this)"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg><span>Calc</span></button>
-  <button class="nb" onclick="goTab('me',this)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></button>
+ <nav id="bnav" aria-label="Main navigation">
+  <button class="nb on" aria-current="page" aria-controls="p-home" onclick="goTab('home',this)"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></button>
+  <button class="nb" aria-controls="p-graphs" onclick="goTab('graphs',this)"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Graphs</span></button>
+  <button class="nb" aria-controls="p-calc" onclick="goTab('calc',this)"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>Khata</span></button>
+  <button class="nb" aria-controls="p-me" onclick="goTab('me',this)"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Profile</span></button>
  </nav>
 </div>
 
@@ -2099,7 +2111,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.32.0-wheel-date-picker';
+const APP_VERSION = 'v1.33.1-navigation';
 
 const today=()=>{
   const d=new Date();
@@ -4254,10 +4266,10 @@ function goTab(id,btn){
   if(id !== 'me'){ versionMarkShown = false; }
   btn = btn || tabBtn(id);
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b=>{b.classList.remove('on');b.removeAttribute('aria-current');});
   const p = document.getElementById('p-'+id);
   if (p) p.classList.add('active');
-  if (btn) btn.classList.add('on');
+  if (btn) { btn.classList.add('on'); btn.setAttribute('aria-current','page'); }
   curTab=id;
   renderTab(id);
   if(prevIdx>-1 && nextIdx>-1 && nextIdx!==prevIdx) slideTransition('#p-'+id, nextIdx>prevIdx?'forward':'back');
@@ -4509,16 +4521,25 @@ function renderHomeContent(el){
   rev += householdAllTimeSummary().billed;
   const sorted=[...pages].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
   let html=`
-   <div class="ph row" style="justify-content:space-between;align-items:flex-start;">
-    <div><div class="eyebrow">My Dairy</div><div class="ptitle">${profile.name}</div></div>
-    <div class="row gap2">${trash.length?`<button class="btn bg bsm" onclick="openTrash()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>${trash.length}</button>`:''}<button class="btn bp bsm" onclick="openNewPageModal()">+ Record</button></div>
+   <div class="dairy-hero-card">
+    <div class="row gap2" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div>
+        <div class="eyebrow" style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);">My Dairy</div>
+        <div style="font-size:18px;font-weight:900;color:var(--fg);">${profile.name}</div>
+      </div>
+      <div class="row gap2">
+        ${trash.length?`<button class="btn bg bsm" onclick="openTrash()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>${trash.length}</button>`:''}
+        <button class="btn bp bsm" onclick="openNewPageModal()" style="font-weight:700;padding:7px 14px;border-radius:8px;">+ New Record</button>
+      </div>
+    </div>
+    <div class="dairy-stats-strip">
+      <div><div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;">RECORDS</div><div style="font-size:16px;font-weight:800;color:var(--fg);margin-top:2px;">${pages.length}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;">CLEARED</div><div style="font-size:16px;font-weight:800;color:var(--success);margin-top:2px;">${pages.filter(p=>p.locked).length}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;">TOTAL EARNED</div><div style="font-size:16px;font-weight:800;color:var(--success);margin-top:2px;">₹${fmt(rev)}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;">ACTIVE PERIOD</div><div style="font-size:16px;font-weight:800;color:#e8b800;margin-top:2px;">₹${fmt(pend)}</div></div>
+    </div>
    </div>
-   <div class="sg3" style="padding:0 15px;margin-bottom:12px;">
-    <div class="sbox"><div class="sval">${pages.length}</div><div class="ssub">Records</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(rev)}</div><div class="ssub">Total Earned</div></div>
-    <div class="sbox"><div class="sval">₹${fmt(pend)}</div><div class="ssub">Active Period</div></div>
-   </div>
-   <div class="pc sp3">`;
+   <div class="pc sp3" style="padding-top:0;">`;
   if(!sorted.length) html+=`<div class="empty"><div class="eico"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div><div class="etitle">No records yet</div><div class="esub">Tap "+ Record" to start</div></div>`;
   else sorted.forEach(p=>{
     const t=pageSummary(p); const filled=p.rows.filter(r=>r.date).length;
@@ -4552,11 +4573,26 @@ function renderDetailView(el){
 
   el.innerHTML=`
    <div class="ph">
-    <div class="row gap2 mb3" style="flex-wrap:nowrap;overflow-x:auto;"><button class="btn bg bsm" onclick="closeDetail()">×</button><div class="f1"></div><button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button><button class="btn bg bsm" onclick="editPageLength('${page.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>Length</button><button class="btn bg bsm" onclick="shareHisaabForPage('${page.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button><button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'Unlock':'Lock'}</button></div>
-    <div class="eyebrow">${page.rows.length}-Day Period</div><div class="ptitle" style="font-size:17px;">${page.label}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px;">${detailPageIdx===0?'Each row unlocks on its assigned date.':'Milk sold to local customers — swipe right to go back.'}</div>
+    <div class="row gap2 mb3" style="align-items:center;justify-content:space-between;">
+      <button class="btn bg bsm" onclick="closeDetail()" style="font-weight:700;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:-1px;"><polyline points="15 18 9 12 15 6"/></svg>Records</button>
+      <div class="row gap2">
+        <button class="btn bg bsm" onclick="shareHisaabForPage('${page.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button>
+        <button class="btn ${page.locked?'bw':'bg'} bsm" onclick="reqLock('${page.id}')">${page.locked?'Unlock':'Lock'}</button>
+        <button class="btn bg bsm" onclick="editPageLength('${page.id}')" title="Change period length"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></button>
+        <button class="btn bg bsm" style="color:var(--danger);" onclick="trashPage('${page.id}')" title="Move to trash"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+      </div>
+    </div>
+    <div>
+      <div class="eyebrow">${page.rows.length}-Day Period</div>
+      <div class="ptitle" style="font-size:18px;">${page.label}</div>
+    </div>
    </div>
-   <div class="detail-dots"><span class="ddot${detailPageIdx===0?' on':''}"></span><span class="ddot${detailPageIdx===1?' on':''}"></span></div>
+   <div style="padding:0 15px;margin-bottom:12px;">
+     <div class="seg-tabs" style="margin-bottom:0;">
+       <button class="seg-btn ${detailPageIdx===0?'on':''}" aria-pressed="${detailPageIdx===0}" onclick="setDetailPageIdx(0)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><path d="M16 3h5v5"/><path d="m10 14 11-11"/><path d="M8 8h3M8 12h2"/></svg> Daily Milk Table</button>
+       <button class="seg-btn ${detailPageIdx===1?'on':''}" aria-pressed="${detailPageIdx===1}" onclick="setDetailPageIdx(1)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z"/></svg> Customer Deliveries (${DB.households().length})</button>
+     </div>
+   </div>
    ${bodyHtml}`;
 
   if (detailPageIdx === 0) {
@@ -5117,6 +5153,25 @@ function drawSelectedGraph() {
   }
 }
 
+
+let calcSubTab = 'milkmen';
+function setCalcSubTab(tab){
+  if (calcSubTab === tab) return;
+  Haptics.fire('tick');
+  calcSubTab = tab;
+  renderCalc();
+}
+function setCalcPresetRate(r){
+  const el = document.getElementById('crate');
+  if(el){ el.value = r; updCalc(); }
+}
+function setDetailPageIdx(idx){
+  if (detailPageIdx === idx) return;
+  Haptics.fire('tick');
+  detailPageIdx = idx;
+  renderHome();
+}
+
 function renderCalc(){
   const pages = DB.pages().filter(p=>!p.trashed); const activePage = pages.find(p=>!p.locked);
   let curMilk = 0, curRev = 0; let trendText = "Steady →", trendColor = "var(--muted)";
@@ -5126,9 +5181,7 @@ function renderCalc(){
     if(milkRows.length >= 2){ const last = milkRows[milkRows.length-1].milk, prev = milkRows[milkRows.length-2].milk; if(last > prev * 1.05) { trendText = "Increasing ↗"; trendColor = "var(--success)"; } else if(last < prev * 0.95) { trendText = "Decreasing ↘"; trendColor = "var(--danger)"; } }
   }
 
-  // ── MILKMEN LEDGER ── Dues are calculated from LOCKED (cleared/completed)
-  // periods only — an ongoing/unlocked period can still change, so it's
-  // never counted as "due" until it locks.
+  // ── MILKMEN LEDGER ──
   const lockedPages = pages.filter(p=>p.locked), unlockedPages = pages.filter(p=>!p.locked);
   let milkmenEarned = 0, milkmenPending = 0, milkmenReceived = 0;
   lockedPages.forEach(p => { milkmenEarned += pageSummary(p).rev; });
@@ -5136,11 +5189,8 @@ function renderCalc(){
   const milkmenPayments = DB.payments().filter(p=>p.type==='received' && !p.deleted);
   milkmenPayments.forEach(p => { milkmenReceived += parseFloat(p.amount)||0; });
   const exps = Store.get('mdn_expenses') || []; let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
-  // Net balance reflects only what milkmen have earned vs what they've been paid —
-  // farm expenses are a separate ledger and must never offset the milkmen balance.
   const milkmenNetBal = milkmenEarned - milkmenReceived;
 
-  // Payments ordered chronologically: older on top to latest on bottom near action buttons
   const milkmenPaymentsSorted = milkmenPayments.slice().sort((a,b) => a.date.localeCompare(b.date));
   const totalMilkmenPay = milkmenPaymentsSorted.length;
   if(typeof window.calcMilkmenPayCount === 'undefined') window.calcMilkmenPayCount = 4;
@@ -5150,7 +5200,7 @@ function renderCalc(){
 
   let milkmenPaymentListHtml = '';
   if(!totalMilkmenPay){
-    milkmenPaymentListHtml = `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted);">No payments recorded yet.</div>`;
+    milkmenPaymentListHtml = `<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);">No payments recorded yet.</div>`;
   } else {
     let seeMoreHtml = '';
     if(milkmenStartIndex > 0){
@@ -5162,13 +5212,12 @@ function renderCalc(){
 
   // ── CUSTOMERS LEDGER ──
   const hhSummary = householdAllTimeSummary(); const households = DB.households();
-  let totalHHOutstanding = 0;
+  const totalHHOutstanding = households.reduce((sum, h) => sum + getCustomerStats(h).currentDue, 0);
   if(!window.hhPayVisibleCounts) window.hhPayVisibleCounts = {};
-  let hhBreakdownHTML = households.slice(0,8).map(h => {
-      const stats = getCustomerStats(h); totalHHOutstanding += stats.currentDue;
+  let hhBreakdownHTML = households.slice(0,12).map(h => {
+      const stats = getCustomerStats(h);
       const isPaidUp = stats.currentDue <= 0;
       const payExpanded = calcHHExpandedId === h.id;
-      // Chronological order: older on top to latest on bottom near the Log Payment button
       const activePayments = (h.payments||[]).filter(p=>!p.deleted).slice().sort((a,b)=>a.date.localeCompare(b.date));
       const hhVis = window.hhPayVisibleCounts[h.id] || 4;
       const totalHHPay = activePayments.length;
@@ -5197,77 +5246,98 @@ function renderCalc(){
        </div>` : ''}
       </div>`;
   }).join('');
-  if (households.length === 0) hhBreakdownHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No local customers added yet</div>`;
+  if (households.length === 0) hhBreakdownHTML = `<div style="text-align:center;padding:14px;font-size:12px;color:var(--muted);">No local customers added yet</div>`;
 
-  let expenseHTML = exps.slice(0, 5).map(e => `<div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;"><div class="f1"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:10px;color:var(--muted);">${fmtDS(e.date)}</div></div><div style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(e.cost)}</div><button class="btn bg bsm" style="color:var(--danger); padding:4px 8px;" onclick="deleteExpense('${e.id}')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`).join('');
-  if(exps.length === 0) expenseHTML = `<div style="text-align:center;padding:10px;font-size:12px;color:var(--muted);">No expenses recorded</div>`;
+  let expenseHTML = exps.slice(0, 10).map(e => `<div class="row gap2 mb2" style="background:var(--bg2); padding:10px; border-radius:8px;"><div class="f1"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:10px;color:var(--muted);">${fmtDS(e.date)}</div></div><div style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(e.cost)}</div><button class="btn bg bsm" style="color:var(--danger); padding:4px 8px;" onclick="deleteExpense('${e.id}')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`).join('');
+  if(exps.length === 0) expenseHTML = `<div style="text-align:center;padding:14px;font-size:12px;color:var(--muted);">No expenses recorded</div>`;
 
-  document.getElementById('cledger').innerHTML=`
-   <div class="card mb4">
-    <div class="slabel mb3">Ongoing Period Dashboard</div>
-    <div class="sp2">
-     <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg><div class="f1"><div style="font-weight:700;">Milk Output Trend</div><div style="font-size:10px;color:var(--muted);">Compared to previous day</div></div><span style="font-weight:800;font-size:14px;color:${trendColor};">${trendText}</span></div>
-     <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/><line x1="6" y1="8" x2="18" y2="8"/></svg><div class="f1"><div style="font-weight:700;">Total Milk</div></div><span style="font-weight:800;font-size:14px;color:var(--fg);">${fmt(curMilk)} L</span></div>
-     <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg><div class="f1"><div style="font-weight:700;">Period Billed (Milkmen)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(curRev)}</span></div>
-    </div>
-   </div>
+  // Segmented Tabs Header
+  let subHtml = `
+   <div class="seg-tabs mb3">
+    <button class="seg-btn ${calcSubTab==='milkmen'?'on':''}" onclick="setCalcSubTab('milkmen')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M8 2h8v3l2 3v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8l2-3V2z"/><line x1="6" y1="8" x2="18" y2="8"/></svg>Milkmen</button>
+    <button class="seg-btn ${calcSubTab==='households'?'on':''}" onclick="setCalcSubTab('households')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Customers</button>
+    <button class="seg-btn ${calcSubTab==='expenses'?'on':''}" onclick="setCalcSubTab('expenses')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Expenses</button>
+    <button class="seg-btn ${calcSubTab==='calc'?'on':''}" onclick="setCalcSubTab('calc')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg>Calculator</button>
+   </div>`;
 
-   <div class="card mb4">
-    <div class="slabel mb3">Main Dairy Ledger (Milkmen)</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">Dues below are calculated from <strong>locked (cleared) periods only</strong> — an ongoing period isn't counted as due until it locks.</div>
-    <div class="sp2">
-     <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div class="f1"><div style="font-weight:700;">Total Billed (Locked Periods)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(milkmenEarned)}</span></div>
-     ${milkmenPending > 0 ? `<div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div class="f1"><div style="font-weight:700;">Ongoing (Not Yet Due)</div><div style="font-size:10px;color:var(--muted);">From unlocked period(s) — excluded above</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenPending)}</span></div>` : ''}
-     <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenReceived)}</span></div>
-     <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg><div class="f1"><div style="font-weight:700;">Total Expenses</div></div><span style="font-weight:800;font-size:14px;color:var(--danger);">₹${fmt(totalExp)}</span></div>
-     <div class="payrow" style="border:1px solid var(--border2);"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h18"/></svg><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;text-align:right;flex:1;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
-    </div>
-    <div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px; margin-top:10px;">
-     <div class="row gap2" style="align-items:center;margin-bottom:8px;">
-      <div class="f1"><div style="font-weight:700;font-size:13px;">Payment History</div><div style="font-size:10px;color:var(--muted);">${milkmenPayments.length} payment(s) logged • latest near buttons</div></div>
-     </div>
-     <div style="padding-top:6px;border-top:1px solid var(--border);">
-      ${milkmenPaymentListHtml}
-      <div class="row gap2" style="margin-top:8px;">
-        <button class="btn bp bsm f1" style="justify-content:center;" onclick="event.stopPropagation();openMilkmenPaymentModal()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>Add Payment</button>
-        <button class="btn bs bsm f1" style="justify-content:center;" onclick="event.stopPropagation();shareHisaabForMilkmen()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share PDF</button>
+  if (calcSubTab === 'milkmen') {
+    subHtml += `
+     <div class="card mb3">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">Dues below are calculated from <strong>locked (cleared) periods only</strong> — an ongoing period isn't counted as due until it locks.</div>
+      <div class="sp2">
+       <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div class="f1"><div style="font-weight:700;">Total Billed (Locked Periods)</div></div><span style="font-weight:800;font-size:14px;color:#e8b800;">₹${fmt(milkmenEarned)}</span></div>
+       ${milkmenPending > 0 ? `<div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><div class="f1"><div style="font-weight:700;">Ongoing (Not Yet Due)</div><div style="font-size:10px;color:var(--muted);">From unlocked period(s)</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenPending)}</span></div>` : ''}
+       <div class="payrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><div class="f1"><div style="font-weight:700;">Total Received</div></div><span style="font-weight:700;font-size:12px;color:var(--muted);">₹${fmt(milkmenReceived)}</span></div>
+       <div class="payrow" style="border:1px solid var(--border2);"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h18"/></svg><div class="f1"><div style="font-weight:700;">Milkmen Net Balance</div></div><span style="font-weight:800;font-size:14px;text-align:right;flex:1;color:${milkmenNetBal>0?'#e8b800':milkmenNetBal<0?'var(--success)':'var(--fg)'};">${milkmenNetBal>0?'₹'+fmt(milkmenNetBal)+' due':milkmenNetBal<0?'Overpaid ₹'+fmt(-milkmenNetBal):'Settled'}</span></div>
       </div>
-     </div>
-    </div>
-   </div>
+      <div class="mb2 calc-hh-row" style="background:var(--bg2); padding:10px; border-radius:8px; margin-top:10px;">
+       <div class="row gap2" style="align-items:center;margin-bottom:8px;">
+        <div class="f1"><div style="font-weight:700;font-size:13px;">Payment History</div><div style="font-size:10px;color:var(--muted);">${milkmenPayments.length} payment(s) logged</div></div>
+       </div>
+       <div style="padding-top:6px;border-top:1px solid var(--border);">
+        ${milkmenPaymentListHtml}
+        <div class="row gap2" style="margin-top:8px;">
+          <button class="btn bp bsm f1" style="justify-content:center;" onclick="event.stopPropagation();openMilkmenPaymentModal()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>Add Payment</button>
+          <button class="btn bs bsm f1" style="justify-content:center;" onclick="event.stopPropagation();shareHisaabForMilkmen()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share PDF</button>
+        </div>
+       </div>
+      </div>
+     </div>`;
+  } else if (calcSubTab === 'households') {
+    subHtml += `
+     <div class="card mb3">
+      <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;">
+          <div class="slabel" style="margin:0;">Local Customers Ledger</div>
+          <button class="btn bs bsm" onclick="openHouseholdsOverview()">Manage Customers →</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;margin-top:-6px;">Separate accounts for daily home deliveries.</div>
+      <div class="row gap2 mb3" style="justify-content:space-between;background:var(--bg2);padding:12px 14px;border-radius:var(--r);border:1px solid var(--border);">
+        <div><div class="eyebrow" style="font-size:10px;">All-Time Billed</div><div style="font-size:17px;font-weight:800;color:var(--fg);margin-top:2px;">₹${fmt(hhSummary.billed)}</div></div>
+        <div class="tr"><div class="eyebrow" style="font-size:10px;">Total Outstanding</div><div style="font-size:17px;font-weight:800;color:${totalHHOutstanding>0?'#e8b800':'var(--fg)'};margin-top:2px;">₹${fmt(totalHHOutstanding)}</div></div>
+      </div>
+      <div class="mb3" style="font-size:11px; color:var(--success); text-align:right;">Total Collected: ₹${fmt(hhSummary.collected)}</div>
+      ${hhBreakdownHTML}
+     </div>`;
+  } else if (calcSubTab === 'expenses') {
+    subHtml += `
+     <div class="card mb3">
+      <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;">
+        <div><div class="slabel" style="margin:0;">Farm Expenses</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Feed, medical, maintenance</div></div>
+        <button class="btn bp bsm" onclick="openExpenseModal()">+ Add Expense</button>
+      </div>
+      <div style="background:var(--bg2);padding:12px 14px;border-radius:var(--r);border:1px solid var(--border);margin-bottom:12px;">
+        <div class="eyebrow" style="font-size:10px;">Total Expenses</div>
+        <div style="font-size:22px;font-weight:900;color:var(--danger);margin-top:2px;">₹${fmt(totalExp)}</div>
+      </div>
+      ${expenseHTML}
+     </div>`;
+  } else if (calcSubTab === 'calc') {
+    subHtml += `
+     <div class="card">
+       <div class="slabel mb3">Quick Rate & Qty Calculator</div>
+       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;margin-top:-6px;">Instantly compute milk billing amount.</div>
+       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div><label class="flabel">Milk Qty (L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="cqty" placeholder="0.0" oninput="updCalc()"/></div>
+        <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="crate" placeholder="0.0" oninput="updCalc()"/></div>
+       </div>
+       <div class="row gap2 mb3" style="flex-wrap:wrap;align-items:center;">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;">Presets:</span>
+        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(50)">₹50</button>
+        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(55)">₹55</button>
+        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(60)">₹60</button>
+        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(65)">₹65</button>
+        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(70)">₹70</button>
+        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(75)">₹75</button>
+       </div>
+       <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:18px;text-align:center;">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;font-weight:700;">Calculated Total</div>
+        <div style="font-size:32px;font-weight:900;color:var(--fg);" id="cresult">₹0.00</div>
+       </div>
+      </div>`;
+  }
 
-   <div class="card mb4">
-    <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;">
-        <div class="slabel" style="margin:0;">Local Customers Ledger</div>
-        <button class="btn bs bsm" onclick="openHouseholdsOverview()">Manage →</button>
-    </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;margin-top:-6px;">Separate accounts for daily home deliveries.</div>
-    <div class="row gap2 mb3" style="justify-content:space-between;">
-      <div><div class="eyebrow">All-Time Billed</div><div style="font-size:18px;font-weight:800;color:var(--fg);">₹${fmt(hhSummary.billed)}</div></div>
-      <div class="tr"><div class="eyebrow">Total Outstanding</div><div style="font-size:18px;font-weight:800;color:${totalHHOutstanding>0?'#e8b800':'var(--fg)'};">₹${fmt(totalHHOutstanding)}</div></div>
-    </div>
-    <div class="mb2" style="font-size:11px; color:var(--success); text-align:right;">Total Collected: ₹${fmt(hhSummary.collected)}</div>
-    ${hhBreakdownHTML}
-   </div>
-   
-   <div class="card mb4">
-    <div class="row gap2 mb3" style="justify-content:space-between; align-items:center;"><div class="slabel" style="margin:0;">General Expenses</div><button class="btn bp bsm" onclick="openExpenseModal()">+ Add</button></div>
-    ${expenseHTML}
-   </div>
-
-   <div class="card">
-     <div class="slabel mb3">Quick Calc</div>
-     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px;">
-      <div><label class="flabel">Qty (L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="cqty" placeholder="0.0" oninput="updCalc()"/></div>
-      <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="crate" placeholder="0.0" oninput="updCalc()"/></div>
-     </div>
-     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:15px;text-align:center;">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Result</div><div style="font-size:28px;font-weight:900;color:var(--fg);" id="cresult">₹0.00</div>
-     </div>
-    </div>
-   `;
-
-  if (households.length) scheduleCoach('calchhtap', () => document.querySelector('.calc-hh-row'), 'Tap a customer here to log a payment or view their due amount.');
+  document.getElementById('cledger').innerHTML = subHtml;
+  if (households.length && calcSubTab === 'households') scheduleCoach('calchhtap', () => document.querySelector('.calc-hh-row'), 'Tap a customer here to log a payment or view their due amount.');
 }
 
 function toggleCalcHHExpand(id){ calcHHExpandedId = (calcHHExpandedId===id) ? null : id; renderCalc(); }
@@ -5446,8 +5516,7 @@ function renderMe(){
    ${devToolsCardHtml()}
    <div class="card mt3"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Data Management</div><div class="row gap2"><button class="btn bp" style="flex:1;" onclick="shareBackup()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share Backup</button><button class="btn bs" style="flex:1;" onclick="document.getElementById('import-file').click()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Import Backup</button></div></div>
    <button class="btn bg mt3" style="width:100%;" onclick="openQuickEntry()">Show Quick Entry UI Now</button>`;
-  const pages=DB.pages().filter(p=>!p.trashed);
-  html+=`<div class="card mt4"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">Quick Stats</div><div class="sg2"><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.length}</div><div class="ssub">Total Pages</div></div><div class="sbox tc"><div class="sval" style="font-size:22px;">${pages.filter(p=>p.locked).length}</div><div class="ssub">Cleared</div></div></div></div></div>`;
+  html+=`</div>`;
   html+=`<div id="app-version-mark" class="${versionMarkShown?'show':''}" onclick="bumpVersionTap()" style="cursor:pointer;"><div>${APP_VERSION}${devMode?' · DEV':''}</div><div>Storage: ${localStorageUsageStr()}</div></div>`;
   el.innerHTML=html;
 }
@@ -6250,8 +6319,8 @@ function aiKeyStatusHtml(){
   if (!getAiKey()) return '<span style="color:var(--muted);">No key — using built-in assistant (GPT-6 Luna)</span>';
   if (!s) return '<span style="color:var(--muted);">Not checked yet</span>';
   if (s.state === 'checking') return '<span style="color:var(--muted);">Checking key…</span>';
-  if (s.state === 'ok') return `<span style="color:#16a34a;font-weight:700;">✓ ${aiEsc(AI_PROVIDERS[s.provider] ? AI_PROVIDERS[s.provider].name : s.provider)}</span>`;
-  return '<span style="color:#dc2626;font-weight:700;">✗ Failed — key not working</span>';
+  if (s.state === 'ok') return `<span style="color:#16a34a;font-weight:700;">Connected: ${aiEsc(AI_PROVIDERS[s.provider] ? AI_PROVIDERS[s.provider].name : s.provider)}</span>`;
+  return '<span style="color:#dc2626;font-weight:700;">Failed — key not working</span>';
 }
 function aiPaintKeyStatus(){ const el = document.getElementById('ai-key-status'); if (el) el.innerHTML = aiKeyStatusHtml(); }
 async function aiVerifyKey(key){
