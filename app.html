@@ -1101,15 +1101,50 @@ async function buildBackupPayload(pretty) {
   }, null, pretty ? 2 : 0);
 }
 
+function safeNum(value){
+  if(typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const raw = String(value == null ? '' : value).replace(/[₹,\s]/g, '');
+  if(!raw || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw)) return 0;
+  const number = Number(raw);
+  return Number.isFinite(number) ? number : 0;
+}
+function roundMoney(value){ return Math.round((safeNum(value) + Number.EPSILON) * 100) / 100; }
+function dedupePeriodPages(records){
+  const seenIds = new Set(), seenRanges = new Set();
+  return (Array.isArray(records) ? records : []).filter(page => {
+    if(!page || typeof page !== 'object') return false;
+    const id = page.id == null ? '' : String(page.id);
+    const range = page.startDate && page.endDate ? `${page.startDate}_${page.endDate}` : '';
+    if((id && seenIds.has(id)) || (range && seenRanges.has(range))) return false;
+    if(id) seenIds.add(id);
+    if(range) seenRanges.add(range);
+    return true;
+  });
+}
+function dedupePayments(records){
+  const seenIds = new Set(), seenLegacySignatures = new Set();
+  return (Array.isArray(records) ? records : []).filter(payment => {
+    if(!payment || typeof payment !== 'object') return false;
+    const id = payment.id == null ? '' : String(payment.id);
+    if(id){ if(seenIds.has(id)) return false; seenIds.add(id); return true; }
+    const signature = `${payment.date || ''}_${roundMoney(payment.amount)}_${payment.type || 'customer'}`;
+    if(seenLegacySignatures.has(signature)) return false;
+    seenLegacySignatures.add(signature);
+    return true;
+  });
+}
+
 async function restoreBackupPayload(payload) {
   const archiveData = await decompressArchive(payload.archive);
   const readable = payload.readable || {};
   if (readable.profile) Store.set('mdn_profile', readable.profile);
-  Store.set('mdn_pages', [...(readable.activePages || []), ...(archiveData.clearedPages || [])]);
-  Store.set('mdn_payments', archiveData.payments || []);
+  const pages = dedupePeriodPages([...(readable.activePages || []), ...(archiveData.clearedPages || [])]);
+  Store.set('mdn_pages', pages);
+  Store.set('mdn_payments', dedupePayments(archiveData.payments || []));
   Store.set('mdn_trash', archiveData.trash || []);
   Store.set('mdn_logs', archiveData.logs || []);
-  Store.set('mdn_households', archiveData.households || []);
+  const households = (archiveData.households || []).map(h => ({...h, payments: dedupePayments(h.payments || [])}));
+  Store.set('mdn_households', households);
   Store.set('mdn_expenses', archiveData.expenses || []);
 }
 
@@ -2111,7 +2146,7 @@ const uid=()=>`${DEVICE_ID}-${Date.now().toString(36)}${Math.random().toString(3
 // ⚠️ AI: bump this on every code change (see instruction block at top of file).
 // Shown as a hidden watermark at the bottom of the Profile tab — revealed only
 // by a hard swipe-up right at the bottom edge of that tab.
-const APP_VERSION = 'v1.33.1-navigation';
+const APP_VERSION = 'v1.36.0-ledger-calculator-fixes';
 
 const today=()=>{
   const d=new Date();
@@ -2967,7 +3002,7 @@ function getCustomerStats(h, customEndDate) {
       daysActive++; d = addDays(d, 1); guard++;
     }
   }
-  const totalPaid = (h.payments||[]).filter(p=>!p.deleted && (!customEndDate || p.date <= customEndDate)).reduce((s, p) => s + (parseFloat(p.amount)||0), 0);
+  const totalPaid = dedupePayments(h.payments||[]).filter(p=>!p.deleted && p.date <= end).reduce((s, p) => s + safeNum(p.amount), 0);
   return {
     totalLiters: parseFloat(totalLiters.toFixed(2)),
     totalMilkValue: parseFloat(totalMilkValue.toFixed(2)),
@@ -2989,7 +3024,7 @@ function householdDueTimeline(h, days){
   for(; d <= end && guard < 3660; d = addDays(d,1), guard++){
      const e = getHouseholdDayEntry(h, d);
      billed += (e.qty||0)*(e.rate||0);
-     while(pIdx < payments.length && payments[pIdx].date <= d){ paid += parseFloat(payments[pIdx].amount)||0; pIdx++; }
+     while(pIdx < payments.length && payments[pIdx].date <= d){ paid += safeNum(payments[pIdx].amount); pIdx++; }
      if(d >= winStart) out.push({date: d, due: parseFloat((billed-paid).toFixed(2))});
   }
   return out;
@@ -3071,7 +3106,7 @@ function getHouseholdPriorDue(h, startDate){
     if((e.qty||0) > 0) priorBilled += parseFloat(((e.qty||0)*(e.rate||0)).toFixed(2));
     d = addDays(d, 1); guard++;
   }
-  const priorPaid = (h.payments||[]).filter(p=>!p.deleted && p.date < startDate).reduce((s,p)=> s + (parseFloat(p.amount)||0), 0);
+  const priorPaid = dedupePayments(h.payments||[]).filter(p=>!p.deleted && p.date < startDate).reduce((s,p)=> s + safeNum(p.amount), 0);
   return parseFloat((priorBilled - priorPaid).toFixed(2));
 }
 
@@ -3420,19 +3455,19 @@ async function buildHisaabPages_Page(page){
 // add up cleanly, and always guarantees at least the latest 5 entries.
 async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = null, mode = 'all'){
   const profile = DB.profile();
-  const lockedPages = DB.pages().filter(p => p.locked && !p.trashed);
-  const milkmenPayments = DB.payments().filter(p => p.type === 'received' && !p.deleted);
+  const lockedPages = dedupePeriodPages(DB.pages().filter(p => p.locked && !p.trashed));
+  const milkmenPayments = dedupePayments(DB.payments()).filter(p => p.type === 'received' && !p.deleted);
 
   let fullLedger = [];
   lockedPages.forEach(p => {
     const rev = pageSummary(p).rev;
-    fullLedger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0 });
+    fullLedger.push({ date: p.endDate, desc: `Period Billed (${fmtDS(p.startDate)} - ${fmtDS(p.endDate)})`, billed: rev, paid: 0, kind: 'bill', id: p.id || `${p.startDate}_${p.endDate}` });
   });
   milkmenPayments.forEach(p => {
-    fullLedger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: parseFloat(p.amount) || 0 });
+    fullLedger.push({ date: p.date, desc: p.note ? `Payment Received (${p.note})` : 'Payment Received', billed: 0, paid: safeNum(p.amount), kind: 'payment', id: p.id || '' });
   });
 
-  fullLedger.sort((a, b) => a.date.localeCompare(b.date));
+  fullLedger.sort((a, b) => a.date.localeCompare(b.date) || (a.kind === b.kind ? 0 : a.kind === 'bill' ? -1 : 1) || String(a.id).localeCompare(String(b.id)));
 
   let openingDate = null;
   let openingBalance = 0;
@@ -3458,7 +3493,7 @@ async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = 
 
   // Show previous balance / prior due at the top of the table if cutoff or range was applied
   if (openingDate) {
-    const priorText = openingBalance === 0 ? 'Settled' : (openingBalance > 0 ? '₹' + fmt(openingBalance) + ' due' : 'Overpaid ₹' + fmt(-openingBalance));
+    const priorText = Math.abs(openingBalance) < 0.005 ? 'Settled' : (openingBalance > 0 ? '₹' + fmt(openingBalance) + ' due' : 'Advance ₹' + fmt(-openingBalance));
     ledgerRows.push([
       fmtDS(openingDate),
       [{ text: 'Prior Due (Carried Forward)', color: '#64748b' }],
@@ -3478,8 +3513,8 @@ async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = 
     const descCell = r.paid ? [{ text: truncateHisaabText(r.desc, 32), color: '#10b981' }] : truncateHisaabText(r.desc, 32);
     const billedCell = r.billed ? '₹' + fmt(r.billed) : '—';
     const paidCell = r.paid ? [{ text: '₹' + fmt(r.paid), color: '#10b981' }] : '—';
-    const balText = currentRunning === 0 ? 'Settled' : (currentRunning > 0 ? '₹' + fmt(currentRunning) + ' due' : 'Overpaid ₹' + fmt(-currentRunning));
-    const balColor = currentRunning === 0 ? '#10b981' : (currentRunning > 0 ? '#0f172a' : '#2563eb');
+    const balText = Math.abs(currentRunning) < 0.005 ? 'Settled' : (currentRunning > 0 ? '₹' + fmt(currentRunning) + ' due' : 'Advance ₹' + fmt(-currentRunning));
+    const balColor = Math.abs(currentRunning) < 0.005 ? '#10b981' : (currentRunning > 0 ? '#0f172a' : '#2563eb');
 
     ledgerRows.push([
       dateCell,
@@ -3490,15 +3525,15 @@ async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = 
     ]);
   });
 
-  const finalBalance = currentRunning;
+  const finalBalance = roundMoney(currentRunning);
   const chunks = chunkArr(ledgerRows, HISAAB_ROWS_PER_PAGE);
   const chunkList = chunks.length ? chunks : [[]];
 
-  let subtitle = `As of ${fmtD(today())}`;
+  let subtitle = visibleLedger.length ? `Records: ${fmtD(visibleLedger[0].date)} – ${fmtD(visibleLedger[visibleLedger.length - 1].date)}  •  As of ${fmtD(today())}` : `No bills or payments through ${fmtD(today())}`;
   if (openingDate) {
-    const sStr = fmtDS(openingDate);
-    const eStr = visibleLedger.length ? fmtDS(visibleLedger[visibleLedger.length - 1].date) : fmtDS(today());
-    subtitle = `Period: ${sStr} – ${eStr}  •  Prior Due: ${openingBalance === 0 ? 'Settled' : '₹' + fmt(openingBalance)}`;
+    const sStr = fmtD(openingDate);
+    const eStr = customEndDate ? fmtD(customEndDate) : (visibleLedger.length ? fmtD(visibleLedger[visibleLedger.length - 1].date) : fmtD(today()));
+    subtitle = `Covered: ${sStr} – ${eStr}  •  Prior Due: ${Math.abs(openingBalance) < 0.005 ? 'Settled' : openingBalance > 0 ? '₹' + fmt(openingBalance) + ' due' : 'Advance ₹' + fmt(-openingBalance)}`;
   }
 
   const pages = await Promise.all(chunkList.map(async (chunk, idx) => {
@@ -3506,10 +3541,9 @@ async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = 
     let footerLines = null;
     if (isLast) {
       footerLines = [
-        openingDate && openingBalance !== 0
-          ? `Prior Due: ₹${fmt(openingBalance)}   Period Billed: ₹${fmt(periodBilled)}   Period Paid: ₹${fmt(periodPaid)}`
-          : `Period Billed: ₹${fmt(periodBilled)}   Period Paid: ₹${fmt(periodPaid)}`,
-        `Net Balance: ${finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : finalBalance < 0 ? 'Overpaid ₹' + fmt(-finalBalance) : 'Settled'}`
+        `Balance math: Prior Due ₹${fmt(openingBalance)} + Bills ₹${fmt(periodBilled)} − Payments ₹${fmt(periodPaid)}`,
+        `Net Balance: ${Math.abs(finalBalance) < 0.005 ? 'Settled' : finalBalance > 0 ? '₹' + fmt(finalBalance) + ' due' : 'Advance ₹' + fmt(-finalBalance)}`,
+        `Only cleared-period bills are counted; ongoing bills and farm expenses are excluded.`
       ];
     }
 
@@ -3531,60 +3565,75 @@ async function buildHisaabPages_Milkmen(customStartDate = null, customEndDate = 
 // Household hisaab with Date Range & Prior Due support
 async function buildHisaabPages_Household(h, customEndDate, customStartDate = null, mode = 'all'){
   const profile = DB.profile();
-  let effStartDate = customStartDate || null;
+  const effStartDate = customStartDate || h.startDate;
+  const effEndDate = customEndDate || ((h.stopped && h.stopDate) ? h.stopDate : today());
+  const ledger = householdFullLedger(h, effEndDate, customStartDate);
+  const priorDue = customStartDate ? getHouseholdPriorDue(h, customStartDate) : 0;
+  const filteredPayments = dedupePayments(h.payments || []).filter(p => !p.deleted && p.date <= effEndDate && (!customStartDate || p.date >= customStartDate)).slice().sort((a,b) => a.date.localeCompare(b.date) || String(a.id || '').localeCompare(String(b.id || '')));
 
-  const ledger = householdFullLedger(h, customEndDate, effStartDate);
-  const priorDue = effStartDate ? getHouseholdPriorDue(h, effStartDate) : 0;
-  const filteredPayments = (h.payments || []).filter(p => !p.deleted && (!customEndDate || p.date <= customEndDate) && (!effStartDate || p.date >= effStartDate)).slice().sort((a,b) => a.date.localeCompare(b.date));
+  const periodMilkValue = roundMoney(ledger.reduce((s, r) => s + safeNum(r.amount), 0));
+  const periodMilkQty = roundMoney(ledger.reduce((s, r) => s + safeNum(r.qty), 0));
+  const periodPaid = roundMoney(filteredPayments.reduce((s, p) => s + safeNum(p.amount), 0));
+  const netDue = roundMoney(priorDue + periodMilkValue - periodPaid);
+  const priorDueApplied = Math.min(Math.max(0, priorDue), periodPaid);
+  let remainingCoverage = roundMoney(Math.max(0, -priorDue) + Math.max(0, periodPaid - Math.max(0, priorDue)));
+  const coveredDates = [];
 
-  const periodMilkValue = ledger.reduce((s, r) => s + r.amount, 0);
-  const periodMilkQty = ledger.reduce((s, r) => s + r.qty, 0);
-  const periodPaid = filteredPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-  const netDue = priorDue + periodMilkValue - periodPaid;
-
-  let displayRows = [];
-  if (effStartDate && priorDue !== 0) {
+  const displayRows = [];
+  if (customStartDate) {
+    let priorLabel = 'Prior Due';
+    let priorValue = 'No prior due';
+    let priorColor = '#10b981';
+    if (priorDue > 0) {
+      const balanceLeft = roundMoney(priorDue - priorDueApplied);
+      if (balanceLeft <= 0.005) { priorLabel = 'Prior Due (Paid / Chukta)'; priorValue = `₹${fmt(priorDue)} paid`; }
+      else if (priorDueApplied > 0) { priorLabel = 'Prior Due (Part-paid)'; priorValue = `₹${fmt(balanceLeft)} due`; priorColor = '#2563eb'; }
+      else { priorValue = `₹${fmt(priorDue)} due`; priorColor = '#d97706'; }
+    } else if (priorDue < 0) {
+      priorLabel = 'Advance Carried Forward'; priorValue = `₹${fmt(-priorDue)} advance`;
+    }
     displayRows.push([
-      [{ text: fmtDS(effStartDate), color: '#64748b' }],
+      [{ text: fmtDS(customStartDate), color: '#64748b' }],
       [{ text: '—', color: '#64748b' }],
-      [{ text: 'Prior Due', color: '#64748b' }],
-      [{ text: '₹' + fmt(priorDue), color: priorDue > 0 ? '#d97706' : '#10b981' }]
+      [{ text: priorLabel, color: priorColor }],
+      [{ text: priorValue, color: priorColor }]
     ]);
   }
 
   ledger.forEach(r => {
-    const isException = r.isException;
-    const dateColor = isException ? '#d97706' : '#0f172a';
+    const amountCents = Math.max(0, Math.round(safeNum(r.amount) * 100));
+    const coveredCents = Math.min(amountCents, Math.max(0, Math.round(remainingCoverage * 100)));
+    remainingCoverage = roundMoney(Math.max(0, remainingCoverage - coveredCents / 100));
+    let status = '', statusColor = r.isException ? '#d97706' : '#0f172a';
+    if (amountCents > 0 && coveredCents >= amountCents) { status = ' · Paid'; statusColor = '#10b981'; coveredDates.push(r.date); }
+    else if (coveredCents > 0) { status = ' · Partial'; statusColor = '#2563eb'; }
     displayRows.push([
-      [{ text: fmtDS(r.date), color: dateColor }],
+      [{ text: fmtDS(r.date) + status, color: statusColor }],
       [{ text: fmt(r.qty) + ' L', color: '#0f172a' }],
       [{ text: fmt(r.rate), color: '#0f172a' }],
-      [{ text: '₹' + fmt(r.amount), color: '#0f172a' }]
+      [{ text: '₹' + fmt(r.amount), color: status ? statusColor : '#0f172a' }]
     ]);
   });
 
+  const coveredThrough = coveredDates.length ? `Paid through ${fmtD(coveredDates[coveredDates.length - 1])}` : 'No delivery fully covered';
+  const balanceLabel = Math.abs(netDue) < 0.005 ? 'Settled' : netDue > 0 ? `₹${fmt(netDue)} due` : `₹${fmt(-netDue)} advance`;
   const entryChunks = chunkArr(displayRows, HISAAB_ROWS_PER_PAGE);
   const entryChunkList = entryChunks.length ? entryChunks : [[]];
   const paymentChunks = chunkArr(filteredPayments, HISAAB_ROWS_PER_PAGE);
   const paymentChunkList = paymentChunks.length ? paymentChunks : [[]];
   const totalPages = entryChunkList.length + paymentChunkList.length;
   const footNote = `Milk supplied by ${profile.name || 'Dairy'}`;
-
-  const periodLabel = `${effStartDate ? fmtD(effStartDate) : fmtD(h.startDate)} – ${customEndDate ? fmtD(customEndDate) : ((h.stopped && h.stopDate) ? fmtD(h.stopDate) : 'Present')}${effStartDate && priorDue !== 0 ? `  •  Prior Due: ₹${fmt(priorDue)}` : ''}`;
+  const periodLabel = `Covered dates: ${fmtD(effStartDate)} – ${fmtD(effEndDate)}`;
 
   const entryPages = await Promise.all(entryChunkList.map((chunk, idx) => {
-    let footerLines = null;
-    if (idx === entryChunkList.length - 1) {
-      footerLines = [
-        effStartDate && priorDue !== 0
-          ? `Prior Due: ₹${fmt(priorDue)}   Period Milk: ₹${fmt(periodMilkValue)}   Paid: ₹${fmt(periodPaid)}`
-          : `Total Milk: ${fmt(periodMilkQty)} L   Total Amount: ₹${fmt(periodMilkValue)}`,
-        `Balance Due: ₹${fmt(netDue)}`
-      ];
-    }
+    const footerLines = idx === entryChunkList.length - 1 ? [
+      `Prior Due ₹${fmt(priorDue)}  +  Deliveries ₹${fmt(periodMilkValue)}  −  Payments ₹${fmt(periodPaid)}`,
+      coveredThrough,
+      `Net Balance: ${balanceLabel}`
+    ] : null;
     return drawNotebookPage({
       heading: `${h.name}`,
-      subheading: 'Milk Hisaab',
+      subheading: 'Milk Hisaab · Paid and partial dates are marked',
       subtitle: periodLabel,
       columns: HISAAB_ENTRY_COLS,
       rows: chunk,
@@ -3599,7 +3648,7 @@ async function buildHisaabPages_Household(h, customEndDate, customStartDate = nu
     const rows = chunk.map(p => [ fmtDS(p.date), '₹' + fmt(p.amount), truncateHisaabText(p.note, 26) ]);
     const isLast = idx === paymentChunkList.length - 1;
     const footerLines = isLast ? [
-      `Total Payments: ₹${fmt(periodPaid)}   Balance Due: ₹${fmt(netDue)}`
+      `Payments in covered dates: ₹${fmt(periodPaid)}  •  ${balanceLabel}`
     ] : null;
     return drawNotebookPage({
       heading: `${h.name}`,
@@ -5155,16 +5204,73 @@ function drawSelectedGraph() {
 
 
 let calcSubTab = 'milkmen';
+const MILK_CALC_STORAGE_KEY = 'mdn_dairy_calc';
+function readMilkCalcState(){
+  const blank = {mode:'shifts', am:'', pm:'', qty:'', rate:'', fat:'', fatRate:''};
+  try { const saved = JSON.parse(localStorage.getItem(MILK_CALC_STORAGE_KEY) || 'null'); return saved && typeof saved === 'object' ? {...blank, ...saved} : blank; }
+  catch(e){ return blank; }
+}
+let milkCalcState = readMilkCalcState();
+let milkCalcActiveField = 'am';
+function saveMilkCalcState(){ try { localStorage.setItem(MILK_CALC_STORAGE_KEY, JSON.stringify(milkCalcState)); } catch(e) {} }
+function calcEscape(value){ return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function milkCalcResult(){
+  const mode = milkCalcState.mode;
+  const quantity = mode === 'shifts' ? safeNum(milkCalcState.am) + safeNum(milkCalcState.pm) : safeNum(milkCalcState.qty);
+  const effectiveRate = mode === 'fat' ? safeNum(milkCalcState.fat) * safeNum(milkCalcState.fatRate) : safeNum(milkCalcState.rate);
+  return {quantity, effectiveRate, amount: roundMoney(quantity * effectiveRate)};
+}
+function setMilkCalcField(field, value){ milkCalcState[field] = value; milkCalcActiveField = field; saveMilkCalcState(); updCalc(); }
+function setMilkCalcMode(mode){
+  if(!['shifts','direct','fat'].includes(mode)) return;
+  milkCalcState.mode = mode;
+  milkCalcActiveField = mode === 'shifts' ? 'am' : mode === 'fat' ? 'qty' : 'qty';
+  saveMilkCalcState(); renderCalc();
+}
+function setMilkCalcPresetRate(rate){
+  const field = milkCalcState.mode === 'fat' ? 'fatRate' : 'rate';
+  milkCalcState[field] = String(rate);
+  milkCalcActiveField = field;
+  saveMilkCalcState(); renderCalc();
+}
+function adjustMilkCalcQty(delta){
+  const field = milkCalcState.mode === 'shifts' ? (['am','pm'].includes(milkCalcActiveField) ? milkCalcActiveField : 'am') : 'qty';
+  milkCalcState[field] = String(Math.max(0, roundMoney(safeNum(milkCalcState[field]) + delta)));
+  milkCalcActiveField = field;
+  saveMilkCalcState(); renderCalc();
+}
+function milkCalcKey(key){
+  const fields = milkCalcState.mode === 'shifts' ? ['am','pm','rate'] : milkCalcState.mode === 'fat' ? ['qty','fat','fatRate'] : ['qty','rate'];
+  if(!fields.includes(milkCalcActiveField)) milkCalcActiveField = fields[0];
+  const current = String(milkCalcState[milkCalcActiveField] || '');
+  if(key === 'C') milkCalcState[milkCalcActiveField] = '';
+  else if(key === '⌫') milkCalcState[milkCalcActiveField] = current.slice(0,-1);
+  else if(key === '.' && current.includes('.')) return;
+  else milkCalcState[milkCalcActiveField] = current + key;
+  saveMilkCalcState(); updCalc();
+}
+function milkCalcMessage(){
+  const result = milkCalcResult();
+  const modeLabel = milkCalcState.mode === 'shifts' ? `Morning ${safeNum(milkCalcState.am)} L + Evening ${safeNum(milkCalcState.pm)} L` : milkCalcState.mode === 'fat' ? `${safeNum(milkCalcState.qty)} L × ${safeNum(milkCalcState.fat)} fat × ₹${safeNum(milkCalcState.fatRate)}` : `${safeNum(milkCalcState.qty)} L × ₹${safeNum(milkCalcState.rate)}/L`;
+  return `Milk calculation\n${modeLabel}\nTotal milk: ${result.quantity.toFixed(2)} L\nEffective rate: ₹${result.effectiveRate.toFixed(2)}/L\nAmount: ₹${result.amount.toFixed(2)}`;
+}
+async function copyMilkCalc(){
+  try { await navigator.clipboard.writeText(milkCalcMessage()); showToast('Calculation copied.'); }
+  catch(e){ const box = document.createElement('textarea'); box.value = milkCalcMessage(); box.style.position = 'fixed'; box.style.opacity = '0'; document.body.appendChild(box); box.select(); try { document.execCommand('copy'); showToast('Calculation copied.'); } catch(err){ showToast('Could not copy calculation.'); } box.remove(); }
+}
+function shareMilkCalc(){ const text = milkCalcMessage(); window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); }
+function clearMilkCalc(){
+  milkCalcState = {...milkCalcState, am:'', pm:'', qty:'', rate:'', fat:'', fatRate:''};
+  milkCalcActiveField = milkCalcState.mode === 'shifts' ? 'am' : 'qty';
+  saveMilkCalcState(); renderCalc();
+}
 function setCalcSubTab(tab){
   if (calcSubTab === tab) return;
   Haptics.fire('tick');
   calcSubTab = tab;
   renderCalc();
 }
-function setCalcPresetRate(r){
-  const el = document.getElementById('crate');
-  if(el){ el.value = r; updCalc(); }
-}
+function setCalcPresetRate(r){ setMilkCalcPresetRate(r); }
 function setDetailPageIdx(idx){
   if (detailPageIdx === idx) return;
   Haptics.fire('tick');
@@ -5173,7 +5279,7 @@ function setDetailPageIdx(idx){
 }
 
 function renderCalc(){
-  const pages = DB.pages().filter(p=>!p.trashed); const activePage = pages.find(p=>!p.locked);
+  const pages = dedupePeriodPages(DB.pages().filter(p=>!p.trashed)); const activePage = pages.find(p=>!p.locked);
   let curMilk = 0, curRev = 0; let trendText = "Steady →", trendColor = "var(--muted)";
   if(activePage){
     const t = pageSummary(activePage); curMilk = t.milk; curRev = t.rev;
@@ -5186,10 +5292,10 @@ function renderCalc(){
   let milkmenEarned = 0, milkmenPending = 0, milkmenReceived = 0;
   lockedPages.forEach(p => { milkmenEarned += pageSummary(p).rev; });
   unlockedPages.forEach(p => { milkmenPending += pageSummary(p).rev; });
-  const milkmenPayments = DB.payments().filter(p=>p.type==='received' && !p.deleted);
-  milkmenPayments.forEach(p => { milkmenReceived += parseFloat(p.amount)||0; });
+  const milkmenPayments = dedupePayments(DB.payments()).filter(p=>p.type==='received' && !p.deleted);
+  milkmenPayments.forEach(p => { milkmenReceived += safeNum(p.amount); });
   const exps = Store.get('mdn_expenses') || []; let totalExp = exps.reduce((sum, e) => sum + e.cost, 0);
-  const milkmenNetBal = milkmenEarned - milkmenReceived;
+  const milkmenNetBal = roundMoney(milkmenEarned - milkmenReceived);
 
   const milkmenPaymentsSorted = milkmenPayments.slice().sort((a,b) => a.date.localeCompare(b.date));
   const totalMilkmenPay = milkmenPaymentsSorted.length;
@@ -5312,28 +5418,57 @@ function renderCalc(){
       ${expenseHTML}
      </div>`;
   } else if (calcSubTab === 'calc') {
+    const mode = milkCalcState.mode;
+    const result = milkCalcResult();
+    const inputField = (field, label, placeholder, focusField = field) => `<div><label class="flabel" for="milk-calc-${field}">${label}</label><input class="inp" id="milk-calc-${field}" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" value="${calcEscape(milkCalcState[field])}" placeholder="${placeholder}" onfocus="milkCalcActiveField='${focusField}'" oninput="setMilkCalcField('${field}',this.value)"/></div>`;
+    const keypadButtons = ['1','2','3','4','5','6','7','8','9','.','0','⌫'];
+    const fieldsHtml = mode === 'shifts' ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        ${inputField('am','Morning milk (L)','0.0')}
+        ${inputField('pm','Evening milk (L)','0.0')}
+      </div>
+      <div style="margin-bottom:12px;">${inputField('rate','Milk rate (₹/L)','60')}</div>` : mode === 'fat' ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        ${inputField('qty','Milk quantity (L)','0.0')}
+        ${inputField('fat','Fat (%)','4.0')}
+      </div>
+      <div style="margin-bottom:12px;">${inputField('fatRate','Rate per fat point (₹)','12')}</div>` : `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        ${inputField('qty','Milk quantity (L)','0.0')}
+        ${inputField('rate','Milk rate (₹/L)','60')}
+      </div>`;
     subHtml += `
      <div class="card">
-       <div class="slabel mb3">Quick Rate & Qty Calculator</div>
-       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;margin-top:-6px;">Instantly compute milk billing amount.</div>
-       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div><label class="flabel">Milk Qty (L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="cqty" placeholder="0.0" oninput="updCalc()"/></div>
-        <div><label class="flabel">Rate (₹/L)</label><input class="inp" type="text" inputmode="decimal" autocomplete="off" data-lpignore="true" id="crate" placeholder="0.0" oninput="updCalc()"/></div>
+       <div class="slabel mb3">Milk Calculator</div>
+       <div class="seg-tabs" role="tablist" aria-label="Calculation type">
+        <button type="button" class="seg-btn ${mode==='shifts'?'on':''}" onclick="setMilkCalcMode('shifts')">Morning + Evening</button>
+        <button type="button" class="seg-btn ${mode==='direct'?'on':''}" onclick="setMilkCalcMode('direct')">Litres × Rate</button>
+        <button type="button" class="seg-btn ${mode==='fat'?'on':''}" onclick="setMilkCalcMode('fat')">Fat Rate</button>
+       </div>
+       ${fieldsHtml}
+       <div class="row gap2 mb3" style="flex-wrap:wrap;align-items:center;">
+        <span style="font-size:11px;color:var(--muted);font-weight:600;">Rate:</span>
+        ${[55,60,65,70,75,80].map(rate=>`<button type="button" class="calc-quick-preset" onclick="setMilkCalcPresetRate(${rate})">₹${rate}</button>`).join('')}
        </div>
        <div class="row gap2 mb3" style="flex-wrap:wrap;align-items:center;">
-        <span style="font-size:11px;color:var(--muted);font-weight:600;">Presets:</span>
-        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(50)">₹50</button>
-        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(55)">₹55</button>
-        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(60)">₹60</button>
-        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(65)">₹65</button>
-        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(70)">₹70</button>
-        <button type="button" class="calc-quick-preset" onclick="setCalcPresetRate(75)">₹75</button>
+        <span style="font-size:11px;color:var(--muted);font-weight:600;">Add litres:</span>
+        ${[0.5,1,2,5,10].map(amount=>`<button type="button" class="calc-quick-preset" onclick="adjustMilkCalcQty(${amount})">+${amount} L</button>`).join('')}
        </div>
-       <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:18px;text-align:center;">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;font-weight:700;">Calculated Total</div>
-        <div style="font-size:32px;font-weight:900;color:var(--fg);" id="cresult">₹0.00</div>
+       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:12px;">
+        ${keypadButtons.map(key=>`<button type="button" class="btn bg" style="min-height:46px;justify-content:center;font-size:18px;font-weight:800;" aria-label="${key==='⌫'?'Backspace':key==='.'?'Decimal point':key}" onclick="milkCalcKey('${key}')">${key}</button>`).join('')}
+        <button type="button" class="btn bs" style="min-height:46px;justify-content:center;font-weight:700;" onclick="milkCalcKey('C')">Clear field</button>
+        <button type="button" class="btn bs" style="min-height:46px;justify-content:center;font-weight:700;" onclick="clearMilkCalc()">Reset</button>
        </div>
-      </div>`;
+       <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:12px;">
+        <div class="milk-calc-total" style="font-size:11px;color:var(--muted);font-weight:700;">TOTAL MILK · ${result.quantity.toFixed(2)} L</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Effective rate ₹${result.effectiveRate.toFixed(2)} per litre</div>
+        <div style="font-size:30px;font-weight:900;color:var(--fg);margin-top:2px;" id="cresult">₹${result.amount.toFixed(2)}</div>
+       </div>
+       <div class="row gap2">
+        <button type="button" class="btn bs f1" style="justify-content:center;" onclick="copyMilkCalc()">Copy result</button>
+        <button type="button" class="btn bp f1" style="justify-content:center;" onclick="shareMilkCalc()">WhatsApp</button>
+       </div>
+     </div>`;
   }
 
   document.getElementById('cledger').innerHTML = subHtml;
@@ -5354,7 +5489,7 @@ function loadMoreHHPayments(hhId){
   renderCalc();
 }
 
-function updCalc(){ const q=parseFloat(document.getElementById('cqty')?.value)||0; const r=parseFloat(document.getElementById('crate')?.value)||0; const el=document.getElementById('cresult'); if(el) el.textContent='₹'+(q*r).toFixed(2); }
+function updCalc(){ const result = milkCalcResult(); const el = document.getElementById('cresult'); if(el) el.textContent = '₹' + result.amount.toFixed(2); const total = document.querySelector('.milk-calc-total'); if(total) total.textContent = result.quantity.toFixed(2); }
 
 function openLogFromPicker(){
   openThemedCalendar('logf-from', null, (d)=>{ logFilterFrom = d; if(logFilterTo && logFilterFrom > logFilterTo) logFilterTo = logFilterFrom; renderMe(); });
